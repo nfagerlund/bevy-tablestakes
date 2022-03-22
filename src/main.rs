@@ -2,9 +2,8 @@ use bevy::prelude::*;
 
 fn main() {
     App::new()
-        .add_startup_system(add_people)
-        .add_system(hellow_orld)
-        .add_system(greet_peeps)
+        .add_plugins(DefaultPlugins)
+        .add_plugin(HelloPlugin)
         .run();
 }
 
@@ -32,5 +31,16 @@ fn greet_peeps(query: Query<&Name, With<Person>>) {
     for name in query.iter() {
         // dbg!(name);
         println!("low hell, {}!", name.0);
+    }
+}
+
+pub struct HelloPlugin;
+impl Plugin for HelloPlugin {
+    fn build(&self, app: &mut App) {
+        // add app stuff
+        app.add_startup_system(add_people)
+            .add_system(hellow_orld)
+            .add_system(greet_peeps);
+
     }
 }
