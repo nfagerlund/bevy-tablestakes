@@ -7,3 +7,12 @@ edition = "2021"
 
 [dependencies]
 bevy = { version = "0.6.1", features = ["dynamic"] }
+
+# Per https://bevy-cheatbook.github.io/pitfalls/performance.html:
+# medium-optimize this crate's own debug builds
+[profile.dev]
+opt-level = 1
+
+# hella optimize all the engine dependencies
+[profile.dev.package."*"]
+opt-level = 3
