@@ -1,5 +1,7 @@
 [package]
 name = "bevy-tablestakes"
+description = "hey!!! I'm walkin here!!!"
+authors = ["Nick Fagerlund", "Motorsprite Chaos Industries"]
 version = "0.1.0"
 edition = "2021"
 
