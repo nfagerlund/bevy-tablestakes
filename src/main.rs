@@ -14,6 +14,14 @@ fn main() {
 
 // Input time!
 
+// All right, so an unfortunate thing I learned is that `gilrs`, the gamepad
+// library bevy relies on, only supports Xinput on windows. That means no PS4
+// controller unless you either run ds4windows or publish on steam to get
+// steaminput. On the plus side, it looks like the issue is just that it's a
+// volunteer-maintained project of relatively young age without maxed-out
+// platform api knowledge, so maybe someone'll add it at some point. (Or maybe
+// I'll have to.)
+
 struct ActiveGamepad(Gamepad);
 
 fn connect_gamepads(
@@ -44,18 +52,16 @@ fn connect_gamepads(
                     }
                 }
             },
-            GamepadEventType::ButtonChanged(GamepadButtonType::Start, val) => {
-                if *val == 1.0 {
-                    info!("Pressed start: {:?}", id);
-                    // If there's an active gamepad...
-                    if let Some(ActiveGamepad(old_id)) = active_gamepad.as_deref() {
-                        // ...but it's not the one you just pressed start on...
-                        if old_id != id {
-                            // ...then let it take over.
-                            commands.insert_resource(ActiveGamepad(*id));
-                            // per the cheatbook: "If you insert a resource of a
-                            // type that already exists, it will be overwritten."
-                        }
+            GamepadEventType::ButtonChanged(GamepadButtonType::Start, val) if *val == 1.0 => {
+                info!("Pressed start: {:?}", id);
+                // If there's an active gamepad...
+                if let Some(ActiveGamepad(old_id)) = active_gamepad.as_deref() {
+                    // ...but it's not the one you just pressed start on...
+                    if old_id != id {
+                        // ...then let it take over.
+                        commands.insert_resource(ActiveGamepad(*id));
+                        // per the cheatbook: "If you insert a resource of a
+                        // type that already exists, it will be overwritten."
                     }
                 }
             },
