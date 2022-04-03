@@ -8,7 +8,7 @@ fn main() {
         // .add_plugin(hellow::HelloPlugin)
         .add_startup_system(setup_sprites)
         .add_system(animate_sprites_system)
-        .add_system(connect_gamepads)
+        .add_system(connect_gamepads_system)
         .run();
 }
 
@@ -24,7 +24,22 @@ fn main() {
 
 struct ActiveGamepad(Gamepad);
 
-fn connect_gamepads(
+// helper function: just forward the axes resource to it, and get a vec back.
+fn get_gamepad_movement_vector(gamepad: Gamepad, axes: Res<Axis<GamepadAxis>>) -> Option<Vec2> {
+    let x_axis = GamepadAxis(gamepad, GamepadAxisType::LeftStickX);
+    let y_axis = GamepadAxis(gamepad, GamepadAxisType::LeftStickY);
+    let x = axes.get(x_axis)?;
+    let y = axes.get(y_axis)?;
+    Some(Vec2::new(x, y))
+}
+
+fn move_player_system(
+    active_gamepad: Option<Res<ActiveGamepad>>,
+    axes: Res<Axis<GamepadAxis>>,
+    mut query: Query<(&)
+) {}
+
+fn connect_gamepads_system(
     mut commands: Commands,
     active_gamepad: Option<Res<ActiveGamepad>>,
     mut gamepad_events: EventReader<GamepadEvent>,
@@ -116,6 +131,10 @@ fn setup_sprites(
             transform: Transform::from_scale(Vec3::splat(3.0)),
             ..Default::default()
         })
-        .insert(Timer::from_seconds(0.1, true)); // <- oh, no, ok, gotcha, that's adding a component on the spawned entity from that bundle.
+        .insert(Timer::from_seconds(0.1, true)) // <- oh, no, ok, gotcha, that's adding a component on the spawned entity from that bundle.
+        .insert(Player);
 }
 
+// Marker struct for the player
+#[derive(Component)]
+struct Player;
