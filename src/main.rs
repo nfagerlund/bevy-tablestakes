@@ -24,7 +24,7 @@ fn main() {
 
 struct ActiveGamepad(Gamepad);
 
-// helper function: just forward the axes resource to it, and get a vec back.
+// helper function: forward the axes resource (and a gamepad id) to it, get a vec back.
 fn get_gamepad_movement_vector(gamepad: Gamepad, axes: Res<Axis<GamepadAxis>>) -> Option<Vec2> {
     let x_axis = GamepadAxis(gamepad, GamepadAxisType::LeftStickX);
     let y_axis = GamepadAxis(gamepad, GamepadAxisType::LeftStickY);
@@ -33,11 +33,45 @@ fn get_gamepad_movement_vector(gamepad: Gamepad, axes: Res<Axis<GamepadAxis>>) -
     Some(Vec2::new(x, y))
 }
 
+// helper function: forward keycodes to it, get a vec back.
+fn get_kb_movement_vector(keys: Res<Input<KeyCode>>) -> Vec2 {
+    let x = 0f32;
+    let y = 0f32;
+    if keys.pressed(KeyCode::Left) {
+        x -= 1.0;
+    }
+    if keys.pressed(KeyCode::Right) {
+        x += 1.0;
+    }
+    if keys.pressed(KeyCode::Up) {
+        y += 1.0; // bc, opposite of other engines so far
+    }
+    if keys.pressed(KeyCode::Down) {
+        y -= 1.0;
+    }
+    Vec2::new(x, y)
+}
+
 fn move_player_system(
     active_gamepad: Option<Res<ActiveGamepad>>,
     axes: Res<Axis<GamepadAxis>>,
-    mut query: Query<(&)
-) {}
+    keys: Res<Input<KeyCode>>,
+    time: Res<Time>,
+    mut query: Query<(&mut Transform, &Speed), With<Player>>,
+) {
+    let delta = time.delta();
+    let gamepad_movement = None;
+    if let Some(ActiveGamepad(pad_id)) = active_gamepad.as_deref() {
+        gamepad_movement = get_gamepad_movement_vector(*pad_id, axes);
+    }
+    let movement = match gamepad_movement {
+        Some(mvmt) => mvmt,
+        None => get_kb_movement_vector(keys),
+    };
+    for (player_transform, speed) in query.iter_mut() {
+        player_transform.translation.x += movement.x * *speed * delta;
+    }
+}
 
 fn connect_gamepads_system(
     mut commands: Commands,
@@ -132,9 +166,14 @@ fn setup_sprites(
             ..Default::default()
         })
         .insert(Timer::from_seconds(0.1, true)) // <- oh, no, ok, gotcha, that's adding a component on the spawned entity from that bundle.
+        .insert(Speed(180.0))
         .insert(Player);
 }
 
 // Marker struct for the player
 #[derive(Component)]
 struct Player;
+
+// Speed in pixels... per... second?
+#[derive(Component)]
+struct Speed(f32);
