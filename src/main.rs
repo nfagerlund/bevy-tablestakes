@@ -1,4 +1,7 @@
-use bevy::prelude::*;
+use bevy::{
+    diagnostic::{Diagnostics, FrameTimeDiagnosticsPlugin},
+    prelude::*,
+};
 
 mod hellow;
 
@@ -6,7 +9,10 @@ fn main() {
     App::new()
         .add_plugins(DefaultPlugins)
         // .add_plugin(hellow::HelloPlugin)
+        .add_plugin(FrameTimeDiagnosticsPlugin)
         .add_startup_system(setup_sprites)
+        .add_startup_system(setup_fps_debug)
+        .add_system(update_fps_debug_system)
         .add_system(animate_sprites_system)
         .add_system(connect_gamepads_system)
         .add_system(move_player_system)
@@ -143,6 +149,61 @@ fn animate_sprites_system(
     }
 }
 
+fn setup_fps_debug(
+    mut commands: Commands,
+    asset_server: Res<AssetServer>,
+) {
+    let style = TextStyle {
+        font: asset_server.load("fonts/m5x7.ttf"),
+        font_size: 36.0,
+        color: Color::rgb(0.0, 1.0, 0.0),
+    };
+    // borrowing this from the bevymark example
+    commands.spawn_bundle(TextBundle {
+        text: Text {
+            sections: vec![
+                TextSection {
+                    value: "FPS: ".to_string(),
+                    style: style.clone(),
+                },
+                TextSection {
+                    value: "".to_string(),
+                    style: style.clone(),
+                },
+            ],
+            ..Default::default() // alignment
+        },
+        style: Style {
+            position_type: PositionType::Absolute,
+            position: Rect {
+                top: Val::Px(5.0),
+                left: Val::Px(5.0),
+                ..Default::default()
+            },
+            ..Default::default() // boy, LOTS of these
+        },
+        ..Default::default()
+    }).insert(FPSCounter);
+}
+
+// marker struct for FPS counter
+#[derive(Component)]
+struct FPSCounter;
+
+// again borrowed from bevymark example
+fn update_fps_debug_system(
+    diagnostics: Res<Diagnostics>,
+    mut query: Query<&mut Text, With<FPSCounter>>,
+) {
+    if let Some(fps) = diagnostics.get(FrameTimeDiagnosticsPlugin::FPS) {
+        if let Some(average) = fps.average() {
+            for mut text in query.iter_mut() {
+                text.sections[1].value = format!("{:.2}", average);
+            }
+        }
+    }
+}
+
 fn setup_sprites(
     mut commands: Commands,
     asset_server: Res<AssetServer>,
@@ -160,13 +221,15 @@ fn setup_sprites(
     let texture_atlas_handle = texture_atlases.add(texture_atlas);
 
     commands.spawn_bundle(OrthographicCameraBundle::new_2d()); // Oh, hmm, gonna want to move that to another system later.
+    commands.spawn_bundle(UiCameraBundle::default());
     commands
         .spawn_bundle(SpriteSheetBundle {
             texture_atlas: texture_atlas_handle,
             transform: Transform::from_scale(Vec3::splat(3.0)),
             ..Default::default()
         })
-        .insert(Timer::from_seconds(0.1, true)) // <- oh, no, ok, gotcha, that's adding a component on the spawned entity from that bundle.
+        .insert(Timer::from_seconds(0.1, true))
+        // ^^ 0.1 = inverse FPS. Could be way more ergonomic.
         .insert(Speed(360.0))
         .insert(Player);
 }
