@@ -167,7 +167,7 @@ fn setup_sprites(
             ..Default::default()
         })
         .insert(Timer::from_seconds(0.1, true)) // <- oh, no, ok, gotcha, that's adding a component on the spawned entity from that bundle.
-        .insert(Speed(180.0))
+        .insert(Speed(360.0))
         .insert(Player);
 }
 
