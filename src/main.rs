@@ -9,6 +9,7 @@ fn main() {
         .add_startup_system(setup_sprites)
         .add_system(animate_sprites_system)
         .add_system(connect_gamepads_system)
+        .add_system(move_player_system)
         .run();
 }
 
@@ -35,8 +36,8 @@ fn get_gamepad_movement_vector(gamepad: Gamepad, axes: Res<Axis<GamepadAxis>>) -
 
 // helper function: forward keycodes to it, get a vec back.
 fn get_kb_movement_vector(keys: Res<Input<KeyCode>>) -> Vec2 {
-    let x = 0f32;
-    let y = 0f32;
+    let mut x = 0f32;
+    let mut y = 0f32;
     if keys.pressed(KeyCode::Left) {
         x -= 1.0;
     }
@@ -59,8 +60,8 @@ fn move_player_system(
     time: Res<Time>,
     mut query: Query<(&mut Transform, &Speed), With<Player>>,
 ) {
-    let delta = time.delta();
-    let gamepad_movement = None;
+    let delta = time.delta_seconds();
+    let mut gamepad_movement = None;
     if let Some(ActiveGamepad(pad_id)) = active_gamepad.as_deref() {
         gamepad_movement = get_gamepad_movement_vector(*pad_id, axes);
     }
@@ -68,8 +69,8 @@ fn move_player_system(
         Some(mvmt) => mvmt,
         None => get_kb_movement_vector(keys),
     };
-    for (player_transform, speed) in query.iter_mut() {
-        player_transform.translation.x += movement.x * *speed * delta;
+    for (mut player_transform, speed) in query.iter_mut() {
+        player_transform.translation += (movement * speed.0 * delta).extend(0.0);
     }
 }
 
