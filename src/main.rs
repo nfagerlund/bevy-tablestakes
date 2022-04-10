@@ -2,16 +2,20 @@ use bevy::{
     diagnostic::{Diagnostics, FrameTimeDiagnosticsPlugin},
     prelude::*,
 };
+use bevy_ecs_ldtk::prelude::*;
 
 mod hellow;
 
 fn main() {
     App::new()
         .add_plugins(DefaultPlugins)
+        .add_plugin(LdtkPlugin)
         // .add_plugin(hellow::HelloPlugin)
         .add_plugin(FrameTimeDiagnosticsPlugin)
         .add_startup_system(setup_sprites)
         .add_startup_system(setup_fps_debug)
+        .add_startup_system(setup_level)
+        .insert_resource(LevelSelection::Index(1))
         .add_system(update_fps_debug_system)
         .add_system(animate_sprites_system)
         .add_system(connect_gamepads_system)
@@ -147,6 +151,16 @@ fn animate_sprites_system(
             // ^^ Ah. OK. We're doing some realll basic flipbooking here. But also, note that the TextureAtlasSprite struct ONLY has color/index/flip_(x|y)/custom_size props, it's meant to always be paired with a textureatlas handle and it doesn't hold its own reference to one. ECS lifestyles.
         }
     }
+}
+
+fn setup_level(
+    mut commands: Commands,
+    asset_server: Res<AssetServer>,
+) {
+    commands.spawn_bundle(LdtkWorldBundle {
+        ldtk_handle: asset_server.load("kittytown.ldtk"),
+        ..Default::default()
+    });
 }
 
 fn setup_fps_debug(
