@@ -3,6 +3,7 @@ use bevy::{
     prelude::*,
 };
 use bevy_ecs_ldtk::prelude::*;
+use bevy_ecs_tilemap::prelude::*;
 
 mod hellow;
 
@@ -20,6 +21,7 @@ fn main() {
         .add_system(animate_sprites_system)
         .add_system(connect_gamepads_system)
         .add_system(move_player_system)
+        // .add_system(_debug_z_system)
         .run();
 }
 
@@ -153,6 +155,20 @@ fn animate_sprites_system(
     }
 }
 
+fn _debug_z_system(
+    // mut local_timer: Local<Timer>,
+    player_query: Query<&Transform, With<Player>>,
+    world_query: Query<&Transform, With<World>>,
+    level_query: Query<(Entity, &Transform, &Map)>,
+) {
+    let player_transform = player_query.get_single().unwrap();
+    let world_transform = world_query.get_single().unwrap();
+    info!("Player at: {}\n World at: {}\n", player_transform.translation, world_transform.translation);
+    for (e_id, transform, map) in level_query.iter() {
+        info!("  Level {:?} (map id {}) at {}\n", e_id, map.id, transform.translation);
+    }
+}
+
 fn setup_level(
     mut commands: Commands,
     asset_server: Res<AssetServer>,
@@ -160,8 +176,11 @@ fn setup_level(
     commands.spawn_bundle(LdtkWorldBundle {
         ldtk_handle: asset_server.load("kittytown.ldtk"),
         ..Default::default()
-    });
+    }).insert(World);
 }
+
+#[derive(Component)]
+struct World;
 
 fn setup_fps_debug(
     mut commands: Commands,
@@ -239,7 +258,7 @@ fn setup_sprites(
     commands
         .spawn_bundle(SpriteSheetBundle {
             texture_atlas: texture_atlas_handle,
-            transform: Transform::from_scale(Vec3::splat(3.0)),
+            transform: Transform::from_translation(Vec3::new(0.0, 0.0, 3.0)),
             ..Default::default()
         })
         .insert(Timer::from_seconds(0.1, true))
