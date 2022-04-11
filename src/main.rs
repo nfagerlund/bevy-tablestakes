@@ -253,7 +253,9 @@ fn setup_sprites(
     let texture_atlas = TextureAtlas::from_grid(texture_handle, Vec2::new(17.0, 24.0), 32, 1);
     let texture_atlas_handle = texture_atlases.add(texture_atlas);
 
-    commands.spawn_bundle(OrthographicCameraBundle::new_2d()); // Oh, hmm, gonna want to move that to another system later.
+    let mut camera_bundle = OrthographicCameraBundle::new_2d();
+    camera_bundle.orthographic_projection.scale = 1.0/3.0;
+    commands.spawn_bundle(camera_bundle); // Oh, hmm, gonna want to move that to another system later.
     commands.spawn_bundle(UiCameraBundle::default());
     commands
         .spawn_bundle(SpriteSheetBundle {
@@ -263,7 +265,7 @@ fn setup_sprites(
         })
         .insert(Timer::from_seconds(0.1, true))
         // ^^ 0.1 = inverse FPS. Could be way more ergonomic.
-        .insert(Speed(360.0))
+        .insert(Speed(120.0))
         .insert(Player);
 }
 
