@@ -21,6 +21,7 @@ fn main() {
         .add_system(animate_sprites_system)
         .add_system(connect_gamepads_system)
         .add_system(move_player_system)
+        .add_system(move_camera_system)
         // .add_system(_debug_z_system)
         .run();
 }
@@ -84,6 +85,22 @@ fn move_player_system(
     for (mut player_transform, speed) in query.iter_mut() {
         player_transform.translation += (movement * speed.0 * delta).extend(0.0);
     }
+}
+
+fn move_camera_system(
+    time: Res<Time>,
+    player_query: Query<&Transform, With<Player>>,
+    cam_query: Query<&mut Transform, (With<OrthographicProjection>, With<Camera>)>,
+) {
+    let delta = time.delta_seconds();
+    let player_pos = player_query.get_single().unwrap().translation;
+    let mut camera_pos = cam_query.get_single().unwrap().translation;
+    // ...now, hmm. I want to treat these as vec2s and ignore their Z coords.
+    // well, for now fuck it, just go with what tutorial boi was doing and fudge
+    // the individual coords.
+    camera_pos.x += (player_pos.x - camera_pos.x) * 4.0 * delta;
+    camera_pos.y += (player_pos.y - camera_pos.y) * 4.0 * delta;
+    // ...and then you'd do room boundaries clamping, screenshake, etc.
 }
 
 fn connect_gamepads_system(
