@@ -89,18 +89,23 @@ fn move_player_system(
 
 fn move_camera_system(
     time: Res<Time>,
-    player_query: Query<&Transform, With<Player>>,
-    cam_query: Query<&mut Transform, (With<OrthographicProjection>, With<Camera>)>,
+    mut query: QuerySet<(
+        QueryState<&Transform, With<Player>>,
+        QueryState<&mut Transform, With<MainCamera>>
+    )>,
 ) {
     let delta = time.delta_seconds();
-    let player_pos = player_query.get_single().unwrap().translation;
-    let mut camera_pos = cam_query.get_single().unwrap().translation;
-    // ...now, hmm. I want to treat these as vec2s and ignore their Z coords.
-    // well, for now fuck it, just go with what tutorial boi was doing and fudge
-    // the individual coords.
-    camera_pos.x += (player_pos.x - camera_pos.x) * 4.0 * delta;
-    camera_pos.y += (player_pos.y - camera_pos.y) * 4.0 * delta;
-    // ...and then you'd do room boundaries clamping, screenshake, etc.
+    let player_tf = query.q0().get_single().unwrap();
+    let player_pos = player_tf.translation;
+    // let mut camera_tf = query.q1().get_single_mut().unwrap();
+    for mut camera_tf in query.q1().iter_mut() {
+        // ...now, hmm. I want to treat these as vec2s and ignore their Z coords.
+        // well, for now fuck it, just go with what tutorial boi was doing and fudge
+        // the individual coords.
+        camera_tf.translation.x += (player_pos.x - camera_tf.translation.x) * 4.0 * delta;
+        camera_tf.translation.y += (player_pos.y - camera_tf.translation.y) * 4.0 * delta;
+        // ...and then you'd do room boundaries clamping, screenshake, etc.
+    }
 }
 
 fn connect_gamepads_system(
@@ -272,7 +277,7 @@ fn setup_sprites(
 
     let mut camera_bundle = OrthographicCameraBundle::new_2d();
     camera_bundle.orthographic_projection.scale = 1.0/3.0;
-    commands.spawn_bundle(camera_bundle); // Oh, hmm, gonna want to move that to another system later.
+    commands.spawn_bundle(camera_bundle).insert(MainCamera); // Oh, hmm, gonna want to move that to another system later.
     commands.spawn_bundle(UiCameraBundle::default());
     commands
         .spawn_bundle(SpriteSheetBundle {
@@ -289,6 +294,10 @@ fn setup_sprites(
 // Marker struct for the player
 #[derive(Component)]
 struct Player;
+
+// Marker struct for main camera
+#[derive(Component)]
+struct MainCamera;
 
 // Speed in pixels... per... second?
 #[derive(Component)]
