@@ -188,7 +188,7 @@ fn setup_fps_debug(
 ) {
     let style = TextStyle {
         font: asset_server.load("fonts/m5x7.ttf"),
-        font_size: 36.0,
+        font_size: 32.0,
         color: Color::rgb(0.0, 1.0, 0.0),
     };
     // borrowing this from the bevymark example
