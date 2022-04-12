@@ -1,11 +1,14 @@
 use bevy::{
-    diagnostic::{Diagnostics, FrameTimeDiagnosticsPlugin},
+    diagnostic::{
+        // Diagnostics,
+        FrameTimeDiagnosticsPlugin},
     prelude::*,
 };
 use bevy_ecs_ldtk::prelude::*;
-use bevy_ecs_tilemap::prelude::*;
+// use bevy_ecs_tilemap::prelude::*;
 
 mod hellow;
+mod junk;
 
 fn main() {
     App::new()
@@ -14,15 +17,15 @@ fn main() {
         // .add_plugin(hellow::HelloPlugin)
         .add_plugin(FrameTimeDiagnosticsPlugin)
         .add_startup_system(setup_sprites)
-        .add_startup_system(setup_fps_debug)
+        .add_startup_system(junk::setup_fps_debug)
         .add_startup_system(setup_level)
         .insert_resource(LevelSelection::Index(1))
-        .add_system(update_fps_debug_system)
+        .add_system(junk::update_fps_debug_system)
         .add_system(animate_sprites_system)
         .add_system(connect_gamepads_system)
         .add_system(move_player_system.label(Movements))
         .add_system(move_camera_system.after(Movements))
-        // .add_system(_debug_z_system)
+        .add_system(junk::debug_z_system)
         .run();
 }
 
@@ -35,8 +38,6 @@ fn main() {
 // volunteer-maintained project of relatively young age without maxed-out
 // platform api knowledge, so maybe someone'll add it at some point. (Or maybe
 // I'll have to.)
-
-struct ActiveGamepad(Gamepad);
 
 // helper function: forward the axes resource (and a gamepad id) to it, get a vec back.
 fn get_gamepad_movement_vector(gamepad: Gamepad, axes: Res<Axis<GamepadAxis>>) -> Option<Vec2> {
@@ -108,9 +109,6 @@ fn move_camera_system(
     }
 }
 
-#[derive(Copy, Clone, Eq, PartialEq, Debug, Hash, SystemLabel)]
-struct Movements;
-
 fn connect_gamepads_system(
     mut commands: Commands,
     active_gamepad: Option<Res<ActiveGamepad>>,
@@ -180,20 +178,6 @@ fn animate_sprites_system(
     }
 }
 
-fn _debug_z_system(
-    // mut local_timer: Local<Timer>,
-    player_query: Query<&Transform, With<Player>>,
-    world_query: Query<&Transform, With<World>>,
-    level_query: Query<(Entity, &Transform, &Map)>,
-) {
-    let player_transform = player_query.get_single().unwrap();
-    let world_transform = world_query.get_single().unwrap();
-    info!("Player at: {}\n World at: {}\n", player_transform.translation, world_transform.translation);
-    for (e_id, transform, map) in level_query.iter() {
-        info!("  Level {:?} (map id {}) at {}\n", e_id, map.id, transform.translation);
-    }
-}
-
 fn setup_level(
     mut commands: Commands,
     asset_server: Res<AssetServer>,
@@ -201,65 +185,7 @@ fn setup_level(
     commands.spawn_bundle(LdtkWorldBundle {
         ldtk_handle: asset_server.load("kittytown.ldtk"),
         ..Default::default()
-    }).insert(World);
-}
-
-#[derive(Component)]
-struct World;
-
-fn setup_fps_debug(
-    mut commands: Commands,
-    asset_server: Res<AssetServer>,
-) {
-    let style = TextStyle {
-        font: asset_server.load("fonts/m5x7.ttf"),
-        font_size: 32.0,
-        color: Color::rgb(0.0, 1.0, 0.0),
-    };
-    // borrowing this from the bevymark example
-    commands.spawn_bundle(TextBundle {
-        text: Text {
-            sections: vec![
-                TextSection {
-                    value: "FPS: ".to_string(),
-                    style: style.clone(),
-                },
-                TextSection {
-                    value: "".to_string(),
-                    style: style.clone(),
-                },
-            ],
-            ..Default::default() // alignment
-        },
-        style: Style {
-            position_type: PositionType::Absolute,
-            position: Rect {
-                top: Val::Px(5.0),
-                left: Val::Px(5.0),
-                ..Default::default()
-            },
-            ..Default::default() // boy, LOTS of these
-        },
-        ..Default::default()
-    }).insert(FPSCounter);
-}
-
-// marker struct for FPS counter
-#[derive(Component)]
-struct FPSCounter;
-
-// again borrowed from bevymark example
-fn update_fps_debug_system(
-    diagnostics: Res<Diagnostics>,
-    mut query: Query<&mut Text, With<FPSCounter>>,
-) {
-    if let Some(fps) = diagnostics.get(FrameTimeDiagnosticsPlugin::FPS) {
-        if let Some(average) = fps.average() {
-            for mut text in query.iter_mut() {
-                text.sections[1].value = format!("{:.2}", average);
-            }
-        }
-    }
+    }).insert(LdtkWorld);
 }
 
 fn setup_sprites(
@@ -294,14 +220,27 @@ fn setup_sprites(
         .insert(Player);
 }
 
-// Marker struct for the player
-#[derive(Component)]
-struct Player;
+// Structs and crap!
 
-// Marker struct for main camera
+/// Resource for storing the active gamepad
+struct ActiveGamepad(Gamepad);
+
+/// Label for stages that move things around the level.
+#[derive(Copy, Clone, Eq, PartialEq, Debug, Hash, SystemLabel)]
+struct Movements;
+
+/// Marker component for a spawned LdtkWorldBundle
+#[derive(Component)]
+pub struct LdtkWorld;
+
+/// Marker component for the player
+#[derive(Component)]
+pub struct Player;
+
+/// Marker component for main camera
 #[derive(Component)]
 struct MainCamera;
 
-// Speed in pixels... per... second?
+/// Speed in pixels... per... second?
 #[derive(Component)]
 struct Speed(f32);
