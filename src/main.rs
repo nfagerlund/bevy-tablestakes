@@ -20,8 +20,8 @@ fn main() {
         .add_system(update_fps_debug_system)
         .add_system(animate_sprites_system)
         .add_system(connect_gamepads_system)
-        .add_system(move_player_system)
-        .add_system(move_camera_system)
+        .add_system(move_player_system.label(Movements))
+        .add_system(move_camera_system.after(Movements))
         // .add_system(_debug_z_system)
         .run();
 }
@@ -107,6 +107,9 @@ fn move_camera_system(
         // ...and then you'd do room boundaries clamping, screenshake, etc.
     }
 }
+
+#[derive(Copy, Clone, Eq, PartialEq, Debug, Hash, SystemLabel)]
+struct Movements;
 
 fn connect_gamepads_system(
     mut commands: Commands,
