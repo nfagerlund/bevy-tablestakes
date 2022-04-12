@@ -96,14 +96,12 @@ fn move_camera_system(
 ) {
     let delta = time.delta_seconds();
     let player_tf = query.q0().get_single().unwrap();
-    let player_pos = player_tf.translation;
+    let player_pos = player_tf.translation.truncate();
     // let mut camera_tf = query.q1().get_single_mut().unwrap();
     for mut camera_tf in query.q1().iter_mut() {
-        // ...now, hmm. I want to treat these as vec2s and ignore their Z coords.
-        // well, for now fuck it, just go with what tutorial boi was doing and fudge
-        // the individual coords.
-        camera_tf.translation.x += (player_pos.x - camera_tf.translation.x) * 4.0 * delta;
-        camera_tf.translation.y += (player_pos.y - camera_tf.translation.y) * 4.0 * delta;
+        let camera_pos = camera_tf.translation.truncate();
+        let follow_amount = (player_pos - camera_pos) * 4.0 * delta;
+        camera_tf.translation += follow_amount.extend(0.0);
         // ...and then you'd do room boundaries clamping, screenshake, etc.
     }
 }
