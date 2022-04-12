@@ -24,7 +24,8 @@ fn main() {
         .add_system(animate_sprites_system)
         .add_system(connect_gamepads_system)
         .add_system(move_player_system.label(Movements))
-        .add_system(move_camera_system.after(Movements))
+        .add_system(move_camera_system.label(CamMovements).after(Movements))
+        .add_system(snap_pixel_positions_system.after(CamMovements))
         .add_system(junk::debug_z_system)
         .run();
 }
@@ -72,7 +73,7 @@ fn move_player_system(
     axes: Res<Axis<GamepadAxis>>,
     keys: Res<Input<KeyCode>>,
     time: Res<Time>,
-    mut query: Query<(&mut Transform, &Speed), With<Player>>,
+    mut query: Query<(&mut SubpixelTranslation, &Speed), With<Player>>,
 ) {
     let delta = time.delta_seconds();
     let mut gamepad_movement = None;
@@ -83,29 +84,37 @@ fn move_player_system(
         Some(mvmt) => mvmt,
         None => get_kb_movement_vector(keys),
     };
-    for (mut player_transform, speed) in query.iter_mut() {
-        player_transform.translation += (movement * speed.0 * delta).extend(0.0);
+    for (mut player_pos, speed) in query.iter_mut() {
+        player_pos.0 += (movement * speed.0 * delta).extend(0.0);
     }
 }
 
 fn move_camera_system(
     time: Res<Time>,
     mut query: QuerySet<(
-        QueryState<&Transform, With<Player>>,
-        QueryState<&mut Transform, With<MainCamera>>
+        QueryState<&SubpixelTranslation, With<Player>>,
+        QueryState<&mut SubpixelTranslation, With<MainCamera>>
     )>,
 ) {
     let delta = time.delta_seconds();
     let player_tf = query.q0().get_single().unwrap();
-    let player_pos = player_tf.translation.truncate();
+    let player_pos = player_tf.0.truncate();
     // let mut camera_tf = query.q1().get_single_mut().unwrap();
     for mut camera_tf in query.q1().iter_mut() {
         // let camera_pos = camera_tf.translation.truncate();
         // let follow_amount = (player_pos - camera_pos) * 4.0 * delta;
         // camera_tf.translation += follow_amount.extend(0.0);
-        let camera_z = camera_tf.translation.z;
-        camera_tf.translation = player_pos.extend(camera_z);
+        let camera_z = camera_tf.0.z;
+        camera_tf.0 = player_pos.extend(camera_z);
         // ...and then you'd do room boundaries clamping, screenshake, etc.
+    }
+}
+
+fn snap_pixel_positions_system(
+    mut query: Query<(&SubpixelTranslation, &mut Transform)>,
+) {
+    for (subpixel_tl, mut pixel_tf) in query.iter_mut() {
+        pixel_tf.translation = subpixel_tl.0.floor();
     }
 }
 
@@ -193,12 +202,6 @@ fn setup_sprites(
     asset_server: Res<AssetServer>,
     mut texture_atlases: ResMut<Assets<TextureAtlas>>,
 ) {
-    // Time to start re-typing everything from bevy/examples/2d/sprite_sheet.rs. well, we all start somewhere.
-
-    // vv OK, so apparently asset_server.load() CAN infer the type of a handle for a receiving
-    // binding without a type annotation, but only by looking *ahead* at where you consume the
-    // handle! That's some rust magic. Anyway, in my case I'm still exploring so I guess I'll just
-    // annotate.
     let texture_handle: Handle<Image> = asset_server.load("sprites/sPlayerRun_strip32.png");
     // vv AH ha, and here's the bit I would want some automation for. Should be easy lol.
     let texture_atlas = TextureAtlas::from_grid(texture_handle, Vec2::new(17.0, 24.0), 32, 1);
@@ -206,7 +209,10 @@ fn setup_sprites(
 
     let mut camera_bundle = OrthographicCameraBundle::new_2d();
     camera_bundle.orthographic_projection.scale = 1.0/3.0;
-    commands.spawn_bundle(camera_bundle).insert(MainCamera); // Oh, hmm, gonna want to move that to another system later.
+    commands.spawn_bundle(camera_bundle)
+        .insert(SubpixelTranslation(Vec3::new(0.0, 0.0, 999.0)))
+        // ^^ hack: I looked up the Z coord on new_2D and fudged it so we won't accidentally round it to 1000.
+        .insert(MainCamera);
     commands.spawn_bundle(UiCameraBundle::default());
     commands
         .spawn_bundle(SpriteSheetBundle {
@@ -214,6 +220,7 @@ fn setup_sprites(
             transform: Transform::from_translation(Vec3::new(0.0, 0.0, 3.0)),
             ..Default::default()
         })
+        .insert(SubpixelTranslation(Vec3::new(0.0, 0.0, 3.0)))
         .insert(Timer::from_seconds(0.1, true))
         // ^^ 0.1 = inverse FPS. Could be way more ergonomic.
         .insert(Speed(120.0))
@@ -228,6 +235,10 @@ struct ActiveGamepad(Gamepad);
 /// Label for stages that move things around the level.
 #[derive(Copy, Clone, Eq, PartialEq, Debug, Hash, SystemLabel)]
 struct Movements;
+
+/// Label for stages that move the camera around the level.
+#[derive(Copy, Clone, Eq, PartialEq, Debug, Hash, SystemLabel)]
+struct CamMovements;
 
 /// Marker component for a spawned LdtkWorldBundle
 #[derive(Component)]
@@ -244,3 +255,7 @@ struct MainCamera;
 /// Speed in pixels... per... second?
 #[derive(Component)]
 struct Speed(f32);
+
+/// Additional transform component for things whose movements should be synced to hard pixel boundaries.
+#[derive(Component)]
+struct SubpixelTranslation(Vec3);
