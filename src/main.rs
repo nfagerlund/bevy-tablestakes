@@ -99,9 +99,11 @@ fn move_camera_system(
     let player_pos = player_tf.translation.truncate();
     // let mut camera_tf = query.q1().get_single_mut().unwrap();
     for mut camera_tf in query.q1().iter_mut() {
-        let camera_pos = camera_tf.translation.truncate();
-        let follow_amount = (player_pos - camera_pos) * 4.0 * delta;
-        camera_tf.translation += follow_amount.extend(0.0);
+        // let camera_pos = camera_tf.translation.truncate();
+        // let follow_amount = (player_pos - camera_pos) * 4.0 * delta;
+        // camera_tf.translation += follow_amount.extend(0.0);
+        let camera_z = camera_tf.translation.z;
+        camera_tf.translation = player_pos.extend(camera_z);
         // ...and then you'd do room boundaries clamping, screenshake, etc.
     }
 }
