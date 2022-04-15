@@ -10,6 +10,8 @@ use bevy_ecs_ldtk::prelude::*;
 mod hellow;
 mod junk;
 
+const PIXEL_SCALE: f32 = 3.0;
+
 fn main() {
     App::new()
         // vv needs to go before DefaultPlugins.
@@ -115,8 +117,9 @@ fn move_camera_system(
 fn snap_pixel_positions_system(
     mut query: Query<(&SubpixelTranslation, &mut Transform)>,
 ) {
+    let global_scale = Vec3::new(PIXEL_SCALE, PIXEL_SCALE, 1.0);
     for (subpixel_tl, mut pixel_tf) in query.iter_mut() {
-        pixel_tf.translation = subpixel_tl.0.floor();
+        pixel_tf.translation = (global_scale * subpixel_tl.0).floor();
     }
 }
 
@@ -195,6 +198,7 @@ fn setup_level(
 ) {
     commands.spawn_bundle(LdtkWorldBundle {
         ldtk_handle: asset_server.load("kittytown.ldtk"),
+        transform: Transform::from_scale(Vec3::splat(3.0)),
         ..Default::default()
     }).insert(LdtkWorld);
 }
@@ -210,7 +214,7 @@ fn setup_sprites(
     let texture_atlas_handle = texture_atlases.add(texture_atlas);
 
     let mut camera_bundle = OrthographicCameraBundle::new_2d();
-    camera_bundle.orthographic_projection.scale = 1.0/3.0;
+    // camera_bundle.orthographic_projection.scale = 1.0/3.0;
     commands.spawn_bundle(camera_bundle)
         .insert(SubpixelTranslation(Vec3::new(0.0, 0.0, 999.0)))
         // ^^ hack: I looked up the Z coord on new_2D and fudged it so we won't accidentally round it to 1000.
@@ -219,7 +223,8 @@ fn setup_sprites(
     commands
         .spawn_bundle(SpriteSheetBundle {
             texture_atlas: texture_atlas_handle,
-            transform: Transform::from_translation(Vec3::new(0.0, 0.0, 3.0)),
+            transform: Transform::from_translation(Vec3::new(0.0, 0.0, 3.0))
+                .with_scale(Vec3::splat(PIXEL_SCALE)),
             ..Default::default()
         })
         .insert(SubpixelTranslation(Vec3::new(0.0, 0.0, 3.0)))
