@@ -3,9 +3,11 @@ use bevy::{
         // Diagnostics,
         FrameTimeDiagnosticsPlugin},
     prelude::*,
+    utils::Duration,
 };
 use bevy_ecs_ldtk::prelude::*;
 // use bevy_ecs_tilemap::prelude::*;
+use std::collections::VecDeque;
 
 mod hellow;
 mod junk;
@@ -24,6 +26,12 @@ fn main() {
             ..Default::default()
         })
         .add_plugins(DefaultPlugins)
+        .insert_resource(RecentFrameTimes{ buffer: VecDeque::new() })
+        .insert_resource(SmoothedTime {
+            delta_seconds: 0.0,
+            delta: Duration::from_secs_f32(0.0),
+        })
+        .add_system_to_stage(CoreStage::PreUpdate, time_smoothing_system)
         .add_plugin(LdtkPlugin)
         // .add_plugin(hellow::HelloPlugin)
         // .add_plugin(FrameTimeDiagnosticsPlugin)
@@ -39,6 +47,45 @@ fn main() {
         .add_system(move_camera_system.label(CamMovements).after(Movements))
         .add_system(snap_pixel_positions_system.after(CamMovements))
         .run();
+}
+
+struct RecentFrameTimes {
+    buffer: VecDeque<f32>,
+}
+struct SmoothedTime {
+    delta_seconds: f32,
+    delta: Duration,
+}
+
+impl SmoothedTime {
+    fn delta_seconds(&self) -> f32 {
+        self.delta_seconds
+    }
+    fn delta(&self) -> Duration {
+        self.delta
+    }
+}
+
+// Smooth out delta time before doing anything with it. This is unoptimized, but that might not matter.
+fn time_smoothing_system(
+    time: Res<Time>,
+    mut recent_time: ResMut<RecentFrameTimes>,
+    mut smoothed_time: ResMut<SmoothedTime>,
+) {
+    let window: usize = 11;
+    let delta = time.delta_seconds();
+    recent_time.buffer.push_back(delta);
+    if recent_time.buffer.len() >= window + 1 {
+        recent_time.buffer.pop_front();
+        let mut sorted: Vec<f32> = recent_time.buffer.clone().into();
+        // floats aren't Ord, and this will panic on NaN but that's probs fine
+        sorted.sort_unstable_by(|a, b| a.partial_cmp(b).unwrap());
+        let sum = &sorted[2..(window - 2)].iter().fold(0.0, |acc, x| acc + *x);
+        smoothed_time.delta_seconds = *sum / (window as f32 - 4.0);
+    } else {
+        smoothed_time.delta_seconds = delta;
+    }
+    smoothed_time.delta = Duration::from_secs_f32(delta);
 }
 
 // Input time!
@@ -76,7 +123,8 @@ fn move_player_system(
     active_gamepad: Option<Res<ActiveGamepad>>,
     axes: Res<Axis<GamepadAxis>>,
     keys: Res<Input<KeyCode>>,
-    time: Res<Time>,
+    // time: Res<Time>,
+    time: Res<SmoothedTime>,
     mut query: Query<(&mut SubpixelTranslation, &Speed), With<Player>>,
 ) {
     let delta = time.delta_seconds();
@@ -94,7 +142,8 @@ fn move_player_system(
 }
 
 fn move_camera_system(
-    time: Res<Time>,
+    // time: Res<Time>,
+    time: Res<SmoothedTime>,
     mut query: QuerySet<(
         QueryState<&SubpixelTranslation, With<Player>>,
         QueryState<&mut SubpixelTranslation, With<MainCamera>>
@@ -177,7 +226,8 @@ fn connect_gamepads_system(
 // animation time!
 
 fn animate_sprites_system(
-    time: Res<Time>,
+    // time: Res<Time>,
+    time: Res<SmoothedTime>,
     texture_atlases: Res<Assets<TextureAtlas>>,
     mut query: Query<(&mut Timer, &mut TextureAtlasSprite, &Handle<TextureAtlas>)>,
     // ^^ ok, the timer I added myself, and the latter two were part of the bundle.
