@@ -12,35 +12,37 @@ mod junk;
 
 fn main() {
     App::new()
+        // vv needs to go before DefaultPlugins.
+        .insert_resource(WindowDescriptor {
+            vsync: true,
+            cursor_visible: false,
+            // mode: bevy::window::WindowMode::BorderlessFullscreen,
+            // width: 1920.0,
+            // height: 1080.0,
+            ..Default::default()
+        })
         .add_plugins(DefaultPlugins)
         .add_plugin(LdtkPlugin)
         // .add_plugin(hellow::HelloPlugin)
-        .add_plugin(FrameTimeDiagnosticsPlugin)
+        // .add_plugin(FrameTimeDiagnosticsPlugin)
+        // .add_startup_system(junk::setup_fps_debug)
+        // .add_system(junk::update_fps_debug_system)
+        // .add_system(junk::debug_z_system)
         .add_startup_system(setup_sprites)
-        .add_startup_system(junk::setup_fps_debug)
         .add_startup_system(setup_level)
         .insert_resource(LevelSelection::Index(1))
-        .add_system(junk::update_fps_debug_system)
         .add_system(animate_sprites_system)
         .add_system(connect_gamepads_system)
         .add_system(move_player_system.label(Movements))
         .add_system(move_camera_system.label(CamMovements).after(Movements))
         .add_system(snap_pixel_positions_system.after(CamMovements))
-        .add_system(junk::debug_z_system)
         .run();
 }
 
 // Input time!
 
-// All right, so an unfortunate thing I learned is that `gilrs`, the gamepad
-// library bevy relies on, only supports Xinput on windows. That means no PS4
-// controller unless you either run ds4windows or publish on steam to get
-// steaminput. On the plus side, it looks like the issue is just that it's a
-// volunteer-maintained project of relatively young age without maxed-out
-// platform api knowledge, so maybe someone'll add it at some point. (Or maybe
-// I'll have to.)
-
 // helper function: forward the axes resource (and a gamepad id) to it, get a vec back.
+// Note: `gilrs`, Bevy's gamepad library, only supports Xinput on windows. boo.
 fn get_gamepad_movement_vector(gamepad: Gamepad, axes: Res<Axis<GamepadAxis>>) -> Option<Vec2> {
     let x_axis = GamepadAxis(gamepad, GamepadAxisType::LeftStickX);
     let y_axis = GamepadAxis(gamepad, GamepadAxisType::LeftStickY);
