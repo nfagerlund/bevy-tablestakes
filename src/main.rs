@@ -28,8 +28,7 @@ fn main() {
         .add_plugins(DefaultPlugins)
         .insert_resource(RecentFrameTimes{ buffer: VecDeque::new() })
         .insert_resource(SmoothedTime {
-            delta_seconds: 0.0,
-            delta: Duration::from_secs_f32(0.0),
+            delta: Duration::new(0, 0),
         })
         .add_system_to_stage(CoreStage::PreUpdate, time_smoothing_system)
         .add_plugin(LdtkPlugin)
@@ -50,16 +49,15 @@ fn main() {
 }
 
 struct RecentFrameTimes {
-    buffer: VecDeque<f32>,
+    buffer: VecDeque<Duration>,
 }
 struct SmoothedTime {
-    delta_seconds: f32,
     delta: Duration,
 }
 
 impl SmoothedTime {
     fn delta_seconds(&self) -> f32 {
-        self.delta_seconds
+        self.delta.as_secs_f32()
     }
     fn delta(&self) -> Duration {
         self.delta
@@ -73,20 +71,19 @@ fn time_smoothing_system(
     mut smoothed_time: ResMut<SmoothedTime>,
 ) {
     let window: usize = 11;
-    let delta = time.delta_seconds();
+    let delta = time.delta();
     recent_time.buffer.push_back(delta);
     if recent_time.buffer.len() >= window + 1 {
         recent_time.buffer.pop_front();
-        let mut sorted: Vec<f32> = recent_time.buffer.clone().into();
-        // floats aren't Ord, and this will panic on NaN but that's probs fine
-        sorted.sort_unstable_by(|a, b| a.partial_cmp(b).unwrap());
-        let sum = &sorted[2..(window - 2)].iter().fold(0.0, |acc, x| acc + *x);
-        smoothed_time.delta_seconds = *sum / (window as f32 - 4.0);
+        let mut sorted: Vec<Duration> = recent_time.buffer.clone().into();
+        sorted.sort_unstable();
+        let sum = &sorted[2..(window - 2)].iter().fold(Duration::new(0, 0), |acc, x| acc + *x);
+        smoothed_time.delta = *sum / (window as u32 - 4);
     } else {
-        smoothed_time.delta_seconds = delta;
+        smoothed_time.delta = delta;
     }
-    smoothed_time.delta = Duration::from_secs_f32(delta);
 }
+
 
 // Input time!
 
