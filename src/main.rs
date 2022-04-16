@@ -130,7 +130,13 @@ fn move_player_system(
         gamepad_movement = get_gamepad_movement_vector(*pad_id, axes);
     }
     let movement = match gamepad_movement {
-        Some(mvmt) => mvmt,
+        Some(mvmt) => {
+            if mvmt.length() > 0.0 {
+                mvmt
+            } else {
+                get_kb_movement_vector(keys)
+            }
+        },
         None => get_kb_movement_vector(keys),
     };
     for (mut player_pos, speed) in query.iter_mut() {
