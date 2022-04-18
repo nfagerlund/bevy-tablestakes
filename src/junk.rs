@@ -3,13 +3,13 @@ use bevy::{
     prelude::*,
 };
 // use bevy_ecs_ldtk::prelude::*;
-use bevy_ecs_tilemap::prelude::*;
+// use bevy_ecs_tilemap::prelude::*;
 
 pub fn debug_z_system(
     // mut local_timer: Local<Timer>,
     player_query: Query<&Transform, With<crate::Player>>,
     world_query: Query<&Transform, With<crate::LdtkWorld>>,
-    level_query: Query<(Entity, &Transform, &Map)>,
+    level_query: Query<(Entity, &Transform, &bevy_ecs_tilemap::Map)>,
 ) {
     let player_transform = player_query.get_single().unwrap();
     let world_transform = world_query.get_single().unwrap();
