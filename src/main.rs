@@ -122,7 +122,7 @@ fn move_player_system(
     keys: Res<Input<KeyCode>>,
     // time: Res<Time>,
     time: Res<SmoothedTime>,
-    mut query: Query<(&mut SubpixelTranslation, &Speed), With<Player>>,
+    mut query: Query<(&mut SubpixelTranslation, &Speed, &mut SpriteDirection), With<Player>>,
 ) {
     let delta = time.delta_seconds();
     let mut gamepad_movement = None;
@@ -139,8 +139,13 @@ fn move_player_system(
         },
         None => get_kb_movement_vector(keys),
     };
-    for (mut player_pos, speed) in query.iter_mut() {
+    for (mut player_pos, speed, mut dir) in query.iter_mut() {
+        // move:
         player_pos.0 += (movement * speed.0 * delta).extend(0.0);
+        // update direction maybe:
+        if let Some(new_dir) = SpriteDirection::from_vec2(movement) {
+            *dir = new_dir;
+        }
     }
 }
 
@@ -281,8 +286,9 @@ fn setup_sprites(
             ..Default::default()
         })
         .insert(SubpixelTranslation(Vec3::new(0.0, 0.0, 3.0)))
-        .insert(Timer::from_seconds(0.1, true))
-        // ^^ 0.1 = inverse FPS. Could be way more ergonomic.
+        .insert(Timer::from_seconds(1.0/15.0, true))
+        // ^^ 15 fps => 1 sec / 15 frames. Would like better way to store that.
+        .insert(SpriteDirection::E)
         .insert(Speed(120.0))
         .insert(Player);
 }
@@ -319,3 +325,109 @@ struct Speed(f32);
 /// Additional transform component for things whose movements should be synced to hard pixel boundaries.
 #[derive(Component)]
 struct SubpixelTranslation(Vec3);
+
+#[derive(Component, Debug, Hash, PartialEq, Eq)]
+enum SpriteDirection { E, N, W, S }
+
+impl SpriteDirection {
+    fn from_vec2(dir: Vec2) -> Option<Self> {
+        if dir.length() <= 0.0 {
+            None
+        } else {
+            let mut angle = Vec2::X.angle_between(dir);
+            // grody-ass hack to bias toward east/west:
+            if (angle - std::f32::consts::FRAC_PI_4).abs() <= f32::EPSILON {
+                angle -= 0.1;
+            }
+            if (angle + std::f32::consts::FRAC_PI_4).abs() <= f32::EPSILON {
+                angle += 0.1;
+            }
+            // ^^ sorry dude!!!
+            let mut cardinal_int = (angle / std::f32::consts::FRAC_PI_2).round() as i32;
+            while cardinal_int < 0 {
+                cardinal_int += 4;
+            }
+            cardinal_int = cardinal_int % 4;
+            // Now it's one of 0, 1, 2, 3, starting from east and going counterclockwise.
+            match cardinal_int {
+                0 => Some(Self::E),
+                1 => Some(Self::N),
+                2 => Some(Self::W),
+                3 => Some(Self::S),
+                _ => {
+                    warn!("Something fucky happened in SpriteDirection::from_vec2. Received: {:?}", dir);
+                    None
+                },
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn sprite_directions() {
+        // zero
+        assert_eq!(
+            SpriteDirection::from_vec2(Vec2::ZERO),
+            None
+        );
+        // plain north
+        assert_eq!(
+            SpriteDirection::from_vec2(Vec2::new(0.0, 1.0)),
+            Some(SpriteDirection::N)
+        );
+        // north but off a bit
+        assert_eq!(
+            SpriteDirection::from_vec2(Vec2::new(0.12, 1.0)),
+            Some(SpriteDirection::N)
+        );
+        // south but off a bit
+        assert_eq!(
+            SpriteDirection::from_vec2(Vec2::new(0.1, -0.89)),
+            Some(SpriteDirection::S)
+        );
+        // Exact 45 degree angles should bias toward east/west.
+        // 45 degrees NE
+        assert_eq!(
+            SpriteDirection::from_vec2(Vec2::new(1.0, 1.0)),
+            Some(SpriteDirection::E)
+        );
+        // 45 degrees NW
+        assert_eq!(
+            SpriteDirection::from_vec2(Vec2::new(-1.0, 1.0)),
+            Some(SpriteDirection::W)
+        );
+        // 45 degrees SW
+        assert_eq!(
+            SpriteDirection::from_vec2(Vec2::new(-1.0, -1.0)),
+            Some(SpriteDirection::W)
+        );
+        // 45 degrees SE
+        assert_eq!(
+            SpriteDirection::from_vec2(Vec2::new(1.0, -1.0)),
+            Some(SpriteDirection::E)
+        );
+
+
+    }
+
+    #[test]
+    fn dumb_non_test() {
+        let half_pi = std::f32::consts::FRAC_PI_2;
+        let deg90 = Vec2::new(0.0, 1.0);
+        let deg180 = Vec2::new(-1.0, 0.0);
+        let deg270 = Vec2::new(0.0, -1.0);
+        let deg0 = Vec2::X;
+        println!("half_pi: {:?}", half_pi);
+        println!("90 deg: {:?}", deg0.angle_between(deg90));
+        println!("180 deg: {:?}", deg0.angle_between(deg180));
+        println!("lil past 180: {:?}", deg0.angle_between(Vec2::new(-1.0, -0.01)));
+        println!("ok now 90 rounded! {:?}", deg0.angle_between(deg90) / half_pi);
+        println!("and... 270 rounded! {:?}", deg0.angle_between(deg270) / half_pi);
+        println!("... to degrees? {:?}", deg0.angle_between(deg270).to_degrees());
+        println!("mod? {:?}", -2 % 4);
+    }
+}
