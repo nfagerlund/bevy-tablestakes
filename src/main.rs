@@ -1,9 +1,11 @@
 use bevy::{
-    diagnostic::{
-        // Diagnostics,
-        FrameTimeDiagnosticsPlugin},
+    // diagnostic::{
+    //     Diagnostics,
+    //     FrameTimeDiagnosticsPlugin
+    // },
     prelude::*,
     utils::Duration,
+    render::camera::Camera2d,
 };
 use bevy_ecs_ldtk::prelude::*;
 // use bevy_ecs_tilemap::prelude::*;
@@ -18,8 +20,8 @@ fn main() {
     App::new()
         // vv needs to go before DefaultPlugins.
         .insert_resource(WindowDescriptor {
-            vsync: true,
-            cursor_visible: false,
+            present_mode: bevy::window::PresentMode::Mailbox,
+            cursor_visible: true,
             // mode: bevy::window::WindowMode::BorderlessFullscreen,
             // width: 1920.0,
             // height: 1080.0,
@@ -42,9 +44,9 @@ fn main() {
         .insert_resource(LevelSelection::Index(1))
         .add_system(animate_sprites_system)
         .add_system(connect_gamepads_system)
-        .add_system(move_player_system.label(Movements))
-        .add_system(move_camera_system.label(CamMovements).after(Movements))
-        .add_system(snap_pixel_positions_system.after(CamMovements))
+        .add_system(move_player_system)
+        .add_system(move_camera_system.after(move_player_system))
+        .add_system(snap_pixel_positions_system.after(move_camera_system))
         .run();
 }
 
@@ -147,16 +149,16 @@ fn move_player_system(
 fn move_camera_system(
     // time: Res<Time>,
     time: Res<SmoothedTime>,
-    mut query: QuerySet<(
-        QueryState<&SubpixelTranslation, With<Player>>,
-        QueryState<&mut SubpixelTranslation, With<MainCamera>>
+    mut params: ParamSet<(
+        Query<&SubpixelTranslation, With<Player>>,
+        Query<&mut SubpixelTranslation, With<Camera2d>>
     )>,
 ) {
     let delta = time.delta_seconds();
-    let player_tf = query.q0().get_single().unwrap();
-    let player_pos = player_tf.0.truncate();
+    let player_pos = params.p0().single().0.truncate();
+    // let player_pos = player_tf.0.truncate();
     // let mut camera_tf = query.q1().get_single_mut().unwrap();
-    for mut camera_tf in query.q1().iter_mut() {
+    for mut camera_tf in params.p1().iter_mut() {
         let camera_pos = camera_tf.0.truncate();
         let follow_amount = (player_pos - camera_pos) * 4.0 * delta;
         camera_tf.0 += follow_amount.extend(0.0);
@@ -232,12 +234,12 @@ fn animate_sprites_system(
     // time: Res<Time>,
     time: Res<SmoothedTime>,
     texture_atlases: Res<Assets<TextureAtlas>>,
-    mut query: Query<(&mut Timer, &mut TextureAtlasSprite, &Handle<TextureAtlas>)>,
+    mut query: Query<(&mut SpriteTimer, &mut TextureAtlasSprite, &Handle<TextureAtlas>)>,
     // ^^ ok, the timer I added myself, and the latter two were part of the bundle.
 ) {
-    for (mut timer, mut sprite, texture_atlas_handle) in query.iter_mut() {
-        timer.tick(time.delta()); // ok, I remember you. advance the timer.
-        if timer.finished() {
+    for (mut sprite_timer, mut sprite, texture_atlas_handle) in query.iter_mut() {
+        sprite_timer.timer.tick(time.delta()); // ok, I remember you. advance the timer.
+        if sprite_timer.timer.finished() {
             let texture_atlas = texture_atlases.get(texture_atlas_handle).unwrap(); // uh ok. btw, how do we avoid the unwraps in this runtime?
             sprite.index = (sprite.index + 1) % texture_atlas.textures.len();
             // ^^ Ah. OK. We're doing some realll basic flipbooking here. But also, note that the TextureAtlasSprite struct ONLY has color/index/flip_(x|y)/custom_size props, it's meant to always be paired with a textureatlas handle and it doesn't hold its own reference to one. ECS lifestyles.
@@ -266,12 +268,11 @@ fn setup_sprites(
     let texture_atlas = TextureAtlas::from_grid(texture_handle, Vec2::new(17.0, 24.0), 32, 1);
     let texture_atlas_handle = texture_atlases.add(texture_atlas);
 
-    let mut camera_bundle = OrthographicCameraBundle::new_2d();
+    let camera_bundle = OrthographicCameraBundle::new_2d();
     // camera_bundle.orthographic_projection.scale = 1.0/3.0;
     commands.spawn_bundle(camera_bundle)
-        .insert(SubpixelTranslation(Vec3::new(0.0, 0.0, 999.0)))
+        .insert(SubpixelTranslation(Vec3::new(0.0, 0.0, 999.0)));
         // ^^ hack: I looked up the Z coord on new_2D and fudged it so we won't accidentally round it to 1000.
-        .insert(MainCamera);
     commands.spawn_bundle(UiCameraBundle::default());
     commands
         .spawn_bundle(SpriteSheetBundle {
@@ -281,7 +282,7 @@ fn setup_sprites(
             ..Default::default()
         })
         .insert(SubpixelTranslation(Vec3::new(0.0, 0.0, 3.0)))
-        .insert(Timer::from_seconds(0.1, true))
+        .insert(SpriteTimer{ timer: Timer::from_seconds(0.1, true) })
         // ^^ 0.1 = inverse FPS. Could be way more ergonomic.
         .insert(Speed(120.0))
         .insert(Player);
@@ -292,14 +293,6 @@ fn setup_sprites(
 /// Resource for storing the active gamepad
 struct ActiveGamepad(Gamepad);
 
-/// Label for stages that move things around the level.
-#[derive(Copy, Clone, Eq, PartialEq, Debug, Hash, SystemLabel)]
-struct Movements;
-
-/// Label for stages that move the camera around the level.
-#[derive(Copy, Clone, Eq, PartialEq, Debug, Hash, SystemLabel)]
-struct CamMovements;
-
 /// Marker component for a spawned LdtkWorldBundle
 #[derive(Component)]
 pub struct LdtkWorld;
@@ -308,13 +301,15 @@ pub struct LdtkWorld;
 #[derive(Component)]
 pub struct Player;
 
-/// Marker component for main camera
-#[derive(Component)]
-struct MainCamera;
-
 /// Speed in pixels... per... second?
 #[derive(Component)]
 struct Speed(f32);
+
+/// Sprite animation frame timer
+#[derive(Component)]
+struct SpriteTimer {
+    timer: Timer,
+}
 
 /// Additional transform component for things whose movements should be synced to hard pixel boundaries.
 #[derive(Component)]
