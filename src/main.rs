@@ -241,9 +241,13 @@ fn animate_sprites_system(
     // ^^ ok, the timer I added myself, and the latter two were part of the bundle.
 ) {
     for (mut timer, mut sprite, texture_atlas_handle) in query.iter_mut() {
+        // TODO: soften the hardcoding
+        // sPlayerRun is 15 fps, so use that for the timer when inserting.
         timer.tick(time.delta()); // ok, I remember you. advance the timer.
         if timer.finished() {
-            let texture_atlas = texture_atlases.get(texture_atlas_handle).unwrap(); // uh ok. btw, how do we avoid the unwraps in this runtime?
+            let texture_atlas = texture_atlases.get(texture_atlas_handle).unwrap();
+            // uh ok. btw, how do we avoid the unwraps in this runtime?
+            // let total_frames = texture_atlas.textures.len();
             sprite.index = (sprite.index + 1) % texture_atlas.textures.len();
             // ^^ Ah. OK. We're doing some realll basic flipbooking here. But also, note that the TextureAtlasSprite struct ONLY has color/index/flip_(x|y)/custom_size props, it's meant to always be paired with a textureatlas handle and it doesn't hold its own reference to one. ECS lifestyles.
         }
