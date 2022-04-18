@@ -8,15 +8,16 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-bevy = { version = "0.6.1", features = [
+bevy = { version = "0.7.0", features = [
     "dynamic",
 ] }
-bevy_ecs_tilemap = "0.5.0"
+# bevy_ecs_tilemap = "0.5.0"
 # bevy_ecs_ldtk = "0.2.0"
 # It looks like LDTK upgrades itself without asking, and tbh I'd rather use
 # latest/greatest for the most part anyway, so I need to use the ldtk-1.0 branch
 # of this crate:
-bevy_ecs_ldtk = { git = "https://github.com/Trouv/bevy_ecs_ldtk.git", rev = "a6e4003fbe33945f5e0dc3384a697497caae866a" }
+bevy_ecs_tilemap = { git = "https://github.com/StarArawn/bevy_ecs_tilemap", rev = "6796c23" }
+bevy_ecs_ldtk = { git = "https://github.com/Trouv/bevy_ecs_ldtk.git", rev = "e005863" }
 # bevy_mod_debugdump = "0.3.0" # neat: https://github.com/jakobhellermann/bevy_mod_debugdump
 
 # Per https://bevy-cheatbook.github.io/pitfalls/performance.html:
