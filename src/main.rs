@@ -9,12 +9,12 @@ use bevy::{
 };
 use bevy_ecs_ldtk::prelude::*;
 // use bevy_ecs_tilemap::prelude::*;
-use std::collections::VecDeque;
+use std::{collections::VecDeque, f32::consts::PI};
 
 mod hellow;
 mod junk;
 
-const PIXEL_SCALE: f32 = 3.0;
+const PIXEL_SCALE: f32 = 1.0;
 
 fn main() {
     App::new()
@@ -32,7 +32,7 @@ fn main() {
         .insert_resource(SmoothedTime {
             delta: Duration::new(0, 0),
         })
-        .add_system_to_stage(CoreStage::PreUpdate, time_smoothing_system)
+        // .add_system_to_stage(CoreStage::PreUpdate, time_smoothing_system)
         .add_plugin(LdtkPlugin)
         // .add_plugin(hellow::HelloPlugin)
         // .add_plugin(FrameTimeDiagnosticsPlugin)
@@ -122,8 +122,8 @@ fn move_player_system(
     active_gamepad: Option<Res<ActiveGamepad>>,
     axes: Res<Axis<GamepadAxis>>,
     keys: Res<Input<KeyCode>>,
-    // time: Res<Time>,
-    time: Res<SmoothedTime>,
+    time: Res<Time>,
+    // time: Res<SmoothedTime>,
     mut query: Query<(&mut SubpixelTranslation, &Speed), With<Player>>,
 ) {
     let delta = time.delta_seconds();
@@ -147,8 +147,8 @@ fn move_player_system(
 }
 
 fn move_camera_system(
-    // time: Res<Time>,
-    time: Res<SmoothedTime>,
+    time: Res<Time>,
+    // time: Res<SmoothedTime>,
     mut params: ParamSet<(
         Query<&SubpixelTranslation, With<Player>>,
         Query<&mut SubpixelTranslation, With<Camera2d>>
@@ -171,9 +171,10 @@ fn move_camera_system(
 fn snap_pixel_positions_system(
     mut query: Query<(&SubpixelTranslation, &mut Transform)>,
 ) {
-    let global_scale = Vec3::new(PIXEL_SCALE, PIXEL_SCALE, 1.0);
+    // let global_scale = Vec3::new(PIXEL_SCALE, PIXEL_SCALE, 1.0);
     for (subpixel_tl, mut pixel_tf) in query.iter_mut() {
-        pixel_tf.translation = (global_scale * subpixel_tl.0).floor();
+        // pixel_tf.translation = (global_scale * subpixel_tl.0).floor();
+        pixel_tf.translation = subpixel_tl.0;
     }
 }
 
@@ -231,8 +232,8 @@ fn connect_gamepads_system(
 // animation time!
 
 fn animate_sprites_system(
-    // time: Res<Time>,
-    time: Res<SmoothedTime>,
+    time: Res<Time>,
+    // time: Res<SmoothedTime>,
     texture_atlases: Res<Assets<TextureAtlas>>,
     mut query: Query<(&mut SpriteTimer, &mut TextureAtlasSprite, &Handle<TextureAtlas>)>,
     // ^^ ok, the timer I added myself, and the latter two were part of the bundle.
@@ -253,7 +254,7 @@ fn setup_level(
 ) {
     commands.spawn_bundle(LdtkWorldBundle {
         ldtk_handle: asset_server.load("kittytown.ldtk"),
-        transform: Transform::from_scale(Vec3::splat(3.0)),
+        transform: Transform::from_scale(Vec3::splat(PIXEL_SCALE)),
         ..Default::default()
     }).insert(LdtkWorld);
 }
@@ -268,8 +269,8 @@ fn setup_sprites(
     let texture_atlas = TextureAtlas::from_grid(texture_handle, Vec2::new(17.0, 24.0), 32, 1);
     let texture_atlas_handle = texture_atlases.add(texture_atlas);
 
-    let camera_bundle = OrthographicCameraBundle::new_2d();
-    // camera_bundle.orthographic_projection.scale = 1.0/3.0;
+    let mut camera_bundle = OrthographicCameraBundle::new_2d();
+    camera_bundle.orthographic_projection.scale = 1.0/3.0;
     commands.spawn_bundle(camera_bundle)
         .insert(SubpixelTranslation(Vec3::new(0.0, 0.0, 999.0)));
         // ^^ hack: I looked up the Z coord on new_2D and fudged it so we won't accidentally round it to 1000.
