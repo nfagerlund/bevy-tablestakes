@@ -200,7 +200,7 @@ version = "0.1.0"
 dependencies = [
  "bevy",
  "bevy_ecs_ldtk",
- "bevy_ecs_tilemap 0.6.0 (git+https://github.com/StarArawn/bevy_ecs_tilemap?rev=6796c23)",
+ "bevy_ecs_tilemap 0.6.0 (git+https://github.com/StarArawn/bevy_ecs_tilemap?rev=02b044b99)",
 ]
 
 [[package]]
@@ -374,7 +374,7 @@ dependencies = [
 [[package]]
 name = "bevy_ecs_ldtk"
 version = "0.2.0"
-source = "git+https://github.com/Trouv/bevy_ecs_ldtk.git?rev=e005863#e005863429c44647867cb4d790af8f49fc1ba7e0"
+source = "git+https://github.com/Trouv/bevy_ecs_ldtk.git?rev=1d4b8e7c86#1d4b8e7c86de8e6007e12412beecb54f1486ee23"
 dependencies = [
  "anyhow",
  "bevy",
@@ -390,7 +390,7 @@ dependencies = [
 [[package]]
 name = "bevy_ecs_ldtk_macros"
 version = "0.2.0"
-source = "git+https://github.com/Trouv/bevy_ecs_ldtk.git?rev=e005863#e005863429c44647867cb4d790af8f49fc1ba7e0"
+source = "git+https://github.com/Trouv/bevy_ecs_ldtk.git?rev=1d4b8e7c86#1d4b8e7c86de8e6007e12412beecb54f1486ee23"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -412,7 +412,7 @@ dependencies = [
 [[package]]
 name = "bevy_ecs_tilemap"
 version = "0.6.0"
-source = "git+https://github.com/StarArawn/bevy_ecs_tilemap?rev=6796c23#6796c2355b75fa383fa4067443413f8bbe4a2956"
+source = "git+https://github.com/StarArawn/bevy_ecs_tilemap?rev=02b044b99#02b044b9948b3386fbba657e2c6bcce3d8069c2f"
 dependencies = [
  "bevy",
  "bytemuck",

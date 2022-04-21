@@ -16,8 +16,8 @@ bevy = { version = "0.7.0", features = [
 # It looks like LDTK upgrades itself without asking, and tbh I'd rather use
 # latest/greatest for the most part anyway, so I need to use the ldtk-1.0 branch
 # of this crate:
-bevy_ecs_tilemap = { git = "https://github.com/StarArawn/bevy_ecs_tilemap", rev = "6796c23" }
-bevy_ecs_ldtk = { git = "https://github.com/Trouv/bevy_ecs_ldtk.git", rev = "e005863" }
+bevy_ecs_tilemap = { git = "https://github.com/StarArawn/bevy_ecs_tilemap", rev = "02b044b99" }
+bevy_ecs_ldtk = { git = "https://github.com/Trouv/bevy_ecs_ldtk.git", rev = "1d4b8e7c86" }
 # bevy_mod_debugdump = "0.3.0" # neat: https://github.com/jakobhellermann/bevy_mod_debugdump
 
 # Per https://bevy-cheatbook.github.io/pitfalls/performance.html:
