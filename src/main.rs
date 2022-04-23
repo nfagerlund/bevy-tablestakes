@@ -10,6 +10,7 @@ use bevy::{
 use bevy_ecs_ldtk::prelude::*;
 // use bevy_ecs_tilemap::prelude::*;
 use std::{collections::VecDeque, f32::consts::PI};
+use bevy_inspector_egui::WorldInspectorPlugin;
 
 mod hellow;
 mod junk;
@@ -36,6 +37,7 @@ fn main() {
         .add_plugin(LdtkPlugin)
         // .add_plugin(hellow::HelloPlugin)
         // .add_plugin(FrameTimeDiagnosticsPlugin)
+        .add_plugin(WorldInspectorPlugin::new())
         // .add_startup_system(junk::setup_fps_debug)
         // .add_system(junk::update_fps_debug_system)
         // .add_system(junk::debug_z_system)

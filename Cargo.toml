@@ -19,11 +19,12 @@ bevy = { version = "0.7.0", features = [
 bevy_ecs_tilemap = { git = "https://github.com/StarArawn/bevy_ecs_tilemap", rev = "02b044b99" }
 bevy_ecs_ldtk = { git = "https://github.com/Trouv/bevy_ecs_ldtk.git", rev = "1d4b8e7c86" }
 # bevy_mod_debugdump = "0.3.0" # neat: https://github.com/jakobhellermann/bevy_mod_debugdump
+bevy-inspector-egui = "0.10.0"
 
 # Per https://bevy-cheatbook.github.io/pitfalls/performance.html:
 # medium-optimize this crate's own debug builds
 [profile.dev]
-opt-level = 1
+opt-level = 2
 
 # hella optimize all the engine dependencies
 [profile.dev.package."*"]
