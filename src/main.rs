@@ -10,7 +10,7 @@ use bevy::{
 use bevy_ecs_ldtk::prelude::*;
 // use bevy_ecs_tilemap::prelude::*;
 use std::{collections::VecDeque, f32::consts::PI};
-use bevy_inspector_egui::WorldInspectorPlugin;
+use bevy_inspector_egui::{WorldInspectorPlugin, Inspectable, RegisterInspectable};
 
 mod hellow;
 mod junk;
@@ -38,6 +38,7 @@ fn main() {
         // .add_plugin(hellow::HelloPlugin)
         // .add_plugin(FrameTimeDiagnosticsPlugin)
         .add_plugin(WorldInspectorPlugin::new())
+        .register_inspectable::<SubTransform>()
         // .add_startup_system(junk::setup_fps_debug)
         // .add_system(junk::update_fps_debug_system)
         // .add_system(junk::debug_z_system)
@@ -315,7 +316,7 @@ struct SpriteTimer {
 }
 
 /// Additional transform component for things whose movements should be synced to hard pixel boundaries.
-#[derive(Component)]
+#[derive(Component, Inspectable)]
 struct SubTransform {
     translation: Vec3,
 }
