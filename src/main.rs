@@ -126,7 +126,7 @@ fn move_player_system(
     keys: Res<Input<KeyCode>>,
     time: Res<Time>,
     // time: Res<SmoothedTime>,
-    mut query: Query<(&mut SubpixelTranslation, &Speed), With<Player>>,
+    mut query: Query<(&mut SubTransform, &Speed), With<Player>>,
 ) {
     let delta = time.delta_seconds();
     let mut gamepad_movement = None;
@@ -143,8 +143,8 @@ fn move_player_system(
         },
         None => get_kb_movement_vector(keys),
     };
-    for (mut player_pos, speed) in query.iter_mut() {
-        player_pos.0 += (movement * speed.0 * delta).extend(0.0);
+    for (mut player_tf, speed) in query.iter_mut() {
+        player_tf.translation += (movement * speed.0 * delta).extend(0.0);
     }
 }
 
@@ -152,31 +152,31 @@ fn move_camera_system(
     time: Res<Time>,
     // time: Res<SmoothedTime>,
     mut params: ParamSet<(
-        Query<&SubpixelTranslation, With<Player>>,
-        Query<&mut SubpixelTranslation, With<Camera2d>>
+        Query<&SubTransform, With<Player>>,
+        Query<&mut SubTransform, With<Camera2d>>
     )>,
 ) {
     let delta = time.delta_seconds();
-    let player_pos = params.p0().single().0.truncate();
-    // let player_pos = player_tf.0.truncate();
+    let player_pos = params.p0().single().translation.truncate();
+    // let player_pos = player_tf.translation.truncate();
     // let mut camera_tf = query.q1().get_single_mut().unwrap();
     for mut camera_tf in params.p1().iter_mut() {
-        let camera_pos = camera_tf.0.truncate();
+        let camera_pos = camera_tf.translation.truncate();
         let follow_amount = (player_pos - camera_pos) * 4.0 * delta;
-        camera_tf.0 += follow_amount.extend(0.0);
-        // let camera_z = camera_tf.0.z;
-        // camera_tf.0 = player_pos.extend(camera_z);
+        camera_tf.translation += follow_amount.extend(0.0);
+        // let camera_z = camera_tf.translation.z;
+        // camera_tf.translation = player_pos.extend(camera_z);
         // ...and then you'd do room boundaries clamping, screenshake, etc.
     }
 }
 
 fn snap_pixel_positions_system(
-    mut query: Query<(&SubpixelTranslation, &mut Transform)>,
+    mut query: Query<(&SubTransform, &mut Transform)>,
 ) {
     // let global_scale = Vec3::new(PIXEL_SCALE, PIXEL_SCALE, 1.0);
-    for (subpixel_tl, mut pixel_tf) in query.iter_mut() {
-        // pixel_tf.translation = (global_scale * subpixel_tl.0).floor();
-        pixel_tf.translation = subpixel_tl.0;
+    for (sub_tf, mut pixel_tf) in query.iter_mut() {
+        // pixel_tf.translation = (global_scale * sub_tf.translation).floor();
+        pixel_tf.translation = sub_tf.translation;
     }
 }
 
@@ -274,7 +274,7 @@ fn setup_sprites(
     let mut camera_bundle = OrthographicCameraBundle::new_2d();
     camera_bundle.orthographic_projection.scale = 1.0/3.0;
     commands.spawn_bundle(camera_bundle)
-        .insert(SubpixelTranslation(Vec3::new(0.0, 0.0, 999.0)));
+        .insert(SubTransform{ translation: Vec3::new(0.0, 0.0, 999.0) });
         // ^^ hack: I looked up the Z coord on new_2D and fudged it so we won't accidentally round it to 1000.
     commands.spawn_bundle(UiCameraBundle::default());
     commands
@@ -284,7 +284,7 @@ fn setup_sprites(
                 .with_scale(Vec3::splat(PIXEL_SCALE)),
             ..Default::default()
         })
-        .insert(SubpixelTranslation(Vec3::new(0.0, 0.0, 3.0)))
+        .insert(SubTransform{ translation: Vec3::new(0.0, 0.0, 3.0) })
         .insert(SpriteTimer{ timer: Timer::from_seconds(0.1, true) })
         // ^^ 0.1 = inverse FPS. Could be way more ergonomic.
         .insert(Speed(120.0))
@@ -316,4 +316,6 @@ struct SpriteTimer {
 
 /// Additional transform component for things whose movements should be synced to hard pixel boundaries.
 #[derive(Component)]
-struct SubpixelTranslation(Vec3);
+struct SubTransform {
+    translation: Vec3,
+}
