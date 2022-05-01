@@ -13,7 +13,12 @@ use std::{
     collections::VecDeque,
     // f32::consts::PI
 };
-use bevy_inspector_egui::{WorldInspectorPlugin, Inspectable, RegisterInspectable};
+use bevy_inspector_egui::{
+    WorldInspectorPlugin,
+    Inspectable,
+    RegisterInspectable,
+    InspectorPlugin,
+};
 use crate::input::*;
 
 mod hellow;
@@ -51,6 +56,9 @@ fn main() {
         // INSPECTOR STUFF
         .add_plugin(WorldInspectorPlugin::new())
         .register_inspectable::<SubTransform>()
+        .insert_resource(WonderWall::default())
+        .add_plugin(InspectorPlugin::<WonderWall>::new())
+        .add_system(look_for_walls_system)
 
         // LDTK STUFF
         .add_startup_system(setup_level)
@@ -69,6 +77,14 @@ fn main() {
         .run();
 }
 
+/// resource for collision yelling
+#[derive(Inspectable, Default)]
+struct WonderWall {
+    tile_entity: Option<Entity>,
+    tile_grid_coords: Option<IVec2>,
+    num_walls: usize,
+}
+
 struct RecentFrameTimes {
     buffer: VecDeque<Duration>,
 }
@@ -83,6 +99,41 @@ impl SmoothedTime {
     fn delta(&self) -> Duration {
         self.delta
     }
+}
+
+fn look_for_walls_system(
+    mut wonderwall: ResMut<WonderWall>,
+    walls_q: Query<(&BBox, &Transform, &GridCoords, Entity), With<Solid>>,
+    player_q: Query<&Transform, With<Player>>,
+) {
+    let player_transform = player_q.single();
+    wonderwall.tile_entity = None;
+    wonderwall.tile_grid_coords = None;
+    wonderwall.num_walls = walls_q.iter().count();
+    for (bbox, transform, grid_coords, entity) in walls_q.iter() {
+        if point_in_bbox(player_transform.translation.truncate(), transform.translation.truncate(), bbox.size) {
+            wonderwall.tile_entity = Some(entity);
+            wonderwall.tile_grid_coords = Some(IVec2::new(grid_coords.x, grid_coords.y));
+        }
+    }
+}
+
+// This is naive and assumes the pivot point in in the center of the bbox.
+fn point_in_bbox(point: Vec2, bbox_location: Vec2, bbox_size: Vec2) -> bool {
+    point.x >= bbox_location.x - bbox_size.x / 2.
+        && point.x <= bbox_location.x + bbox_size.x / 2.
+        && point.y >= bbox_location.y - bbox_size.y / 2.
+        && point.y <= bbox_location.y + bbox_size.y / 2.
+}
+
+#[test]
+fn point_in_bbox_test() {
+    let loc = Vec2::new(5.0, 5.0);
+    let bb_size = BBox{ size: Vec2::new(16.0, 16.0) };
+    let bb_in = Vec2::new(6.0, 6.0);
+    let bb_out = Vec2::new(90.0, 90.0);
+    assert!(point_in_bbox(loc, bb_in, bb_size.size));
+    assert!(!point_in_bbox(loc, bb_out, bb_size.size));
 }
 
 fn tile_info_barfing_system(
