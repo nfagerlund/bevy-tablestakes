@@ -40,21 +40,32 @@ fn main() {
         })
         // .add_system_to_stage(CoreStage::PreUpdate, time_smoothing_system)
         .add_plugin(LdtkPlugin)
-        // .add_plugin(hellow::HelloPlugin)
+
+        // NOISY DEBUG STUFF
         // .add_plugin(FrameTimeDiagnosticsPlugin)
-        .add_plugin(WorldInspectorPlugin::new())
-        .register_inspectable::<SubTransform>()
         // .add_startup_system(junk::setup_fps_debug)
         // .add_system(junk::update_fps_debug_system)
         // .add_system(junk::debug_z_system)
-        .add_startup_system(setup_sprites)
+        .add_system(tile_info_barfing_system)
+
+        // INSPECTOR STUFF
+        .add_plugin(WorldInspectorPlugin::new())
+        .register_inspectable::<SubTransform>()
+
+        // LDTK STUFF
         .add_startup_system(setup_level)
         .insert_resource(LevelSelection::Index(1))
+        .register_ldtk_int_cell_for_layer::<Wall>("StructureKind", 1)
+
+        // PLAYER STUFF
+        .add_startup_system(setup_sprites)
         .add_system(animate_sprites_system)
         .add_system(connect_gamepads_system)
         .add_system(move_player_system)
         .add_system(move_camera_system.after(move_player_system))
         .add_system(snap_pixel_positions_system.after(move_camera_system))
+
+        // OK BYE!!!
         .run();
 }
 
@@ -71,6 +82,21 @@ impl SmoothedTime {
     }
     fn delta(&self) -> Duration {
         self.delta
+    }
+}
+
+fn tile_info_barfing_system(
+    keys: Res<Input<KeyCode>>,
+    tile_query: Query<(&IntGridCell, &GridCoords, &Transform)>,
+    level_query: Query<(&Handle<LdtkLevel>, &Transform)>,
+) {
+    if keys.just_pressed(KeyCode::B) {
+        for (gridcell, coords, transform) in tile_query.iter() {
+            info!("{:?} at {:?}", gridcell, transform);
+        }
+        for (level, transform) in level_query.iter() {
+            info!("level {:?} at {:?}", level, transform);
+        }
     }
 }
 
@@ -241,4 +267,36 @@ struct SpriteTimer {
 #[derive(Component, Inspectable)]
 struct SubTransform {
     translation: Vec3,
+}
+
+/// Collidable solid component... but you also need a position Vec3 and a size Vec2 from somewhere.
+#[derive(Component)]
+struct Solid;
+
+/// Bounding box size component. I'm using the f32-based Vec2 because that's what
+/// bevy::sprite::collide_aabb::collide() uses.
+#[derive(Component)]
+struct BBox {
+    size: Vec2,
+}
+
+/// Wall bundle for tilemap walls
+#[derive(Bundle)]
+struct Wall {
+    solid: Solid,
+    bbox: BBox,
+    // transform: Transform, // This is needed, but it's handled by the plugin.
+}
+
+// Custom impl instead of derive bc... you'll see!
+impl LdtkIntCell for Wall {
+    fn bundle_int_cell(_: IntGridCell, layer_instance: &LayerInstance) -> Self {
+        Wall {
+            solid: Solid,
+            bbox: BBox {
+                // there!! v. proud of finding this, the example just cheated w/ prior knowledge.
+                size: Vec2::splat(layer_instance.grid_size as f32),
+            },
+        }
+    }
 }
