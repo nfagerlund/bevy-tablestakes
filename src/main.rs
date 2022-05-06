@@ -103,7 +103,7 @@ impl SmoothedTime {
 
 fn look_for_walls_system(
     mut wonderwall: ResMut<WonderWall>,
-    walls_q: Query<(&BBox, &Transform, &GridCoords, Entity), With<Solid>>,
+    walls_q: Query<(&BBoxOld, &Transform, &GridCoords, Entity), With<Solid>>,
     player_q: Query<&Transform, With<Player>>,
 ) {
     let player_transform = player_q.single();
@@ -129,7 +129,7 @@ fn point_in_bbox(point: Vec2, bbox_location: Vec2, bbox_size: Vec2) -> bool {
 #[test]
 fn point_in_bbox_test() {
     let loc = Vec2::new(5.0, 5.0);
-    let bb_size = BBox{ size: Vec2::new(16.0, 16.0) };
+    let bb_size = BBoxOld{ size: Vec2::new(16.0, 16.0) };
     let bb_in = Vec2::new(6.0, 6.0);
     let bb_out = Vec2::new(90.0, 90.0);
     assert!(point_in_bbox(loc, bb_in, bb_size.size));
@@ -277,13 +277,22 @@ fn setup_sprites(
         .insert(SubTransform{ translation: Vec3::new(0.0, 0.0, 999.0) });
         // ^^ hack: I looked up the Z coord on new_2D and fudged it so we won't accidentally round it to 1000.
     commands.spawn_bundle(UiCameraBundle::default());
+    // IT'S THE PLAYER, GIVE IT UP!!
     commands
         .spawn_bundle(SpriteSheetBundle {
             texture_atlas: texture_atlas_handle,
+            sprite: TextureAtlasSprite {
+                anchor: bevy::sprite::Anchor::BottomLeft,
+                ..Default::default()
+            },
             transform: Transform::from_translation(Vec3::new(0.0, 0.0, 3.0))
                 .with_scale(Vec3::splat(PIXEL_SCALE)),
             ..Default::default()
         })
+        // some nasty hardcoded bbox numbers that should be in an asset somewhere:
+        .insert(OriginOffset(Vec2::new(8., 0.)))
+        .insert(Walkbox(BBox::bottom_centered(14., 5.)))
+        // come back to those later!
         .insert(SubTransform{ translation: Vec3::new(0.0, 0.0, 3.0) })
         .insert(SpriteTimer{ timer: Timer::from_seconds(0.1, true) })
         // ^^ 0.1 = inverse FPS. Could be way more ergonomic.
@@ -320,14 +329,103 @@ struct SubTransform {
     translation: Vec3,
 }
 
+/// The offset of a sprite-based entity's "real" origin point, relative to the
+/// anchor point of its Transform.
+#[derive(Component)]
+struct OriginOffset(Vec2);
+
+/// BBox defining the space an entity takes up on the ground.
+#[derive(Component)]
+struct Walkbox(BBox);
+
+/// BBox defining the space where an entity can be hit by attacks.
+#[derive(Component)]
+struct Hitbox(BBox);
+// ...and then eventually I'll want Swingbox for attacks, but, tbh I have no
+// idea how to best handle that yet. Is that even a component? Or is it a larger
+// data structure associated with an animation or something?
+
+/// An axis-aligned bounding box. When stored on an entity, these are defined in
+/// terms of the offset of each side from an origin point. (In other words, you
+/// also need an origin in order to do anything with it.) However, in transitory
+/// states they can be transformed to absolute (ish) coordinates so they can be
+/// checked against each other.
+pub struct BBox {
+    pub l: f32,
+    pub r: f32,
+    pub t: f32,
+    pub b: f32,
+}
+
+impl BBox {
+    fn bottom_centered(width: f32, height: f32) -> Self {
+        Self {
+            l: -width/2.,
+            r: width/2.,
+            t: height,
+            b: 0.,
+        }
+    }
+    fn centered(width: f32, height: f32) -> Self {
+        Self {
+            l: -width/2.,
+            r: width/2.,
+            t: height/2.,
+            b: -height/2.,
+        }
+    }
+    /// Convert a relative bbox to an absolutely positioned one that can be
+    /// compared against other entity bboxes.
+    fn locate(&self, origin: Vec2) -> AbsBBox {
+        AbsBBox {
+            l: self.l + origin.x,
+            r: self.r + origin.x,
+            t: self.t + origin.y,
+            b: self.b + origin.y,
+        }
+    }
+}
+
+/// An AABB that's located in absolute space, probably produced by combining a
+/// BBox with an origin offset.
+pub struct AbsBBox {
+    pub l: f32,
+    pub r: f32,
+    pub t: f32,
+    pub b: f32,
+}
+
+impl AbsBBox {
+    /// Check whether an absolutely positioned bbox overlaps with another one.
+    fn collide(&self, other: Self) -> bool {
+        if self.l > other.r {
+            // we're right of other
+            false
+        } else if self.r < other.l {
+            // we're left of other
+            false
+        } else if self.t < other.b {
+            // we're below other
+            false
+        } else if self.b > other.t {
+            // we're above other
+            false
+        } else {
+            // guess we're colliding! ¯\_(ツ)_/¯
+            true
+        }
+    }
+}
+
+
 /// Collidable solid component... but you also need a position Vec3 and a size Vec2 from somewhere.
 #[derive(Component)]
 struct Solid;
 
-/// Bounding box size component. I'm using the f32-based Vec2 because that's what
+/// Temp bounding box size component. I'm using the f32-based Vec2 because that's what
 /// bevy::sprite::collide_aabb::collide() uses.
 #[derive(Component)]
-struct BBox {
+struct BBoxOld {
     size: Vec2,
 }
 
@@ -335,18 +433,24 @@ struct BBox {
 #[derive(Bundle)]
 struct Wall {
     solid: Solid,
-    bbox: BBox,
+    walkbox: Walkbox,
+    origin_offset: OriginOffset,
+    bbox: BBoxOld,
     // transform: Transform, // This is needed, but it's handled by the plugin.
 }
 
 // Custom impl instead of derive bc... you'll see!
 impl LdtkIntCell for Wall {
     fn bundle_int_cell(_: IntGridCell, layer_instance: &LayerInstance) -> Self {
+        // there!! v. proud of finding this, the example just cheated w/ prior knowledge.
+        let grid_size = layer_instance.grid_size as f32;
         Wall {
             solid: Solid,
-            bbox: BBox {
-                // there!! v. proud of finding this, the example just cheated w/ prior knowledge.
-                size: Vec2::splat(layer_instance.grid_size as f32),
+            walkbox: Walkbox(BBox::centered(grid_size, grid_size)),
+            // the plugin puts tile anchor points in the center:
+            origin_offset: OriginOffset(Vec2::ZERO),
+            bbox: BBoxOld {
+                size: Vec2::splat(grid_size),
             },
         }
     }
