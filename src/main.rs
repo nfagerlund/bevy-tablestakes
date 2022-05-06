@@ -177,9 +177,14 @@ fn move_player_system(
     keys: Res<Input<KeyCode>>,
     time: Res<Time>,
     // time: Res<SmoothedTime>,
-    mut query: Query<(&mut SubTransform, &Speed), With<Player>>,
+    mut player_q: Query<(&mut SubTransform, &mut MoveRemainder, &Speed, &OriginOffset, &Walkbox), With<Player>>,
+    solids_q: Query<(&Transform, &OriginOffset, &Walkbox), With<Solid>>,
+    // ^^ Hmmmmmm probably gonna need a QuerySet later for this. In the meantime
+    // I can probably get away with it temporarily.
 ) {
     let delta = time.delta_seconds();
+
+    // get movement intent
     let mut gamepad_movement = None;
     if let Some(ActiveGamepad(pad_id)) = active_gamepad.as_deref() {
         gamepad_movement = get_gamepad_movement_vector(*pad_id, axes);
@@ -194,9 +199,50 @@ fn move_player_system(
         },
         None => get_kb_movement_vector(keys),
     };
-    for (mut player_tf, speed) in query.iter_mut() {
-        player_tf.translation += (movement * speed.0 * delta).extend(0.0);
+
+    // move, maybe! TODO: multiplayer :|
+    // Cribbing from this Maddie post:
+    // https://maddythorson.medium.com/celeste-and-towerfall-physics-d24bd2ae0fc5
+    let solids: Vec<AbsBBox> = solids_q.iter().map(|(transform, origin_offset, walkbox)| {
+        let origin = transform.translation.truncate() + origin_offset.0;
+        walkbox.0.locate(origin)
+    }).collect();
+
+    let (mut player_tf, mut move_remainder, speed, origin_offset, walkbox) = player_q.single_mut();
+    move_remainder.0 += movement * speed.0 * delta;
+    let move_pixels = move_remainder.0.round();
+
+    let mut move_x = move_pixels.x;
+    let sign_x = move_x.signum();
+    while move_x != 0. {
+        let next_loc = player_tf.translation + Vec3::new(sign_x, 0., 0.);
+        let next_box = walkbox.0.locate(next_loc.truncate() + origin_offset.0);
+        if let None = solids.iter().find(|s| s.collide(next_box)) {
+            player_tf.translation.x += sign_x;
+            move_x -= sign_x;
+        } else {
+            // Hit a wall, theoretically we should do something additional but for now,
+            break;
+        }
     }
+    let mut move_y = move_pixels.y;
+    let sign_y = move_y.signum();
+    while move_y != 0. {
+        let next_loc = player_tf.translation + Vec3::new(0., sign_y, 0.);
+        let next_box = walkbox.0.locate(next_loc.truncate() + origin_offset.0);
+        if let None = solids.iter().find(|s| s.collide(next_box)) {
+            player_tf.translation.y += sign_y;
+            move_y -= sign_y;
+        } else {
+            // Hit a wall, theoretically we should do something additional but for now,
+            break;
+        }
+    }
+
+    // Old version of move:
+    // for (mut player_tf, speed) in player_q.iter_mut() {
+    //     player_tf.translation += (movement * speed.0 * delta).extend(0.0);
+    // }
 }
 
 fn move_camera_system(
@@ -294,6 +340,7 @@ fn setup_sprites(
         .insert(Walkbox(BBox::bottom_centered(14., 5.)))
         // come back to those later!
         .insert(SubTransform{ translation: Vec3::new(0.0, 0.0, 3.0) })
+        .insert(MoveRemainder(Vec2::ZERO))
         .insert(SpriteTimer{ timer: Timer::from_seconds(0.1, true) })
         // ^^ 0.1 = inverse FPS. Could be way more ergonomic.
         .insert(Speed(120.0))
@@ -316,6 +363,9 @@ pub struct Player;
 /// Speed in pixels... per... second?
 #[derive(Component)]
 struct Speed(f32);
+
+#[derive(Component)]
+struct MoveRemainder(Vec2);
 
 /// Sprite animation frame timer
 #[derive(Component)]
@@ -350,6 +400,7 @@ struct Hitbox(BBox);
 /// also need an origin in order to do anything with it.) However, in transitory
 /// states they can be transformed to absolute (ish) coordinates so they can be
 /// checked against each other.
+#[derive(Copy, Clone, Debug)]
 pub struct BBox {
     pub l: f32,
     pub r: f32,
@@ -388,6 +439,7 @@ impl BBox {
 
 /// An AABB that's located in absolute space, probably produced by combining a
 /// BBox with an origin offset.
+#[derive(Copy, Clone, Debug)]
 pub struct AbsBBox {
     pub l: f32,
     pub r: f32,
