@@ -211,6 +211,7 @@ fn move_player_system(
     let (mut player_tf, mut move_remainder, speed, origin_offset, walkbox) = player_q.single_mut();
     move_remainder.0 += movement * speed.0 * delta;
     let move_pixels = move_remainder.0.round();
+    move_remainder.0 -= move_pixels;
 
     let mut move_x = move_pixels.x;
     let sign_x = move_x.signum();
