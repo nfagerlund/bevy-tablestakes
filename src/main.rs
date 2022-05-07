@@ -338,7 +338,7 @@ fn setup_sprites(
         })
         // some nasty hardcoded bbox numbers that should be in an asset somewhere:
         .insert(OriginOffset(Vec2::new(8., 0.)))
-        .insert(Walkbox(BBox::bottom_centered(14., 5.)))
+        .insert(Walkbox(BBox::bottom_centered(10., 5.)))
         // come back to those later!
         .insert(SubTransform{ translation: Vec3::new(0.0, 0.0, 3.0) })
         .insert(MoveRemainder(Vec2::ZERO))
