@@ -31,7 +31,7 @@ fn main() {
     App::new()
         // vv needs to go before DefaultPlugins.
         .insert_resource(WindowDescriptor {
-            present_mode: bevy::window::PresentMode::Mailbox,
+            present_mode: bevy::window::PresentMode::Fifo,
             cursor_visible: true,
             // mode: bevy::window::WindowMode::BorderlessFullscreen,
             // width: 1920.0,
@@ -43,6 +43,7 @@ fn main() {
         .insert_resource(SmoothedTime {
             delta: Duration::new(0, 0),
         })
+        .insert_resource(StaticTime)
         // .add_system_to_stage(CoreStage::PreUpdate, time_smoothing_system)
         .add_plugin(LdtkPlugin)
 
@@ -98,6 +99,17 @@ impl SmoothedTime {
     }
     fn delta(&self) -> Duration {
         self.delta
+    }
+}
+
+struct StaticTime;
+
+impl StaticTime {
+    fn delta_seconds(&self) -> f32 {
+        1./60.
+    }
+    fn delta(&self) -> Duration {
+        Duration::new(1, 0) / 60
     }
 }
 
@@ -175,7 +187,8 @@ fn move_player_system(
     active_gamepad: Option<Res<ActiveGamepad>>,
     axes: Res<Axis<GamepadAxis>>,
     keys: Res<Input<KeyCode>>,
-    time: Res<Time>,
+    // time: Res<Time>,
+    time: Res<StaticTime>,
     // time: Res<SmoothedTime>,
     mut player_q: Query<(&mut SubTransform, &mut MoveRemainder, &Speed, &OriginOffset, &Walkbox), With<Player>>,
     solids_q: Query<(&Transform, &OriginOffset, &Walkbox), With<Solid>>,
@@ -247,7 +260,8 @@ fn move_player_system(
 }
 
 fn move_camera_system(
-    time: Res<Time>,
+    // time: Res<Time>,
+    time: Res<StaticTime>,
     // time: Res<SmoothedTime>,
     mut params: ParamSet<(
         Query<&SubTransform, With<Player>>,
@@ -299,7 +313,8 @@ fn snap_pixel_positions_system(
 // animation time!
 
 fn animate_sprites_system(
-    time: Res<Time>,
+    // time: Res<Time>,
+    time: Res<StaticTime>,
     // time: Res<SmoothedTime>,
     texture_atlases: Res<Assets<TextureAtlas>>,
     mut query: Query<(&mut SpriteTimer, &mut TextureAtlasSprite, &Handle<TextureAtlas>)>,
