@@ -56,9 +56,9 @@ fn main() {
         // INSPECTOR STUFF
         .add_plugin(WorldInspectorPlugin::new())
         .register_inspectable::<SubTransform>()
-        .insert_resource(WonderWall::default())
-        .add_plugin(InspectorPlugin::<WonderWall>::new())
-        .add_system(look_for_walls_system)
+        // .insert_resource(WonderWall::default())
+        // .add_plugin(InspectorPlugin::<WonderWall>::new())
+        // .add_system(look_for_walls_system)
 
         // LDTK STUFF
         .add_startup_system(setup_level)
