@@ -70,8 +70,8 @@ fn main() {
         .add_system(animate_sprites_system)
         .add_system(connect_gamepads_system)
         .add_system(move_player_system)
-        .add_system(move_camera_system.after(move_player_system))
-        .add_system(snap_pixel_positions_system.after(move_camera_system))
+        .add_system(dumb_move_camera_system.after(move_player_system))
+        .add_system(snap_pixel_positions_system.after(dumb_move_camera_system))
 
         // OK BYE!!!
         .run();
@@ -260,12 +260,30 @@ fn move_camera_system(
     // let mut camera_tf = query.q1().get_single_mut().unwrap();
     for mut camera_tf in params.p1().iter_mut() {
         let camera_pos = camera_tf.translation.truncate();
-        let follow_amount = (player_pos - camera_pos) * 4.0 * delta;
+        let camera_distance = player_pos - camera_pos;
+        let follow_amount = if camera_distance.length() <= 1.0 {
+            camera_distance
+        } else {
+            (camera_distance * 4.0 * delta).round()
+        };
         camera_tf.translation += follow_amount.extend(0.0);
         // let camera_z = camera_tf.translation.z;
         // camera_tf.translation = player_pos.extend(camera_z);
         // ...and then you'd do room boundaries clamping, screenshake, etc.
     }
+}
+
+fn dumb_move_camera_system(
+    mut params: ParamSet<(
+        Query<&SubTransform, With<Player>>,
+        Query<&mut SubTransform, With<Camera2d>>
+    )>,
+) {
+    let player_pos = params.p0().single().translation;
+    let mut camera_q = params.p1();
+    let mut camera_tf = camera_q.single_mut();
+    camera_tf.translation.x = player_pos.x;
+    camera_tf.translation.y = player_pos.y;
 }
 
 fn snap_pixel_positions_system(
