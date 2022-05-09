@@ -26,6 +26,7 @@ mod junk;
 mod input;
 
 const PIXEL_SCALE: f32 = 1.0;
+const SIXTY_FPS: f32 = 1./60.;
 
 fn main() {
     App::new()
@@ -33,9 +34,9 @@ fn main() {
         .insert_resource(WindowDescriptor {
             present_mode: bevy::window::PresentMode::Fifo,
             cursor_visible: true,
-            // mode: bevy::window::WindowMode::BorderlessFullscreen,
-            // width: 1920.0,
-            // height: 1080.0,
+            mode: bevy::window::WindowMode::BorderlessFullscreen,
+            width: 1920.0,
+            height: 1080.0,
             ..Default::default()
         })
         .add_plugins(DefaultPlugins)
@@ -44,7 +45,7 @@ fn main() {
             delta: Duration::new(0, 0),
         })
         .insert_resource(StaticTime)
-        // .add_system_to_stage(CoreStage::PreUpdate, time_smoothing_system)
+        .add_system_to_stage(CoreStage::PreUpdate, time_smoothing_system)
         .add_plugin(LdtkPlugin)
 
         // NOISY DEBUG STUFF
@@ -52,7 +53,8 @@ fn main() {
         // .add_startup_system(junk::setup_fps_debug)
         // .add_system(junk::update_fps_debug_system)
         // .add_system(junk::debug_z_system)
-        .add_system(tile_info_barfing_system)
+        // .add_system(tile_info_barfing_system)
+        .add_system(delta_dump_system)
 
         // INSPECTOR STUFF
         .add_plugin(WorldInspectorPlugin::new())
@@ -60,6 +62,8 @@ fn main() {
         // .insert_resource(WonderWall::default())
         // .add_plugin(InspectorPlugin::<WonderWall>::new())
         // .add_system(look_for_walls_system)
+        .insert_resource(DebugSettings::default())
+        .add_plugin(InspectorPlugin::<DebugSettings>::new())
 
         // LDTK STUFF
         .add_startup_system(setup_level)
@@ -71,8 +75,13 @@ fn main() {
         .add_system(animate_sprites_system)
         .add_system(connect_gamepads_system)
         .add_system(move_player_system)
-        .add_system(dumb_move_camera_system.after(move_player_system))
-        .add_system(snap_pixel_positions_system.after(dumb_move_camera_system))
+        .add_system(move_camera_system.after(move_player_system))
+        .add_system(dumb_move_player_system)
+        .add_system(dumb_move_camera_system.after(dumb_move_player_system))
+        .add_system(snap_pixel_positions_system
+            .after(dumb_move_camera_system)
+            .after(move_camera_system)
+        )
 
         // OK BYE!!!
         .run();
@@ -84,6 +93,36 @@ struct WonderWall {
     tile_entity: Option<Entity>,
     tile_grid_coords: Option<IVec2>,
     num_walls: usize,
+}
+
+#[derive(Inspectable)]
+struct DebugSettings {
+    delta_dump: bool,
+    proper_walk: bool,
+    cam_style: CamStyle,
+    time_style: TimeStyle,
+}
+impl Default for DebugSettings {
+    fn default() -> Self {
+        Self {
+            delta_dump: false,
+            proper_walk: true,
+            cam_style: CamStyle::Simple,
+            time_style: TimeStyle::Normal,
+        }
+    }
+}
+#[derive(Inspectable, PartialEq)]
+enum CamStyle {
+    Proper,
+    Simple,
+    None,
+}
+#[derive(Inspectable, PartialEq)]
+enum TimeStyle {
+    Normal,
+    Fixed,
+    Smoothed,
 }
 
 struct RecentFrameTimes {
@@ -111,6 +150,17 @@ impl StaticTime {
     fn delta(&self) -> Duration {
         Duration::new(1, 0) / 60
     }
+}
+
+fn delta_dump_system(
+    time: Res<Time>,
+    debug_settings: Res<DebugSettings>,
+) {
+    if !debug_settings.delta_dump {
+        return;
+    }
+
+    info!("{:?}", time.delta_seconds());
 }
 
 fn look_for_walls_system(
@@ -187,15 +237,24 @@ fn move_player_system(
     active_gamepad: Option<Res<ActiveGamepad>>,
     axes: Res<Axis<GamepadAxis>>,
     keys: Res<Input<KeyCode>>,
-    // time: Res<Time>,
-    time: Res<StaticTime>,
-    // time: Res<SmoothedTime>,
+    time: Res<Time>,
+    static_time: Res<StaticTime>,
+    smoothed_time: Res<SmoothedTime>,
+    debug_settings: Res<DebugSettings>,
     mut player_q: Query<(&mut SubTransform, &mut MoveRemainder, &Speed, &OriginOffset, &Walkbox), With<Player>>,
     solids_q: Query<(&Transform, &OriginOffset, &Walkbox), With<Solid>>,
     // ^^ Hmmmmmm probably gonna need a QuerySet later for this. In the meantime
     // I can probably get away with it temporarily.
 ) {
-    let delta = time.delta_seconds();
+    if !debug_settings.proper_walk {
+        return;
+    }
+
+    let delta = match debug_settings.time_style {
+        TimeStyle::Normal => time.delta_seconds(),
+        TimeStyle::Fixed => static_time.delta_seconds(),
+        TimeStyle::Smoothed => smoothed_time.delta_seconds(),
+    };
 
     // get movement intent
     let mut gamepad_movement = None;
@@ -222,7 +281,17 @@ fn move_player_system(
     }).collect();
 
     let (mut player_tf, mut move_remainder, speed, origin_offset, walkbox) = player_q.single_mut();
-    move_remainder.0 += movement * speed.0 * delta;
+    let move_fraction = movement * speed.0 * delta;
+    // If the x or y component is 0, "forget" any leftover remainder. Only care
+    // about the remainder while we're _actually_ moving, don't save it up
+    // across separate moves.
+    if move_fraction.x == 0.0 {
+        move_remainder.0.x = 0.0;
+    }
+    if move_fraction.y == 0.0 {
+        move_remainder.0.y = 0.0;
+    }
+    move_remainder.0 += move_fraction;
     let move_pixels = move_remainder.0.round();
     move_remainder.0 -= move_pixels;
 
@@ -252,23 +321,71 @@ fn move_player_system(
             break;
         }
     }
-
-    // Old version of move:
-    // for (mut player_tf, speed) in player_q.iter_mut() {
-    //     player_tf.translation += (movement * speed.0 * delta).extend(0.0);
-    // }
 }
 
+fn dumb_move_player_system(
+    active_gamepad: Option<Res<ActiveGamepad>>,
+    axes: Res<Axis<GamepadAxis>>,
+    keys: Res<Input<KeyCode>>,
+    time: Res<Time>,
+    static_time: Res<StaticTime>,
+    smoothed_time: Res<SmoothedTime>,
+    debug_settings: Res<DebugSettings>,
+    mut player_q: Query<(&mut SubTransform, &mut MoveRemainder, &Speed, &OriginOffset, &Walkbox), With<Player>>,
+    // ^^ Hmmmmmm probably gonna need a QuerySet later for this. In the meantime
+    // I can probably get away with it temporarily.
+) {
+    if debug_settings.proper_walk {
+        return;
+    }
+
+    let delta = match debug_settings.time_style {
+        TimeStyle::Normal => time.delta_seconds(),
+        TimeStyle::Fixed => static_time.delta_seconds(),
+        TimeStyle::Smoothed => smoothed_time.delta_seconds(),
+    };
+
+    // get movement intent
+    let mut gamepad_movement = None;
+    if let Some(ActiveGamepad(pad_id)) = active_gamepad.as_deref() {
+        gamepad_movement = get_gamepad_movement_vector(*pad_id, axes);
+    }
+    let movement = match gamepad_movement {
+        Some(mvmt) => {
+            if mvmt.length() > 0.0 {
+                mvmt
+            } else {
+                get_kb_movement_vector(keys)
+            }
+        },
+        None => get_kb_movement_vector(keys),
+    };
+    for (mut player_tf, _, speed, _, _) in player_q.iter_mut() {
+        player_tf.translation += (movement * speed.0 * delta).extend(0.0);
+    }
+}
+
+
 fn move_camera_system(
-    // time: Res<Time>,
-    time: Res<StaticTime>,
-    // time: Res<SmoothedTime>,
+    time: Res<Time>,
+    static_time: Res<StaticTime>,
+    smoothed_time: Res<SmoothedTime>,
+    debug_settings: Res<DebugSettings>,
     mut params: ParamSet<(
         Query<&SubTransform, With<Player>>,
         Query<&mut SubTransform, With<Camera2d>>
     )>,
 ) {
-    let delta = time.delta_seconds();
+    if debug_settings.cam_style != CamStyle::Proper  {
+        return;
+    }
+
+    let delta = match debug_settings.time_style {
+        TimeStyle::Normal => time.delta_seconds(),
+        TimeStyle::Fixed => static_time.delta_seconds(),
+        TimeStyle::Smoothed => smoothed_time.delta_seconds(),
+    };
+
     let player_pos = params.p0().single().translation.truncate();
     // let player_pos = player_tf.translation.truncate();
     // let mut camera_tf = query.q1().get_single_mut().unwrap();
@@ -288,11 +405,16 @@ fn move_camera_system(
 }
 
 fn dumb_move_camera_system(
+    debug_settings: Res<DebugSettings>,
     mut params: ParamSet<(
         Query<&SubTransform, With<Player>>,
         Query<&mut SubTransform, With<Camera2d>>
     )>,
 ) {
+    if debug_settings.cam_style != CamStyle::Simple {
+        return;
+    }
+
     let player_pos = params.p0().single().translation;
     let mut camera_q = params.p1();
     let mut camera_tf = camera_q.single_mut();
@@ -313,15 +435,22 @@ fn snap_pixel_positions_system(
 // animation time!
 
 fn animate_sprites_system(
-    // time: Res<Time>,
-    time: Res<StaticTime>,
-    // time: Res<SmoothedTime>,
+    time: Res<Time>,
+    static_time: Res<StaticTime>,
+    smoothed_time: Res<SmoothedTime>,
+    debug_settings: Res<DebugSettings>,
     texture_atlases: Res<Assets<TextureAtlas>>,
     mut query: Query<(&mut SpriteTimer, &mut TextureAtlasSprite, &Handle<TextureAtlas>)>,
     // ^^ ok, the timer I added myself, and the latter two were part of the bundle.
 ) {
+    let delta = match debug_settings.time_style {
+        TimeStyle::Normal => time.delta(),
+        TimeStyle::Fixed => static_time.delta(),
+        TimeStyle::Smoothed => smoothed_time.delta(),
+    };
+
     for (mut sprite_timer, mut sprite, texture_atlas_handle) in query.iter_mut() {
-        sprite_timer.timer.tick(time.delta()); // ok, I remember you. advance the timer.
+        sprite_timer.timer.tick(delta); // ok, I remember you. advance the timer.
         if sprite_timer.timer.finished() {
             let texture_atlas = texture_atlases.get(texture_atlas_handle).unwrap(); // uh ok. btw, how do we avoid the unwraps in this runtime?
             sprite.index = (sprite.index + 1) % texture_atlas.textures.len();
