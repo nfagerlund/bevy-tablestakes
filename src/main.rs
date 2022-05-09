@@ -57,8 +57,8 @@ fn main() {
         .add_system(delta_dump_system)
 
         // INSPECTOR STUFF
-        .add_plugin(WorldInspectorPlugin::new())
-        .register_inspectable::<SubTransform>()
+        // .add_plugin(WorldInspectorPlugin::new())
+        // .register_inspectable::<SubTransform>()
         // .insert_resource(WonderWall::default())
         // .add_plugin(InspectorPlugin::<WonderWall>::new())
         // .add_system(look_for_walls_system)
