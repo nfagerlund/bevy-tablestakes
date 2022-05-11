@@ -107,7 +107,6 @@ struct WonderWall {
 #[derive(Inspectable)]
 struct DebugSettings {
     delta_dump: bool,
-    proper_walk: bool,
     walk_style: WalkStyle,
     cam_style: CamStyle,
     time_style: TimeStyle,
@@ -116,7 +115,6 @@ impl Default for DebugSettings {
     fn default() -> Self {
         Self {
             delta_dump: false,
-            proper_walk: true,
             walk_style: WalkStyle::WholePixelAndCollide,
             cam_style: CamStyle::Simple,
             time_style: TimeStyle::Normal,
@@ -347,13 +345,51 @@ fn no_collide_move_player_system(    active_gamepad: Option<Res<ActiveGamepad>>,
     static_time: Res<StaticTime>,
     smoothed_time: Res<SmoothedTime>,
     debug_settings: Res<DebugSettings>,
-    mut player_q: Query<(&mut Transform, &mut MoveRemainder, &Speed, &OriginOffset, &Walkbox), With<Player>>,
+    mut player_q: Query<(&mut Transform, &mut MoveRemainder, &Speed), With<Player>>,
 ) {
     if debug_settings.walk_style != WalkStyle::WholePixel {
         return;
     }
 
+    let delta = match debug_settings.time_style {
+        TimeStyle::Normal => time.delta_seconds(),
+        TimeStyle::Fixed => static_time.delta_seconds(),
+        TimeStyle::Smoothed => smoothed_time.delta_seconds(),
+    };
 
+    // get movement intent
+    let mut gamepad_movement = None;
+    if let Some(ActiveGamepad(pad_id)) = active_gamepad.as_deref() {
+        gamepad_movement = get_gamepad_movement_vector(*pad_id, axes);
+    }
+    let movement = match gamepad_movement {
+        Some(mvmt) => {
+            if mvmt.length() > 0.0 {
+                mvmt
+            } else {
+                get_kb_movement_vector(keys)
+            }
+        },
+        None => get_kb_movement_vector(keys),
+    };
+
+    let (mut player_tf, mut move_remainder, speed) = player_q.single_mut();
+    let move_fraction = movement * speed.0 * delta;
+    // If the x or y component is 0, "forget" any leftover remainder. Only care
+    // about the remainder while we're _actually_ moving, don't save it up
+    // across separate moves.
+    if move_fraction.x == 0.0 {
+        move_remainder.0.x = 0.0;
+    }
+    if move_fraction.y == 0.0 {
+        move_remainder.0.y = 0.0;
+    }
+    move_remainder.0 += move_fraction;
+    let move_pixels = move_remainder.0.round();
+    move_remainder.0 -= move_pixels;
+
+    // And since we're not worrying about walls, just mutate the translation.
+    player_tf.translation += move_pixels.extend(0.0);
 }
 
 fn dumb_move_player_system(
