@@ -75,13 +75,22 @@ fn main() {
         .add_system(animate_sprites_system)
         .add_system(connect_gamepads_system)
         .add_system(move_player_system)
-        .add_system(move_camera_system.after(move_player_system))
+        .add_system(no_collide_move_player_system)
         .add_system(dumb_move_player_system)
-        .add_system(dumb_move_camera_system.after(dumb_move_player_system))
-        .add_system(snap_pixel_positions_system
-            .after(dumb_move_camera_system)
-            .after(move_camera_system)
+        .add_system(move_camera_system
+            .after(move_player_system)
+            .after(dumb_move_player_system)
+            .after(no_collide_move_player_system)
         )
+        .add_system(dumb_move_camera_system
+            .after(move_player_system)
+            .after(dumb_move_player_system)
+            .after(no_collide_move_player_system)
+        )
+        // .add_system(snap_pixel_positions_system
+        //     .after(dumb_move_camera_system)
+        //     .after(move_camera_system)
+        // )
 
         // OK BYE!!!
         .run();
@@ -99,6 +108,7 @@ struct WonderWall {
 struct DebugSettings {
     delta_dump: bool,
     proper_walk: bool,
+    walk_style: WalkStyle,
     cam_style: CamStyle,
     time_style: TimeStyle,
 }
@@ -107,10 +117,17 @@ impl Default for DebugSettings {
         Self {
             delta_dump: false,
             proper_walk: true,
+            walk_style: WalkStyle::WholePixelAndCollide,
             cam_style: CamStyle::Simple,
             time_style: TimeStyle::Normal,
         }
     }
+}
+#[derive(Inspectable, PartialEq)]
+enum WalkStyle {
+    RawDelta,
+    WholePixel,
+    WholePixelAndCollide,
 }
 #[derive(Inspectable, PartialEq)]
 enum CamStyle {
@@ -241,12 +258,12 @@ fn move_player_system(
     static_time: Res<StaticTime>,
     smoothed_time: Res<SmoothedTime>,
     debug_settings: Res<DebugSettings>,
-    mut player_q: Query<(&mut SubTransform, &mut MoveRemainder, &Speed, &OriginOffset, &Walkbox), With<Player>>,
-    solids_q: Query<(&Transform, &OriginOffset, &Walkbox), With<Solid>>,
+    mut player_q: Query<(&mut Transform, &mut MoveRemainder, &Speed, &OriginOffset, &Walkbox), (With<Player>, Without<Solid>)>,
+    solids_q: Query<(&Transform, &OriginOffset, &Walkbox), (With<Solid>, Without<Player>)>,
     // ^^ Hmmmmmm probably gonna need a QuerySet later for this. In the meantime
     // I can probably get away with it temporarily.
 ) {
-    if !debug_settings.proper_walk {
+    if debug_settings.walk_style != WalkStyle::WholePixelAndCollide {
         return;
     }
 
@@ -323,6 +340,22 @@ fn move_player_system(
     }
 }
 
+fn no_collide_move_player_system(    active_gamepad: Option<Res<ActiveGamepad>>,
+    axes: Res<Axis<GamepadAxis>>,
+    keys: Res<Input<KeyCode>>,
+    time: Res<Time>,
+    static_time: Res<StaticTime>,
+    smoothed_time: Res<SmoothedTime>,
+    debug_settings: Res<DebugSettings>,
+    mut player_q: Query<(&mut Transform, &mut MoveRemainder, &Speed, &OriginOffset, &Walkbox), With<Player>>,
+) {
+    if debug_settings.walk_style != WalkStyle::WholePixel {
+        return;
+    }
+
+
+}
+
 fn dumb_move_player_system(
     active_gamepad: Option<Res<ActiveGamepad>>,
     axes: Res<Axis<GamepadAxis>>,
@@ -331,11 +364,11 @@ fn dumb_move_player_system(
     static_time: Res<StaticTime>,
     smoothed_time: Res<SmoothedTime>,
     debug_settings: Res<DebugSettings>,
-    mut player_q: Query<(&mut SubTransform, &mut MoveRemainder, &Speed, &OriginOffset, &Walkbox), With<Player>>,
+    mut player_q: Query<(&mut Transform, &mut MoveRemainder, &Speed, &OriginOffset, &Walkbox), With<Player>>,
     // ^^ Hmmmmmm probably gonna need a QuerySet later for this. In the meantime
     // I can probably get away with it temporarily.
 ) {
-    if debug_settings.proper_walk {
+    if debug_settings.walk_style != WalkStyle::RawDelta {
         return;
     }
 
@@ -372,8 +405,8 @@ fn move_camera_system(
     smoothed_time: Res<SmoothedTime>,
     debug_settings: Res<DebugSettings>,
     mut params: ParamSet<(
-        Query<&SubTransform, With<Player>>,
-        Query<&mut SubTransform, With<Camera2d>>
+        Query<&Transform, With<Player>>,
+        Query<&mut Transform, With<Camera2d>>
     )>,
 ) {
     if debug_settings.cam_style != CamStyle::Proper  {
@@ -407,8 +440,8 @@ fn move_camera_system(
 fn dumb_move_camera_system(
     debug_settings: Res<DebugSettings>,
     mut params: ParamSet<(
-        Query<&SubTransform, With<Player>>,
-        Query<&mut SubTransform, With<Camera2d>>
+        Query<&Transform, With<Player>>,
+        Query<&mut Transform, With<Camera2d>>
     )>,
 ) {
     if debug_settings.cam_style != CamStyle::Simple {
