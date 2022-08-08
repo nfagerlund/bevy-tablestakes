@@ -45,7 +45,7 @@ pub fn setup_fps_debug(
         },
         style: Style {
             position_type: PositionType::Absolute,
-            position: Rect {
+            position: UiRect {
                 top: Val::Px(5.0),
                 left: Val::Px(5.0),
                 ..Default::default()
@@ -75,4 +75,3 @@ pub fn update_fps_debug_system(
 /// Marker component for FPS counter
 #[derive(Component)]
 pub struct FPSCounter;
-
