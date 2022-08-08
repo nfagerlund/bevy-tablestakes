@@ -9,13 +9,13 @@ pub fn debug_z_system(
     // mut local_timer: Local<Timer>,
     player_query: Query<&Transform, With<crate::Player>>,
     world_query: Query<&Transform, With<crate::LdtkWorld>>,
-    level_query: Query<(Entity, &Transform, &bevy_ecs_tilemap::Map)>,
+    level_query: Query<(Entity, &Transform, &bevy_ecs_tilemap::map::TilemapId)>,
 ) {
     let player_transform = player_query.get_single().unwrap();
     let world_transform = world_query.get_single().unwrap();
     info!("Player at: {}\n World at: {}\n", player_transform.translation, world_transform.translation);
     for (e_id, transform, map) in level_query.iter() {
-        info!("  Level {:?} (map id {}) at {}\n", e_id, map.id, transform.translation);
+        info!("  Level {:?} (map id {:?}) at {}\n", e_id, map.0, transform.translation);
     }
 }
 
