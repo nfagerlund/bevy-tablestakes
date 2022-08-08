@@ -5,7 +5,7 @@ use bevy::{
     // },
     prelude::*,
     utils::Duration,
-    render::camera::Camera2d,
+    render::texture::ImageSettings, // remove eventually, was added to prelude shortly after 0.8
 };
 use bevy_ecs_ldtk::prelude::*;
 // use bevy_ecs_tilemap::prelude::*;
@@ -38,6 +38,7 @@ fn main() {
             // height: 1080.0,
             ..Default::default()
         })
+        .insert_resource(ImageSettings::default_nearest()) // prevents blurry sprites
         .add_plugins(DefaultPlugins)
         .insert_resource(RecentFrameTimes{ buffer: VecDeque::new() })
         .insert_resource(SmoothedTime {
