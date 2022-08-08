@@ -265,7 +265,7 @@ fn move_camera_system(
     // time: Res<SmoothedTime>,
     mut params: ParamSet<(
         Query<&SubTransform, With<Player>>,
-        Query<&mut SubTransform, With<Camera2d>>
+        Query<&mut SubTransform, With<Camera>>
     )>,
 ) {
     let delta = time.delta_seconds();
@@ -290,7 +290,7 @@ fn move_camera_system(
 fn dumb_move_camera_system(
     mut params: ParamSet<(
         Query<&SubTransform, With<Player>>,
-        Query<&mut SubTransform, With<Camera2d>>
+        Query<&mut SubTransform, With<Camera>>
     )>,
 ) {
     let player_pos = params.p0().single().translation;
@@ -351,12 +351,11 @@ fn setup_sprites(
     let texture_atlas = TextureAtlas::from_grid(texture_handle, Vec2::new(17.0, 24.0), 32, 1);
     let texture_atlas_handle = texture_atlases.add(texture_atlas);
 
-    let mut camera_bundle = OrthographicCameraBundle::new_2d();
-    camera_bundle.orthographic_projection.scale = 1.0/3.0;
+    let mut camera_bundle = Camera2dBundle::default();
+    camera_bundle.projection.scale = 1.0/3.0;
     commands.spawn_bundle(camera_bundle)
         .insert(SubTransform{ translation: Vec3::new(0.0, 0.0, 999.0) });
         // ^^ hack: I looked up the Z coord on new_2D and fudged it so we won't accidentally round it to 1000.
-    commands.spawn_bundle(UiCameraBundle::default());
     // IT'S THE PLAYER, GIVE IT UP!!
     commands
         .spawn_bundle(SpriteSheetBundle {
