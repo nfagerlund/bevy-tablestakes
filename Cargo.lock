@@ -209,9 +209,9 @@ checksum = "904dfeac50f3cdaba28fc6f57fdcddb75f49ed61346676a78c4ffe55877802fd"
 
 [[package]]
 name = "bevy"
-version = "0.8.0"
+version = "0.8.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "55f08528a4e59d607460513a823b40f602d013c1a00f57b824f1075d5d48c3cd"
+checksum = "fea147ef1ebb92d41294cfad804c40de151b174c711ce6e0a4a40eba23eae1a4"
 dependencies = [
  "bevy_dylib",
  "bevy_internal",
@@ -415,8 +415,9 @@ dependencies = [
 
 [[package]]
 name = "bevy_ecs_ldtk"
-version = "0.3.0"
-source = "git+https://github.com/nfagerlund/bevy_ecs_ldtk.git?rev=1bfe05f#1bfe05fd971b289c31d44e8eb2670b059d255fcf"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1a2779cbde0319990c90c459e0c9caa41861f86027fb037f0c4653d2963c0df8"
 dependencies = [
  "anyhow",
  "bevy",
@@ -431,8 +432,9 @@ dependencies = [
 
 [[package]]
 name = "bevy_ecs_ldtk_macros"
-version = "0.3.0"
-source = "git+https://github.com/nfagerlund/bevy_ecs_ldtk.git?rev=1bfe05f#1bfe05fd971b289c31d44e8eb2670b059d255fcf"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a09642d6549bbc505422f6eeade67842b36490907fad20e98877ea1a18f57b05"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -3410,7 +3412,7 @@ dependencies = [
  "js-sys",
  "log",
  "naga",
- "parking_lot 0.11.2",
+ "parking_lot 0.12.1",
  "raw-window-handle",
  "smallvec",
  "wasm-bindgen",
@@ -3436,7 +3438,7 @@ dependencies = [
  "fxhash",
  "log",
  "naga",
- "parking_lot 0.11.2",
+ "parking_lot 0.12.1",
  "profiling",
  "raw-window-handle",
  "smallvec",
@@ -3473,7 +3475,7 @@ dependencies = [
  "metal",
  "naga",
  "objc",
- "parking_lot 0.11.2",
+ "parking_lot 0.12.1",
  "profiling",
  "range-alloc",
  "raw-window-handle",
