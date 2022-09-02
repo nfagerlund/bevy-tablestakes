@@ -188,8 +188,8 @@ fn move_player_system(
     active_gamepad: Option<Res<ActiveGamepad>>,
     axes: Res<Axis<GamepadAxis>>,
     keys: Res<Input<KeyCode>>,
-    // time: Res<Time>,
-    time: Res<StaticTime>,
+    time: Res<Time>,
+    // time: Res<StaticTime>,
     // time: Res<SmoothedTime>,
     mut player_q: Query<(&mut SubTransform, &mut MoveRemainder, &Speed, &OriginOffset, &Walkbox), With<Player>>,
     solids_q: Query<(&Transform, &OriginOffset, &Walkbox), With<Solid>>,
@@ -261,8 +261,8 @@ fn move_player_system(
 }
 
 fn move_camera_system(
-    // time: Res<Time>,
-    time: Res<StaticTime>,
+    time: Res<Time>,
+    // time: Res<StaticTime>,
     // time: Res<SmoothedTime>,
     mut params: ParamSet<(
         Query<&SubTransform, With<Player>>,
@@ -314,8 +314,8 @@ fn snap_pixel_positions_system(
 // animation time!
 
 fn animate_sprites_system(
-    // time: Res<Time>,
-    time: Res<StaticTime>,
+    time: Res<Time>,
+    // time: Res<StaticTime>,
     // time: Res<SmoothedTime>,
     texture_atlases: Res<Assets<TextureAtlas>>,
     mut query: Query<(&mut SpriteTimer, &mut TextureAtlasSprite, &Handle<TextureAtlas>)>,
