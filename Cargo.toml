@@ -8,6 +8,9 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+anyhow = "1.0.56"
+asefile = "0.3.5"
+image = "0.23.14" # match asefile's dep
 bevy = { version = "0.8.1", features = [
     "dynamic",
 ] }
