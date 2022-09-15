@@ -24,6 +24,7 @@ use crate::input::*;
 mod hellow;
 mod junk;
 mod input;
+mod char_animation;
 
 const PIXEL_SCALE: f32 = 1.0;
 
