@@ -82,7 +82,7 @@ fn load_aseprite_badly(bytes: &[u8]) -> anyhow::Result<Image> {
 /// Convert the specific variant of `image::ImageBuffer` that
 /// `asefile::Frame.image()` returns into a `bevy::render::texture::Image`.
 /// Consumes the argument and re-uses the internal container.
-fn remux_image(img: image::ImageBuffer<image::Rgba<u8>, Vec<u8>>) -> Image {
+fn remux_image(img: image::RgbaImage) -> Image {
 	let size = Extent3d {
 		width: img.width(),
 		height: img.height(),
