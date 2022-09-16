@@ -74,17 +74,24 @@ fn load_aseprite(bytes: &[u8]) -> anyhow::Result<()> {
 fn load_aseprite_badly(bytes: &[u8]) -> anyhow::Result<Image> {
 	let ase = AsepriteFile::read(bytes)?;
 	let img = ase.frame(0).image();
+	let bevy_img = remux_image(img);
+	dbg!(&bevy_img);
+	Ok(bevy_img)
+}
+
+/// Convert the specific variant of `image::ImageBuffer` that
+/// `asefile::Frame.image()` returns into a `bevy::render::texture::Image`.
+/// Consumes the argument and re-uses the internal container.
+fn remux_image(img: image::ImageBuffer<image::Rgba<u8>, Vec<u8>>) -> Image {
 	let size = Extent3d {
 		width: img.width(),
 		height: img.height(),
 		depth_or_array_layers: 1
 	};
-	let bevy_img = Image::new(
+	Image::new(
 		size,
 		TextureDimension::D2,
 		img.into_raw(),
 		TextureFormat::Rgba8UnormSrgb,
-	);
-	dbg!(&bevy_img);
-	Ok(bevy_img)
+	)
 }
