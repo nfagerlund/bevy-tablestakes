@@ -2,6 +2,7 @@ use bevy::asset::{
     AssetIoError, AssetLoader, AssetPath, BoxedFuture, Handle, LoadContext, LoadedAsset,
 };
 use bevy::math::prelude::*;
+use bevy::prelude::{App, AddAsset, Plugin};
 use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat};
 use bevy::render::texture::Image;
 use bevy::sprite::{Rect, TextureAtlas, TextureAtlasBuilder};
@@ -26,6 +27,14 @@ pub struct CharAnimationFrame {
 	pub duration: Duration, // ?
 	pub walkbox: Option<Rect>,
 	// hitbox, hurtbox,
+}
+
+pub struct CharAnimationPlugin;
+
+impl Plugin for CharAnimationPlugin {
+	fn build(&self, app: &mut App) {
+		app.init_asset_loader::<CharAnimationLoader>();
+	}
 }
 
 #[derive(Default)]
