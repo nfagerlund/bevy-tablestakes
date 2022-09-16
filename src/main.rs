@@ -20,6 +20,7 @@ use bevy_inspector_egui::{
     InspectorPlugin,
 };
 use crate::input::*;
+use crate::char_animation::*;
 
 mod hellow;
 mod junk;
@@ -41,6 +42,7 @@ fn main() {
         })
         .insert_resource(ImageSettings::default_nearest()) // prevents blurry sprites
         .add_plugins(DefaultPlugins)
+        .init_asset_loader::<CharAnimationLoader>()
         .insert_resource(RecentFrameTimes{ buffer: VecDeque::new() })
         .insert_resource(SmoothedTime {
             delta: Duration::new(0, 0),
@@ -380,6 +382,13 @@ fn setup_sprites(
         // ^^ 0.1 = inverse FPS. Could be way more ergonomic.
         .insert(Speed(120.0))
         .insert(Player);
+
+    let test_texture_handle: Handle<Image> = asset_server.load("sprites/sPlayerRun.aseprite");
+    commands.spawn_bundle(SpriteBundle {
+        texture: test_texture_handle,
+        transform: Transform::from_translation(Vec3::new(10.0, 10.0, 3.0)),
+        ..default()
+    });
 }
 
 // Structs and crap!
