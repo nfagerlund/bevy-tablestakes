@@ -382,13 +382,6 @@ fn setup_sprites(
         // ^^ 0.1 = inverse FPS. Could be way more ergonomic.
         .insert(Speed(120.0))
         .insert(Player);
-
-    let test_texture_handle: Handle<Image> = asset_server.load("sprites/sPlayerRun.aseprite");
-    commands.spawn_bundle(SpriteBundle {
-        texture: test_texture_handle,
-        transform: Transform::from_translation(Vec3::new(10.0, 10.0, 3.0)),
-        ..default()
-    });
 }
 
 // Structs and crap!

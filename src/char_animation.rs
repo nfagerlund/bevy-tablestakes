@@ -2,7 +2,7 @@ use bevy::asset::{
     AssetIoError, Assets, AssetServer, AssetLoader, AssetPath, BoxedFuture, Handle, LoadContext, LoadedAsset,
 };
 use bevy::math::prelude::*;
-use bevy::prelude::{App, AddAsset, Plugin};
+use bevy::prelude::*;
 use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat};
 use bevy::render::texture::Image;
 use bevy::sprite::{Rect, TextureAtlas, TextureAtlasBuilder};
@@ -39,8 +39,22 @@ pub struct CharAnimationPlugin;
 
 impl Plugin for CharAnimationPlugin {
 	fn build(&self, app: &mut App) {
-		app.init_asset_loader::<CharAnimationLoader>();
+		app
+			.init_asset_loader::<CharAnimationLoader>()
+			.add_startup_system(charanm_test_setup_system);
 	}
+}
+
+fn charanm_test_setup_system(
+	mut commands: Commands,
+	asset_server: Res<AssetServer>,
+) {
+    let test_texture_handle: Handle<Image> = asset_server.load("sprites/sPlayerRun.aseprite");
+    commands.spawn_bundle(SpriteBundle {
+        texture: test_texture_handle,
+        transform: Transform::from_translation(Vec3::new(10.0, 10.0, 3.0)),
+        ..default()
+    });
 }
 
 #[derive(Default)]
@@ -181,9 +195,8 @@ fn find_rectangle_bounds(img: &RgbaImage) -> Option<Rect> {
     let mut y_min: u32 = u32::MAX;
     let mut y_max: u32 = 0;
 	let mut present = false;
-    let blank = image::Rgba([0,0,0,0]);
     for (x, y, val) in img.enumerate_pixels() {
-        if *val != blank {
+        if alpha(val) != 0 {
             present = true;
 			if x < x_min { x_min = x; }
             if x > x_max { x_max = x; }
@@ -199,4 +212,8 @@ fn find_rectangle_bounds(img: &RgbaImage) -> Option<Rect> {
 	} else {
 		None
 	}
+}
+
+fn alpha(pixel: &image::Rgba<u8>) -> u8 {
+	pixel.0[3]
 }
