@@ -51,7 +51,7 @@ fn charanm_test_setup_system(
 	mut commands: Commands,
 	asset_server: Res<AssetServer>,
 ) {
-    let test_texture_handle: Handle<Image> = asset_server.load("sprites/sPlayerRun.aseprite");
+    let test_texture_handle: Handle<Image> = asset_server.load("sprites/sPlayerRun.aseprite#texture");
     commands.spawn_bundle(SpriteBundle {
         texture: test_texture_handle,
         transform: Transform::from_translation(Vec3::new(10.0, 10.0, 3.0)),
@@ -74,8 +74,7 @@ impl AssetLoader for CharAnimationLoader {
     ) -> BoxedFuture<'a, anyhow::Result<()>> {
         Box::pin(async move {
             // DO SOMETHING HERE w/ ?, returning (), and using LoadContext.set_default_asset for its side effects
-			let bevy_img = load_aseprite_badly(bytes)?;
-			load_context.set_default_asset(LoadedAsset::new(bevy_img));
+			load_aseprite(bytes, load_context)?;
             Ok(())
         })
 	}
@@ -187,15 +186,6 @@ fn load_aseprite(bytes: &[u8], load_context: &mut LoadContext) -> anyhow::Result
 	// And, cut!
 	load_context.set_default_asset(LoadedAsset::new(animation));
 	Ok(())
-}
-
-// Test texture creation
-fn load_aseprite_badly(bytes: &[u8]) -> anyhow::Result<Image> {
-	let ase = AsepriteFile::read(bytes)?;
-	let img = ase.frame(0).image();
-	let bevy_img = remux_image(img);
-	dbg!(&bevy_img);
-	Ok(bevy_img)
 }
 
 /// Convert the specific variant of `image::ImageBuffer` that
