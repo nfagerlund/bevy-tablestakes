@@ -20,13 +20,13 @@ pub struct CharAnimation {
 
 pub struct CharAnimationVariant {
 	pub name: String,
-	pub origin: Vec2, // Can't vary per frame, picked from first frame
 	pub frames: Vec<CharAnimationFrame>,
 }
 
 pub struct CharAnimationFrame {
 	pub index: usize,
 	pub duration: Duration, // ?
+	pub origin: Vec2,
 	pub walkbox: Option<Rect>,
 	// hitbox, hurtbox,
 }
