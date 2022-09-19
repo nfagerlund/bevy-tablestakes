@@ -1,5 +1,5 @@
 use bevy::asset::{
-    AssetIoError, Assets, AssetServer, AssetLoader, AssetPath, BoxedFuture, Handle, LoadContext, LoadedAsset,
+    AssetServer, AssetLoader, BoxedFuture, Handle, LoadContext, LoadedAsset,
 };
 use bevy::math::prelude::*;
 use bevy::prelude::*;
@@ -8,7 +8,7 @@ use bevy::render::{
 	render_resource::{Extent3d, TextureDimension, TextureFormat},
 	texture::{Image, TextureFormatPixelInfo}
 };
-use bevy::sprite::{Rect, TextureAtlas, TextureAtlasBuilder};
+use bevy::sprite::{Rect, TextureAtlas};
 use bevy::utils::Duration;
 use std::collections::HashMap;
 use asefile::AsepriteFile;
@@ -73,33 +73,29 @@ impl AssetLoader for CharAnimationLoader {
         load_context: &'a mut LoadContext,
     ) -> BoxedFuture<'a, anyhow::Result<()>> {
         Box::pin(async move {
-            // DO SOMETHING HERE w/ ?, returning (), and using LoadContext.set_default_asset for its side effects
 			load_aseprite(bytes, load_context)?;
             Ok(())
         })
 	}
 }
 
-// Return the real asset, not ()!
-// RE-re-reconsidering all this: None of the atlas builders are suitable, they
-// all rely on runtime asset collections. So I need to construct a plain sprite
-// sheet texture myself, then use TextureAtlas::from_grid_with_padding, because
-// it only requires a Handle<Image> (which I can provide).
+/// Loads an aseprite file and uses it to construct a sprite sheet `#texture`, a
+/// `#texture_atlas` that indexes into that sprite sheet, and a top-level
+/// `CharAnimation`. The individual `CharAnimationFrames` in the
+/// `CharAnimationVariants` contain indexes into the `TextureAtlas`.
+/// Assumptions:
+/// - File only uses AnimationDirection::Forward.
+/// - Tag names are unique in the file. (Aseprite doesn't guarantee this.)
+/// - Named tags cover all of the needed animation frames.
+/// - Walkbox layer: "walkbox"
 fn load_aseprite(bytes: &[u8], load_context: &mut LoadContext) -> anyhow::Result<()> {
     let ase = AsepriteFile::read(bytes)?;
-	// Assumptions: I'm only using AnimationDirection::Forward, and I'm assuming
-	// tag names are unique in the file (which aseprite doesn't guarantee), and
-	// I'm assuming there are named tags that cover all the needed animation.
 	let width = ase.width();
 	let height = ase.height();
 	let num_frames = ase.num_frames();
 
-	// Build the texture atlas first!
-
-	// Laziness: I'm slurping every frame into the final asset, so it might
-	// include some garbage frames that aren't in any tags. Later, this lets me
-	// index into the texture atlas using plain frame IDs without needing to
-	// hold onto any translation layer.
+	// Build the texture atlas, ensuring that its sub-texture indices match the
+	// original Aseprite file's frame indices.
 	let frame_images: Vec<Image> = (0..num_frames)
 		.map(|i| remux_image(ase.frame(i).image()))
 		.collect();
@@ -130,7 +126,9 @@ fn load_aseprite(bytes: &[u8], load_context: &mut LoadContext) -> anyhow::Result
 		"texture",
 		LoadedAsset::new(atlas_texture),
 	);
-	// atlas time!!! hardcoding many things
+	// atlas time!!!
+	// N.b.: from_grid_with_padding adds grid cells in left-to-right,
+	// top-to-bottom order, and we rely on this to make the frame indices match.
 	let atlas = TextureAtlas::from_grid_with_padding(
 		texture_handle,
 		Vec2::new(width as f32, height as f32),
@@ -143,13 +141,8 @@ fn load_aseprite(bytes: &[u8], load_context: &mut LoadContext) -> anyhow::Result
 		"texture_atlas",
 		LoadedAsset::new(atlas),
 	);
-	// At this point, the indexing of the atlas's sub-textures matches the
-	// original Ase file's frame indices! (although it's usize instead of
-	// asefile's u32.) from_grid_with_padding adds grid cells in left-to-right,
-	// top-to-bottom order.
 
-	// Now that I know about the indexing ahead of time, I should be able to
-	// construct complete animation variants in one go.
+	// Since our final frame indices are reliable, processing tags is easy.
 	let mut variants: HashMap<String, CharAnimationVariant> = HashMap::new();
 
 	for tag in (0..ase.num_tags()).map(|i| ase.tag(i)) {
@@ -180,7 +173,7 @@ fn load_aseprite(bytes: &[u8], load_context: &mut LoadContext) -> anyhow::Result
 		variants.insert(name, variant);
 	}
 
-	// OK, now I think we can build the whole enchilada...
+	// The whole enchilada:
 	let animation = CharAnimation { variants, texture_atlas: atlas_handle };
 
 	// And, cut!
@@ -188,9 +181,9 @@ fn load_aseprite(bytes: &[u8], load_context: &mut LoadContext) -> anyhow::Result
 	Ok(())
 }
 
-/// Convert the specific variant of `image::ImageBuffer` that
-/// `asefile::Frame.image()` returns into a `bevy::render::texture::Image`.
-/// Consumes the argument and re-uses the internal container.
+/// Convert the image buffer returned by `asefile::Frame.image()` into a
+/// `bevy::render::texture::Image`. Consumes the argument and re-uses the
+/// internal container.
 fn remux_image(img: RgbaImage) -> Image {
 	let size = Extent3d {
 		width: img.width(),
@@ -213,7 +206,7 @@ fn get_rect_lmao(img: &RgbaImage) -> Option<Rect> {
     let mut y_max: u32 = 0;
 	let mut present = false;
     for (x, y, val) in img.enumerate_pixels() {
-        if alpha(val) != 0 {
+        if non_empty(val) {
             present = true;
 			if x < x_min { x_min = x; }
             if x > x_max { x_max = x; }
@@ -235,9 +228,13 @@ fn alpha(pixel: &image::Rgba<u8>) -> u8 {
 	pixel.0[3]
 }
 
+fn non_empty(pixel: &image::Rgba<u8>) -> bool {
+	alpha(pixel) != 0
+}
+
 // Yoinked+hacked fn from TextureAtlasBuilder (which I can't use directly
 // because it relies on runtime asset collections):
-// https://github.com/bevyengine/bevy/blob/c27cc59e0d1e305b0ab42b07455c3550ed671740/crates/bevy_sprite/src/texture_atlas_builder.rs#L95
+// https://github.com/bevyengine/bevy/blob/c27cc59e0/crates/bevy_sprite/src/texture_atlas_builder.rs#L95
 fn copy_texture_to_atlas(
 	atlas_texture: &mut Image,
 	texture: &Image,
