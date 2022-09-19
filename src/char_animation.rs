@@ -74,7 +74,7 @@ impl AssetLoader for CharAnimationLoader {
     ) -> BoxedFuture<'a, anyhow::Result<()>> {
         Box::pin(async move {
             // DO SOMETHING HERE w/ ?, returning (), and using LoadContext.set_default_asset for its side effects
-			let bevy_img = load_aseprite(bytes)?;
+			let bevy_img = load_aseprite_badly(bytes)?;
 			load_context.set_default_asset(LoadedAsset::new(bevy_img));
             Ok(())
         })
@@ -86,7 +86,7 @@ impl AssetLoader for CharAnimationLoader {
 // all rely on runtime asset collections. So I need to construct a plain sprite
 // sheet texture myself, then use TextureAtlas::from_grid_with_padding, because
 // it only requires a Handle<Image> (which I can provide).
-fn load_aseprite(bytes: &[u8]) -> anyhow::Result<Image> {
+fn load_aseprite(bytes: &[u8], load_context: &mut LoadContext) -> anyhow::Result<Image> {
     let ase = AsepriteFile::read(bytes)?;
 	// Assumptions: I'm only using AnimationDirection::Forward, and I'm assuming
 	// tag names are unique in the file (which aseprite doesn't guarantee), and
@@ -122,11 +122,28 @@ fn load_aseprite(bytes: &[u8]) -> anyhow::Result<Image> {
 			width,
 			height,
 			cur_x,
-			0
+			0,
 		);
 		cur_x += width + 1;
 	}
-	Ok(atlas_texture)
+	// stow texture and get a handle
+	let texture_handle = load_context.set_labeled_asset(
+		"texture",
+		LoadedAsset::new(atlas_texture),
+	);
+	// atlas time!!! hardcoding many things
+	let atlas = TextureAtlas::from_grid_with_padding(
+		texture_handle,
+		Vec2::new(width as f32, height as f32),
+		num_frames as usize,
+		1,
+		Vec2::new(1.0, 0.0),
+		Vec2::ZERO,
+	);
+	let atlas_handle = load_context.set_labeled_asset(
+		"texture_atlas",
+		LoadedAsset::new(atlas),
+	);
 
 	// let mut variants: HashMap<String, CharAnimationVariant> = HashMap::new();
 
