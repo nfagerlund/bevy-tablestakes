@@ -111,7 +111,7 @@ fn load_aseprite(bytes: &[u8], textures: &mut Assets<Image>, texture_atlases: &m
 			let walkbox = if let Some(walkbox_layer) = ase.layer_by_name("walkbox") {
 				let walkbox_cel = walkbox_layer.frame(frame_index);
 				let walkbox_image = walkbox_cel.image();
-				find_rectangle_bounds(&walkbox_image)
+				get_rect_lmao(&walkbox_image)
 			} else {
 				None
 			};
@@ -189,7 +189,7 @@ fn remux_image(img: RgbaImage) -> Image {
 }
 
 /// Find the Rect that contains all the non-transparent pixels in a cel.
-fn find_rectangle_bounds(img: &RgbaImage) -> Option<Rect> {
+fn get_rect_lmao(img: &RgbaImage) -> Option<Rect> {
     let mut x_min: u32 = u32::MAX;
     let mut x_max: u32 = 0;
     let mut y_min: u32 = u32::MAX;
