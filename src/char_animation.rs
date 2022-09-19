@@ -3,6 +3,7 @@ use bevy::asset::{
 };
 use bevy::math::prelude::*;
 use bevy::prelude::*;
+use bevy::reflect::TypeUuid;
 use bevy::render::{
 	render_resource::{Extent3d, TextureDimension, TextureFormat},
 	texture::{Image, TextureFormatPixelInfo}
@@ -13,16 +14,20 @@ use std::collections::HashMap;
 use asefile::AsepriteFile;
 use image::RgbaImage;
 
+#[derive(Debug, TypeUuid)]
+#[uuid = "585e2e41-4a97-42ef-a13e-55761c854bb4"]
 pub struct CharAnimation {
 	pub variants: HashMap<String, CharAnimationVariant>,
 	pub texture_atlas: Handle<TextureAtlas>,
 }
 
+#[derive(Debug)]
 pub struct CharAnimationVariant {
 	pub name: String,
 	pub frames: Vec<CharAnimationFrame>,
 }
 
+#[derive(Debug)]
 pub struct CharAnimationFrame {
 	pub index: usize,
 	pub duration: Duration, // ?
@@ -42,6 +47,7 @@ pub struct CharAnimationPlugin;
 impl Plugin for CharAnimationPlugin {
 	fn build(&self, app: &mut App) {
 		app
+			.add_asset::<CharAnimation>()
 			.init_asset_loader::<CharAnimationLoader>()
 			.add_startup_system(charanm_test_setup_system);
 	}
