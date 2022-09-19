@@ -3,8 +3,10 @@ use bevy::asset::{
 };
 use bevy::math::prelude::*;
 use bevy::prelude::*;
-use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat};
-use bevy::render::texture::Image;
+use bevy::render::{
+	render_resource::{Extent3d, TextureDimension, TextureFormat},
+	texture::{Image, TextureFormatPixelInfo}
+};
 use bevy::sprite::{Rect, TextureAtlas, TextureAtlasBuilder};
 use bevy::utils::Duration;
 use std::collections::HashMap;
@@ -224,4 +226,28 @@ fn get_rect_lmao(img: &RgbaImage) -> Option<Rect> {
 
 fn alpha(pixel: &image::Rgba<u8>) -> u8 {
 	pixel.0[3]
+}
+
+// Yoinked+hacked fn from TextureAtlasBuilder (which I can't use directly
+// because it relies on runtime asset collections):
+// https://github.com/bevyengine/bevy/blob/c27cc59e0d1e305b0ab42b07455c3550ed671740/crates/bevy_sprite/src/texture_atlas_builder.rs#L95
+fn copy_texture_to_atlas(
+	atlas_texture: &mut Image,
+	texture: &Image,
+	rect_width: usize,
+	rect_height: usize,
+	rect_x: usize,
+	rect_y: usize,
+) {
+	let atlas_width = atlas_texture.texture_descriptor.size.width as usize;
+	let format_size = atlas_texture.texture_descriptor.format.pixel_size();
+
+	for (texture_y, bound_y) in (rect_y..rect_y + rect_height).enumerate() {
+		let begin = (bound_y * atlas_width + rect_x) * format_size;
+		let end = begin + rect_width * format_size;
+		let texture_begin = texture_y * rect_width * format_size;
+		let texture_end = texture_begin + rect_width * format_size;
+		atlas_texture.data[begin..end]
+			.copy_from_slice(&texture.data[texture_begin..texture_end]);
+	}
 }
