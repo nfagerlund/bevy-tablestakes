@@ -82,6 +82,14 @@ impl AssetLoader for CharAnimationLoader {
 // Return the real asset, not ()!
 // Oh, lol, this needs to have hellacious side effects, because so does
 // TextureAtlasBuilder.
+// OK, nope. Time to reconsider all this, because I can't access this ECS
+// runtime stuff from here. I think what I've learned is that you can construct
+// Handles directly from asset paths without having consumed the asset to load
+// it yet, so it looks like I want to construct the handle before adding a frame
+// to the texture atlas... and then, how do I store the atlas once it's done? I
+// guess I just set it as a labeled sub-asset via the LoadContext, and then make
+// sure my primary asset holds onto a handle to it. Oh also: those handles the
+// texture atlas holds onto: are they strong or weak?
 fn load_aseprite(bytes: &[u8], textures: &mut Assets<Image>, texture_atlases: &mut Assets<TextureAtlas>) -> anyhow::Result<CharAnimation> {
     let ase = AsepriteFile::read(bytes)?;
 	// Assumptions: I'm only using AnimationDirection::Forward, and I'm assuming
