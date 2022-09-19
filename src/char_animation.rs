@@ -36,12 +36,6 @@ pub struct CharAnimationFrame {
 	// hitbox, hurtbox,
 }
 
-struct TempFrame {
-	texture_handle: Handle<Image>,
-	duration_ms: u32,
-	walkbox: Option<Rect>,
-}
-
 pub struct CharAnimationPlugin;
 
 impl Plugin for CharAnimationPlugin {
@@ -92,7 +86,7 @@ impl AssetLoader for CharAnimationLoader {
 // all rely on runtime asset collections. So I need to construct a plain sprite
 // sheet texture myself, then use TextureAtlas::from_grid_with_padding, because
 // it only requires a Handle<Image> (which I can provide).
-fn load_aseprite(bytes: &[u8], load_context: &mut LoadContext) -> anyhow::Result<Image> {
+fn load_aseprite(bytes: &[u8], load_context: &mut LoadContext) -> anyhow::Result<()> {
     let ase = AsepriteFile::read(bytes)?;
 	// Assumptions: I'm only using AnimationDirection::Forward, and I'm assuming
 	// tag names are unique in the file (which aseprite doesn't guarantee), and
@@ -150,79 +144,49 @@ fn load_aseprite(bytes: &[u8], load_context: &mut LoadContext) -> anyhow::Result
 		"texture_atlas",
 		LoadedAsset::new(atlas),
 	);
+	// At this point, the indexing of the atlas's sub-textures matches the
+	// original Ase file's frame indices! (although it's usize instead of
+	// asefile's u32.) from_grid_with_padding adds grid cells in left-to-right,
+	// top-to-bottom order.
 
-	// let mut variants: HashMap<String, CharAnimationVariant> = HashMap::new();
+	// Now that I know about the indexing ahead of time, I should be able to
+	// construct complete animation variants in one go.
+	let mut variants: HashMap<String, CharAnimationVariant> = HashMap::new();
 
-	// let mut tag_data: Vec<(String, Vec<TempFrame>)> = Vec::new();
-	// for tag in (0..ase.num_tags()).map(|i| ase.tag(i)) {
-	// 	// Construct a varaiant struct, and add images to atlas builder
-	// 	let frame_count = (tag.to_frame() - tag.from_frame() + 1) as usize;
-	// 	let mut frames: Vec<CharAnimationFrame> = Vec::with_capacity(frame_count);
-	// 	let mut temp_frames: Vec<TempFrame> = Vec::with_capacity(frame_count);
+	for tag in (0..ase.num_tags()).map(|i| ase.tag(i)) {
+		let name = tag.name().to_string();
+		let frame_range = tag.from_frame()..=tag.to_frame(); // inclusive
+		let frames: Vec<CharAnimationFrame> = frame_range.map(|i| {
+			let frame = ase.frame(i);
+			let index = i as usize;
+			let duration_ms = frame.duration() as u64;
+			let duration = Duration::from_millis(duration_ms);
 
-	// 	// something to hold stuff while I'm working on it...
-	// 	for frame_index in tag.from_frame()..=tag.to_frame() {
-	// 		let frame = ase.frame(frame_index);
-	// 		let duration_ms = frame.duration();
-	// 		// Get and dispose of frame image
-	// 		let frame_img = frame.image();
-	// 		let texture = remux_image(frame_img);
-	// 		let texture_handle = textures.add(texture);
-	// 		let texture = textures.get(&texture_handle).unwrap();
-	// 		atlas_builder.add_texture(texture_handle.clone(), texture);
-	// 		// Get walkbox
-	// 		let walkbox = if let Some(walkbox_layer) = ase.layer_by_name("walkbox") {
-	// 			let walkbox_cel = walkbox_layer.frame(frame_index);
-	// 			let walkbox_image = walkbox_cel.image();
-	// 			get_rect_lmao(&walkbox_image)
-	// 		} else {
-	// 			None
-	// 		};
-	// 		// Save a temp frame to process later (once we have a texture atlas
-	// 		// to read from)
-	// 		temp_frames.push(TempFrame {
-	// 			texture_handle,
-	// 			duration_ms,
-	// 			walkbox,
-	// 		});
-	// 	}
+			let walkbox = ase.layer_by_name("walkbox").map(|wb_layer| {
+				let wb_image = wb_layer.frame(i).image();
+				get_rect_lmao(&wb_image)
+			}).flatten();
 
-	// 	// Stash tag data bc we can't process it until we have an atlas:
-	// 	tag_data.push((tag.name().to_string(), temp_frames));
-	// 	// wow, this kinda sucks lmao! ANYWAY
-	// }
+			let origin = Vec2::ZERO; // TODO idk yet
 
-	// // Start finishing the whole asset
-	// let texture_atlas = atlas_builder.finish(textures)?;
-	// // Convert each tag's temp data into a CharAnimationVariant, and add it to
-	// // the variants hashmap
-	// for (name, temp_frames) in tag_data {
-	// 	let frames: Vec<CharAnimationFrame> = temp_frames.into_iter().map(|tf| {
-	// 		let TempFrame { texture_handle, duration_ms, walkbox } = tf;
-	// 		let index = texture_atlas.get_texture_index(&texture_handle).unwrap();
-	// 		let duration = Duration::from_millis(duration_ms as u64);
-	// 		CharAnimationFrame {
-	// 			index,
-	// 			duration,
-	// 			walkbox,
-	// 		}
-	// 	}).collect();
-	// 	let variant = CharAnimationVariant {
-	// 		name: name.clone(),
-	// 		origin: Vec2::ZERO, // TODO idek yet
-	// 		frames,
-	// 	};
-	// 	variants.insert(name, variant);
-	// }
+			CharAnimationFrame {
+				index,
+				duration,
+				origin,
+				walkbox,
+			}
+		}).collect();
 
-	// // Only add the atlas as an asset once we're done looking stuff up in it:
-	// let atlas_handle = texture_atlases.add(texture_atlas);
+		let variant = CharAnimationVariant { name: name.clone(), frames };
+		variants.insert(name, variant);
+	}
 
-	// // Okay, FINALLY: return the whole asset
-	// Ok(CharAnimation {
-	// 	variants,
-	// 	texture_atlas: atlas_handle,
-	// })
+	// OK, now I think we can build the whole enchilada...
+	let animation = CharAnimation { variants, texture_atlas: atlas_handle };
+
+	// And, cut!
+	load_context.set_default_asset(LoadedAsset::new(animation));
+	Ok(())
 }
 
 // Test texture creation
