@@ -74,7 +74,7 @@ impl AssetLoader for CharAnimationLoader {
     ) -> BoxedFuture<'a, anyhow::Result<()>> {
         Box::pin(async move {
             // DO SOMETHING HERE w/ ?, returning (), and using LoadContext.set_default_asset for its side effects
-			let bevy_img = load_aseprite_badly(bytes)?;
+			let bevy_img = load_aseprite(bytes)?;
 			load_context.set_default_asset(LoadedAsset::new(bevy_img));
             Ok(())
         })
@@ -82,94 +82,124 @@ impl AssetLoader for CharAnimationLoader {
 }
 
 // Return the real asset, not ()!
-// Oh, lol, this needs to have hellacious side effects, because so does
-// TextureAtlasBuilder.
-// OK, nope. Time to reconsider all this, because I can't access this ECS
-// runtime stuff from here. I think what I've learned is that you can construct
-// Handles directly from asset paths without having consumed the asset to load
-// it yet, so it looks like I want to construct the handle before adding a frame
-// to the texture atlas... and then, how do I store the atlas once it's done? I
-// guess I just set it as a labeled sub-asset via the LoadContext, and then make
-// sure my primary asset holds onto a handle to it. Oh also: those handles the
-// texture atlas holds onto: are they strong or weak?
-fn load_aseprite(bytes: &[u8], textures: &mut Assets<Image>, texture_atlases: &mut Assets<TextureAtlas>) -> anyhow::Result<CharAnimation> {
+// RE-re-reconsidering all this: None of the atlas builders are suitable, they
+// all rely on runtime asset collections. So I need to construct a plain sprite
+// sheet texture myself, then use TextureAtlas::from_grid_with_padding, because
+// it only requires a Handle<Image> (which I can provide).
+fn load_aseprite(bytes: &[u8]) -> anyhow::Result<Image> {
     let ase = AsepriteFile::read(bytes)?;
 	// Assumptions: I'm only using AnimationDirection::Forward, and I'm assuming
 	// tag names are unique in the file (which aseprite doesn't guarantee), and
 	// I'm assuming there are named tags that cover all the needed animation.
-	let mut atlas_builder = TextureAtlasBuilder::default();
-	let mut variants: HashMap<String, CharAnimationVariant> = HashMap::new();
+	let width = ase.width();
+	let height = ase.height();
+	let num_frames = ase.num_frames();
 
-	let mut tag_data: Vec<(String, Vec<TempFrame>)> = Vec::new();
-	for tag in (0..ase.num_tags()).map(|i| ase.tag(i)) {
-		// Construct a varaiant struct, and add images to atlas builder
-		let frame_count = (tag.to_frame() - tag.from_frame() + 1) as usize;
-		let mut frames: Vec<CharAnimationFrame> = Vec::with_capacity(frame_count);
-		let mut temp_frames: Vec<TempFrame> = Vec::with_capacity(frame_count);
+	// Build the texture atlas first!
 
-		// something to hold stuff while I'm working on it...
-		for frame_index in tag.from_frame()..=tag.to_frame() {
-			let frame = ase.frame(frame_index);
-			let duration_ms = frame.duration();
-			// Get and dispose of frame image
-			let frame_img = frame.image();
-			let texture = remux_image(frame_img);
-			let texture_handle = textures.add(texture);
-			let texture = textures.get(&texture_handle).unwrap();
-			atlas_builder.add_texture(texture_handle.clone(), texture);
-			// Get walkbox
-			let walkbox = if let Some(walkbox_layer) = ase.layer_by_name("walkbox") {
-				let walkbox_cel = walkbox_layer.frame(frame_index);
-				let walkbox_image = walkbox_cel.image();
-				get_rect_lmao(&walkbox_image)
-			} else {
-				None
-			};
-			// Save a temp frame to process later (once we have a texture atlas
-			// to read from)
-			temp_frames.push(TempFrame {
-				texture_handle,
-				duration_ms,
-				walkbox,
-			});
-		}
-
-		// Stash tag data bc we can't process it until we have an atlas:
-		tag_data.push((tag.name().to_string(), temp_frames));
-		// wow, this kinda sucks lmao! ANYWAY
+	// Laziness: I'm slurping every frame into the final asset, so it might
+	// include some garbage frames that aren't in any tags. Later, this lets me
+	// index into the texture atlas using plain frame IDs without needing to
+	// hold onto any translation layer.
+	let frame_images: Vec<Image> = (0..num_frames)
+		.map(|i| remux_image(ase.frame(i).image()))
+		.collect();
+	// Atlas will be a 1D horizontal strip w/ 1px padding between frames.
+	let atlas_height = height as u32;
+	let atlas_width = width as u32 * num_frames + num_frames - 1;
+	let mut atlas_texture = Image::new_fill(
+		Extent3d { width: atlas_width, height: atlas_height, depth_or_array_layers: 1 },
+		TextureDimension::D2,
+		&[255, 0, 0, 255], // FIXME: making opaque red for initial debug, should be clear
+		TextureFormat::Rgba8UnormSrgb, // Could frame_images[0].format(), but hardcode for now.
+	);
+	// copy time
+	let mut cur_x = 0_usize;
+	for img in frame_images.iter() {
+		copy_texture_to_atlas(
+			&mut atlas_texture,
+			img,
+			width,
+			height,
+			cur_x,
+			0
+		);
+		cur_x += width + 1;
 	}
+	Ok(atlas_texture)
 
-	// Start finishing the whole asset
-	let texture_atlas = atlas_builder.finish(textures)?;
-	// Convert each tag's temp data into a CharAnimationVariant, and add it to
-	// the variants hashmap
-	for (name, temp_frames) in tag_data {
-		let frames: Vec<CharAnimationFrame> = temp_frames.into_iter().map(|tf| {
-			let TempFrame { texture_handle, duration_ms, walkbox } = tf;
-			let index = texture_atlas.get_texture_index(&texture_handle).unwrap();
-			let duration = Duration::from_millis(duration_ms as u64);
-			CharAnimationFrame {
-				index,
-				duration,
-				walkbox,
-			}
-		}).collect();
-		let variant = CharAnimationVariant {
-			name: name.clone(),
-			origin: Vec2::ZERO, // TODO idek yet
-			frames,
-		};
-		variants.insert(name, variant);
-	}
+	// let mut variants: HashMap<String, CharAnimationVariant> = HashMap::new();
 
-	// Only add the atlas as an asset once we're done looking stuff up in it:
-	let atlas_handle = texture_atlases.add(texture_atlas);
+	// let mut tag_data: Vec<(String, Vec<TempFrame>)> = Vec::new();
+	// for tag in (0..ase.num_tags()).map(|i| ase.tag(i)) {
+	// 	// Construct a varaiant struct, and add images to atlas builder
+	// 	let frame_count = (tag.to_frame() - tag.from_frame() + 1) as usize;
+	// 	let mut frames: Vec<CharAnimationFrame> = Vec::with_capacity(frame_count);
+	// 	let mut temp_frames: Vec<TempFrame> = Vec::with_capacity(frame_count);
 
-	// Okay, FINALLY: return the whole asset
-	Ok(CharAnimation {
-		variants,
-		texture_atlas: atlas_handle,
-	})
+	// 	// something to hold stuff while I'm working on it...
+	// 	for frame_index in tag.from_frame()..=tag.to_frame() {
+	// 		let frame = ase.frame(frame_index);
+	// 		let duration_ms = frame.duration();
+	// 		// Get and dispose of frame image
+	// 		let frame_img = frame.image();
+	// 		let texture = remux_image(frame_img);
+	// 		let texture_handle = textures.add(texture);
+	// 		let texture = textures.get(&texture_handle).unwrap();
+	// 		atlas_builder.add_texture(texture_handle.clone(), texture);
+	// 		// Get walkbox
+	// 		let walkbox = if let Some(walkbox_layer) = ase.layer_by_name("walkbox") {
+	// 			let walkbox_cel = walkbox_layer.frame(frame_index);
+	// 			let walkbox_image = walkbox_cel.image();
+	// 			get_rect_lmao(&walkbox_image)
+	// 		} else {
+	// 			None
+	// 		};
+	// 		// Save a temp frame to process later (once we have a texture atlas
+	// 		// to read from)
+	// 		temp_frames.push(TempFrame {
+	// 			texture_handle,
+	// 			duration_ms,
+	// 			walkbox,
+	// 		});
+	// 	}
+
+	// 	// Stash tag data bc we can't process it until we have an atlas:
+	// 	tag_data.push((tag.name().to_string(), temp_frames));
+	// 	// wow, this kinda sucks lmao! ANYWAY
+	// }
+
+	// // Start finishing the whole asset
+	// let texture_atlas = atlas_builder.finish(textures)?;
+	// // Convert each tag's temp data into a CharAnimationVariant, and add it to
+	// // the variants hashmap
+	// for (name, temp_frames) in tag_data {
+	// 	let frames: Vec<CharAnimationFrame> = temp_frames.into_iter().map(|tf| {
+	// 		let TempFrame { texture_handle, duration_ms, walkbox } = tf;
+	// 		let index = texture_atlas.get_texture_index(&texture_handle).unwrap();
+	// 		let duration = Duration::from_millis(duration_ms as u64);
+	// 		CharAnimationFrame {
+	// 			index,
+	// 			duration,
+	// 			walkbox,
+	// 		}
+	// 	}).collect();
+	// 	let variant = CharAnimationVariant {
+	// 		name: name.clone(),
+	// 		origin: Vec2::ZERO, // TODO idek yet
+	// 		frames,
+	// 	};
+	// 	variants.insert(name, variant);
+	// }
+
+	// // Only add the atlas as an asset once we're done looking stuff up in it:
+	// let atlas_handle = texture_atlases.add(texture_atlas);
+
+	// // Okay, FINALLY: return the whole asset
+	// Ok(CharAnimation {
+	// 	variants,
+	// 	texture_atlas: atlas_handle,
+	// })
 }
 
 // Test texture creation
