@@ -110,7 +110,7 @@ fn load_aseprite(bytes: &[u8]) -> anyhow::Result<Image> {
 	let mut atlas_texture = Image::new_fill(
 		Extent3d { width: atlas_width, height: atlas_height, depth_or_array_layers: 1 },
 		TextureDimension::D2,
-		&[255, 0, 0, 255], // FIXME: making opaque red for initial debug, should be clear
+		&[0, 0, 0, 0], // clear
 		TextureFormat::Rgba8UnormSrgb, // Could frame_images[0].format(), but hardcode for now.
 	);
 	// copy time
