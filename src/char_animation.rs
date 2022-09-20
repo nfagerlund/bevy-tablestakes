@@ -27,11 +27,25 @@ pub struct CharAnimationVariant {
 	pub frames: Vec<CharAnimationFrame>,
 }
 
+/// Data for an individual animation frame. This struct contains coordinates for
+/// some points and rectangles; in all cases, these are relative to the top left
+/// corner of the sprite.
 #[derive(Debug)]
 pub struct CharAnimationFrame {
+	/// The index to use for getting this frame from this animation's
+	/// `TextureAtlas`. This can be assigned to a `TextureAtlasSprite` when it's
+	/// time to display this frame.
 	pub index: usize,
-	pub duration: Duration, // ?
+	/// How long this frame should be displayed for, according to the animation
+	/// source file.
+	pub duration: Duration,
+	/// The origin/anchor/pivot point of the sprite. Technically I expect the
+	/// origin not to differ across frames of the same animation variant, but
+	/// it's stored on the frame for convenience.
 	pub origin: Vec2,
+	/// The bounding box that represents the projected position of the
+	/// character's feet onto the ground, for determining where they're standing
+	/// or trying to stand.
 	pub walkbox: Option<Rect>,
 	// hitbox, hurtbox,
 }
