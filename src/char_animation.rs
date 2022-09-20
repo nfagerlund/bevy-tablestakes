@@ -103,6 +103,8 @@ impl AssetLoader for CharAnimationLoader {
 /// - Named tags cover all of the needed animation frames.
 /// - Walkbox layer: "walkbox"
 /// - Origin layer: "origin"
+/// - Layers for drawn-on metadata coordinates should be marked as invisible in
+///   the saved file.
 fn load_aseprite(bytes: &[u8], load_context: &mut LoadContext) -> anyhow::Result<()> {
     let ase = AsepriteFile::read(bytes)?;
 	let width = ase.width();
