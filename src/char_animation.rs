@@ -88,6 +88,7 @@ impl AssetLoader for CharAnimationLoader {
 /// - Tag names are unique in the file. (Aseprite doesn't guarantee this.)
 /// - Named tags cover all of the needed animation frames.
 /// - Walkbox layer: "walkbox"
+/// - Origin layer: "origin"
 fn load_aseprite(bytes: &[u8], load_context: &mut LoadContext) -> anyhow::Result<()> {
     let ase = AsepriteFile::read(bytes)?;
 	let width = ase.width();
@@ -154,12 +155,13 @@ fn load_aseprite(bytes: &[u8], load_context: &mut LoadContext) -> anyhow::Result
 			let duration_ms = frame.duration() as u64;
 			let duration = Duration::from_millis(duration_ms);
 
-			let walkbox = ase.layer_by_name("walkbox").map(|wb_layer| {
-				let wb_image = wb_layer.frame(i).image();
-				get_rect_lmao(&wb_image)
-			}).flatten();
+			let walkbox = rect_from_cel(&ase, "walkbox", i);
 
-			let origin = Vec2::ZERO; // TODO idk yet
+			// Wasteful, bc we could exit early on first non-clear px, but meh.
+			let origin = match rect_from_cel(&ase, "origin", i) {
+				Some(origin_rect) => origin_rect.min,
+				None => Vec2::ZERO, // Origin's non-optional.
+			};
 
 			CharAnimationFrame {
 				index,
@@ -196,6 +198,15 @@ fn remux_image(img: RgbaImage) -> Image {
 		img.into_raw(),
 		TextureFormat::Rgba8UnormSrgb,
 	)
+}
+
+/// Extract the non-transparent-pixels bounding rectangle from the cel at a
+/// given layer name and frame index.
+fn rect_from_cel(ase: &AsepriteFile, layer_name: &str, frame_index: u32) -> Option<Rect> {
+	ase.layer_by_name(layer_name).map(|layer| {
+		let cel_img = layer.frame(frame_index).image();
+		get_rect_lmao(&cel_img)
+	}).flatten()
 }
 
 /// Find the Rect that contains all the non-transparent pixels in a cel.
