@@ -10,6 +10,7 @@ use bevy::render::{
 };
 use bevy::sprite::{Rect, TextureAtlas};
 use bevy::utils::Duration;
+use bevy_inspector_egui::Inspectable;
 use std::collections::HashMap;
 use asefile::AsepriteFile;
 use image::RgbaImage;
@@ -50,6 +51,21 @@ pub struct CharAnimationFrame {
 	// hitbox, hurtbox,
 }
 
+/// Right, so, how do we animate these dudes? (and thus, what do we need in our state component/bundle?)
+/// Starting in media res:
+/// - Each step, tick down a TIMER (non-repeating) for the current frame.
+/// - When the timer runs out, switch your FRAME INDEX to the next frame (or, WRAP AROUND if you're configured to loop).
+
+#[derive(Component, Debug, Reflect, Inspectable)]
+pub struct TempCharAnimationState {
+	pub animation: Handle<CharAnimation>,
+	pub variant: String, // hate the string lookup here btw, need something better.
+	// guess I could do interning and import IndexMap maybe.
+	pub frame: usize,
+	// To start with, we'll just always loop.
+	pub frame_timer: Timer,
+}
+
 pub struct CharAnimationPlugin;
 
 impl Plugin for CharAnimationPlugin {
@@ -64,7 +80,19 @@ impl Plugin for CharAnimationPlugin {
 fn charanm_test_setup_system(
 	mut commands: Commands,
 	asset_server: Res<AssetServer>,
+	animations: Res<Assets<CharAnimation>>,
 ) {
+	let anim_handle: Handle<CharAnimation> = asset_server.load("sprites/sPlayerRun.aseprite");
+	let anim = animations.get(&anim_handle)
+	commands.spawn_bundle((
+		TextureAtlasSprite::default(),
+		// Oh. Ugh?? how do I init this without exploding? I could add loading
+		// state, but that's WAY premature
+		TempCharAnimationState {
+
+		}
+	));
+
     let test_texture_handle: Handle<Image> = asset_server.load("sprites/sPlayerRun.aseprite#texture");
     commands.spawn_bundle(SpriteBundle {
         texture: test_texture_handle,
