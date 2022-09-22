@@ -74,7 +74,35 @@ impl Plugin for CharAnimationPlugin {
 			.add_asset::<CharAnimation>()
 			.init_asset_loader::<CharAnimationLoader>()
 			.add_startup_system(charanm_test_setup_system)
-			.add_system(charanm_test_atlas_reassign_system);
+			.add_system(charanm_test_atlas_reassign_system)
+			.add_system(charanm_test_animate_system);
+	}
+}
+
+fn charanm_test_animate_system(
+	animations: Res<Assets<CharAnimation>>,
+	mut query: Query<(&TempCharAnimationState, &mut TextureAtlasSprite)>,
+) {
+	for (
+		state,
+		mut sprite,
+	) in query.iter_mut() {
+		if let Some(animation) = animations.get(&state.animation) {
+			// UGH!!!
+			if let Some(variant_name) = &state.variant {
+				// ok, where was I. Uh, dig into the variant and frame to see
+				// what actual texture index we oughtta use, and set it.
+
+				// (btw this is static atm, we're not animating yet we're just
+				// using the CORRECT frame rect.)
+				let variant = animation.variants.get(variant_name).unwrap(); // UGH!!
+				let frame = &variant.frames[state.frame];
+				if sprite.index != frame.index {
+					println!("Updating sprite index! (animating)");
+					sprite.index = frame.index;
+				}
+			}
+		}
 	}
 }
 
