@@ -56,14 +56,14 @@ pub struct CharAnimationFrame {
 /// - Each step, tick down a TIMER (non-repeating) for the current frame.
 /// - When the timer runs out, switch your FRAME INDEX to the next frame (or, WRAP AROUND if you're configured to loop).
 
-#[derive(Component, Debug, Reflect, Inspectable)]
+#[derive(Component, Debug)]
 pub struct TempCharAnimationState {
 	pub animation: Handle<CharAnimation>,
-	pub variant: String, // hate the string lookup here btw, need something better.
+	pub variant: Option<String>, // hate the string lookup here btw, need something better.
 	// guess I could do interning and import IndexMap maybe.
 	pub frame: usize,
 	// To start with, we'll just always loop.
-	pub frame_timer: Timer,
+	pub frame_timer: Option<Timer>,
 }
 
 pub struct CharAnimationPlugin;
@@ -73,25 +73,60 @@ impl Plugin for CharAnimationPlugin {
 		app
 			.add_asset::<CharAnimation>()
 			.init_asset_loader::<CharAnimationLoader>()
-			.add_startup_system(charanm_test_setup_system);
+			.add_startup_system(charanm_test_setup_system)
+			.add_system(charanm_test_atlas_reassign_system);
+	}
+}
+
+fn charanm_test_atlas_reassign_system(
+	mut commands: Commands,
+	animations: Res<Assets<CharAnimation>>,
+	query: Query<(Entity, &TempCharAnimationState, &Handle<TextureAtlas>)>,
+) {
+	for (
+			entity,
+			state,
+			atlas_handle,
+		) in query.iter() {
+		// get the animation, get the handle off it, compare the handles, and if
+		// they don't match, issue an insert command.
+		if let Some(animation) = animations.get(&state.animation) {
+			let desired_atlas_handle = &animation.texture_atlas;
+			if desired_atlas_handle != atlas_handle {
+				println!("Replacing texture handle!");
+				commands.entity(entity).insert(desired_atlas_handle.clone());
+			}
+		}
 	}
 }
 
 fn charanm_test_setup_system(
 	mut commands: Commands,
 	asset_server: Res<AssetServer>,
-	animations: Res<Assets<CharAnimation>>,
 ) {
 	let anim_handle: Handle<CharAnimation> = asset_server.load("sprites/sPlayerRun.aseprite");
-	let anim = animations.get(&anim_handle)
-	commands.spawn_bundle((
-		TextureAtlasSprite::default(),
-		// Oh. Ugh?? how do I init this without exploding? I could add loading
-		// state, but that's WAY premature
-		TempCharAnimationState {
-
-		}
-	));
+	commands
+		.spawn_bundle(SpriteSheetBundle {
+			transform: Transform::from_translation(Vec3::new(30.0, 60.0, 3.0)),
+			..default()
+		})
+		.insert(
+			// Oh. Ugh?? how do I init this without exploding? I could add loading
+			// state, but that's WAY premature.. I guess Options.
+			TempCharAnimationState {
+				animation: anim_handle,
+				// but also for now I'm hardcoding.
+				variant: Some("W".to_string()),
+				frame: 0,
+				frame_timer: None,
+			}
+			// Oh wait yeah, and when should I insert the Handle<TextureAtlas> I
+			// eventually get from the loaded animation? The sprite won't render
+			// without it...
+			// ...It'll need to be an ongoing system anyway! Because! The atlas will
+			// change whenever the animation changes, and I'll be flipping through
+			// whole animations whenever the character changes what it's doing!
+		);
 
     let test_texture_handle: Handle<Image> = asset_server.load("sprites/sPlayerRun.aseprite#texture");
     commands.spawn_bundle(SpriteBundle {
