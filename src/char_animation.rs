@@ -11,6 +11,7 @@ use bevy::render::{
 use bevy::sprite::{Rect, TextureAtlas};
 use bevy::utils::Duration;
 use bevy_inspector_egui::Inspectable;
+use bevy_inspector_egui::egui::Key;
 use std::collections::HashMap;
 use std::env::var;
 use asefile::AsepriteFile;
@@ -59,12 +60,31 @@ pub struct CharAnimationFrame {
 
 #[derive(Component, Debug)]
 pub struct TempCharAnimationState {
-	pub animation: Handle<CharAnimation>,
-	pub variant: Option<String>, // hate the string lookup here btw, need something better.
+	animation: Handle<CharAnimation>,
+	variant: Option<String>, // hate the string lookup here btw, need something better.
 	// guess I could do interning and import IndexMap maybe.
-	pub frame: usize,
+	frame: usize,
 	// To start with, we'll just always loop.
-	pub frame_timer: Option<Timer>,
+	frame_timer: Option<Timer>,
+}
+
+impl TempCharAnimationState {
+	fn new(animation: Handle<CharAnimation>, variant: &str) -> Self {
+		TempCharAnimationState {
+			animation,
+			variant: Some(variant.to_string()),
+			// in the future I might end up wanting to blend between animations
+			// at a particular frame. Doesn't matter yet tho.
+			frame: 0,
+			frame_timer: None,
+		}
+	}
+
+	fn change_variant(&mut self, variant: &str) {
+		self.variant = Some(variant.to_string());
+		self.frame = 0;
+		self.frame_timer = None;
+	}
 }
 
 pub struct CharAnimationPlugin;
@@ -76,7 +96,25 @@ impl Plugin for CharAnimationPlugin {
 			.init_asset_loader::<CharAnimationLoader>()
 			.add_startup_system(charanm_test_setup_system)
 			.add_system(charanm_test_atlas_reassign_system)
-			.add_system(charanm_test_animate_system);
+			.add_system(charanm_test_animate_system)
+			.add_system(charanm_test_directions_system);
+	}
+}
+
+fn charanm_test_directions_system(
+	mut query: Query<&mut TempCharAnimationState>,
+	keys: Res<Input<KeyCode>>,
+) {
+	for mut state in query.iter_mut() {
+		if keys.just_pressed(KeyCode::Right) {
+			state.change_variant("E");
+		} else if keys.just_pressed(KeyCode::Up) {
+			state.change_variant("N");
+		} else if keys.just_pressed(KeyCode::Left) {
+			state.change_variant("W");
+		} else if keys.just_pressed(KeyCode::Down) {
+			state.change_variant("S");
+		}
 	}
 }
 
@@ -157,23 +195,7 @@ fn charanm_test_setup_system(
 			transform: Transform::from_translation(Vec3::new(30.0, 60.0, 3.0)),
 			..default()
 		})
-		.insert(
-			// Oh. Ugh?? how do I init this without exploding? I could add loading
-			// state, but that's WAY premature.. I guess Options.
-			TempCharAnimationState {
-				animation: anim_handle,
-				// but also for now I'm hardcoding.
-				variant: Some("W".to_string()),
-				frame: 0,
-				frame_timer: None,
-			}
-			// Oh wait yeah, and when should I insert the Handle<TextureAtlas> I
-			// eventually get from the loaded animation? The sprite won't render
-			// without it...
-			// ...It'll need to be an ongoing system anyway! Because! The atlas will
-			// change whenever the animation changes, and I'll be flipping through
-			// whole animations whenever the character changes what it's doing!
-		);
+		.insert(TempCharAnimationState::new(anim_handle, "W"));
 
     let test_texture_handle: Handle<Image> = asset_server.load("sprites/sPlayerRun.aseprite#texture");
     commands.spawn_bundle(SpriteBundle {
