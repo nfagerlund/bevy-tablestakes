@@ -12,6 +12,7 @@ use bevy::sprite::{Rect, TextureAtlas};
 use bevy::utils::Duration;
 use bevy_inspector_egui::Inspectable;
 use std::collections::HashMap;
+use std::env::var;
 use asefile::AsepriteFile;
 use image::RgbaImage;
 
@@ -81,24 +82,42 @@ impl Plugin for CharAnimationPlugin {
 
 fn charanm_test_animate_system(
 	animations: Res<Assets<CharAnimation>>,
-	mut query: Query<(&TempCharAnimationState, &mut TextureAtlasSprite)>,
+	mut query: Query<(&mut TempCharAnimationState, &mut TextureAtlasSprite)>,
+	time: Res<Time>,
 ) {
 	for (
-		state,
+		mut state,
 		mut sprite,
 	) in query.iter_mut() {
 		if let Some(animation) = animations.get(&state.animation) {
 			// UGH!!!
 			if let Some(variant_name) = &state.variant {
+				// get the stugff
+				let variant = animation.variants.get(variant_name).unwrap(); // UGH!!
+
+				// update the timer... or initialize it, if it's missing.
+				if let Some(frame_timer) = &mut state.frame_timer {
+					frame_timer.tick(time.delta());
+					if frame_timer.finished() {
+						// increment+loop frame, and replace the timer with the new frame's duration
+						// TODO: we're only looping rn.
+						let frame_count = variant.frames.len();
+						state.frame = (state.frame + 1) % frame_count;
+
+						state.frame_timer = Some(Timer::new(variant.frames[state.frame].duration, false));
+					}
+				} else {
+					// must be new here. initialize the timer w/ the current
+					// frame's duration, can start ticking on the next loop.
+					let frame = &variant.frames[state.frame];
+					state.frame_timer = Some(Timer::new(frame.duration, false));
+				}
+
 				// ok, where was I. Uh, dig into the variant and frame to see
 				// what actual texture index we oughtta use, and set it.
-
-				// (btw this is static atm, we're not animating yet we're just
-				// using the CORRECT frame rect.)
-				let variant = animation.variants.get(variant_name).unwrap(); // UGH!!
 				let frame = &variant.frames[state.frame];
 				if sprite.index != frame.index {
-					println!("Updating sprite index! (animating)");
+					// println!("Updating sprite index! (animating)");
 					sprite.index = frame.index;
 				}
 			}
