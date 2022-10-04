@@ -500,11 +500,38 @@ mod tests {
     const HARD_SE: Vec2 = Vec2::new(1.0, -1.0);
     const HARD_SW: Vec2 = Vec2::new(-1.0, -1.0);
 
+    const LIL_BIT: f32 = 0.01;
+
     #[test]
     fn test_from_vec2_cardinal_ordinal() {
         assert_eq!(DiscreteDir::from_vec2_cardinal_ordinal(HARD_NE), DiscreteDir::NE);
         assert_eq!(DiscreteDir::from_vec2_cardinal_ordinal(HARD_NW), DiscreteDir::NW);
         assert_eq!(DiscreteDir::from_vec2_cardinal_ordinal(HARD_SE), DiscreteDir::SE);
         assert_eq!(DiscreteDir::from_vec2_cardinal_ordinal(HARD_SW), DiscreteDir::SW);
+
+        // inter-intercardinal x/y components
+        let iic_short: f32 = FRAC_PI_8.sin();
+        let iic_long: f32 = FRAC_PI_8.cos();
+
+        // On _just_ one side or the other of the deciding line:
+        assert_eq!(DiscreteDir::from_vec2_cardinal_ordinal(Vec2::new(iic_long + LIL_BIT, iic_short)), DiscreteDir::E);
+        assert_eq!(DiscreteDir::from_vec2_cardinal_ordinal(Vec2::new(iic_long, iic_short + LIL_BIT)), DiscreteDir::NE);
+        assert_eq!(DiscreteDir::from_vec2_cardinal_ordinal(Vec2::new(iic_long + LIL_BIT, -iic_short)), DiscreteDir::E);
+        assert_eq!(DiscreteDir::from_vec2_cardinal_ordinal(Vec2::new(iic_long, -(iic_short + LIL_BIT))), DiscreteDir::SE);
+
+        // On exactly the deciding line:
+        match DiscreteDir::from_vec2_cardinal_ordinal(Vec2::new(iic_long, iic_short)) {
+            DiscreteDir::E => (),
+            DiscreteDir::NE => (),
+            _ => {
+                panic!("pi/8 angle should be either E or NE");
+            }
+        }
+
+        // Bogus input:
+        assert_eq!(DiscreteDir::from_vec2_cardinal_ordinal(Vec2::ZERO), DiscreteDir::Neutral);
+        assert_eq!(DiscreteDir::from_vec2_cardinal_ordinal(Vec2::new(f32::NAN, 1.0)), DiscreteDir::Neutral);
+        assert_eq!(DiscreteDir::from_vec2_cardinal_ordinal(Vec2::new(1.0, f32::INFINITY)), DiscreteDir::Neutral);
+        assert_eq!(DiscreteDir::from_vec2_cardinal_ordinal(Vec2::new(f32::NEG_INFINITY, 1.0)), DiscreteDir::Neutral);
     }
 }
