@@ -416,6 +416,7 @@ fn copy_texture_to_atlas(
     }
 }
 
+#[derive(Debug, PartialEq, Eq)]
 enum DiscreteDir {
     E, N, W, S,
     NE, NW, SW, SE,
@@ -468,7 +469,7 @@ impl DiscreteDir {
         if motion == Vec2::ZERO {
             return Self::Neutral;
         }
-        let angle = motion.angle_between(Vec2::X);
+        let angle = Vec2::X.angle_between(motion);
         if angle > ESE && angle <= ENE {
             Self::E
         } else if angle > ENE && angle <= NNE {
@@ -488,5 +489,22 @@ impl DiscreteDir {
         } else {
             panic!("IDK what happened, but some angle fell through all my comparisons.")
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    const HARD_NE: Vec2 = Vec2::new(1.0, 1.0);
+    const HARD_NW: Vec2 = Vec2::new(-1.0, 1.0);
+    const HARD_SE: Vec2 = Vec2::new(1.0, -1.0);
+    const HARD_SW: Vec2 = Vec2::new(-1.0, -1.0);
+
+    #[test]
+    fn test_from_vec2_cardinal_ordinal() {
+        assert_eq!(DiscreteDir::from_vec2_cardinal_ordinal(HARD_NE), DiscreteDir::NE);
+        assert_eq!(DiscreteDir::from_vec2_cardinal_ordinal(HARD_NW), DiscreteDir::NW);
+        assert_eq!(DiscreteDir::from_vec2_cardinal_ordinal(HARD_SE), DiscreteDir::SE);
+        assert_eq!(DiscreteDir::from_vec2_cardinal_ordinal(HARD_SW), DiscreteDir::SW);
     }
 }
