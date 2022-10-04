@@ -14,6 +14,7 @@ use bevy_inspector_egui::Inspectable;
 use bevy_inspector_egui::egui::Key;
 use std::collections::HashMap;
 use std::env::var;
+use std::f32::consts::*;
 use asefile::AsepriteFile;
 use image::RgbaImage;
 
@@ -412,5 +413,80 @@ fn copy_texture_to_atlas(
         let texture_end = texture_begin + rect_width * format_size;
         atlas_texture.data[begin..end]
             .copy_from_slice(&texture.data[texture_begin..texture_end]);
+    }
+}
+
+enum DiscreteDir {
+    E, N, W, S,
+    NE, NW, SW, SE,
+    Neutral,
+}
+
+impl DiscreteDir {
+    // Given a Vec2, return east, west, or neutral. Bias towards east.
+    fn from_vec2_horizontal(motion: Vec2) -> Self {
+        if motion == Vec2::ZERO {
+            Self::Neutral
+        } else if motion.x < 0.0 {
+            Self::W
+        } else {
+            Self::E
+        }
+    }
+
+    // Given a Vec2, return north, south, or neutral. Bias towards south.
+    fn from_vec2_vertical(motion: Vec2) -> Self {
+        if motion == Vec2::ZERO {
+            Self::Neutral
+        } else if motion.y > 0.0 {
+            Self::N
+        } else {
+            Self::S
+        }
+    }
+
+    // Given a Vec2, return one of the four cardinal directions or neutral. Bias
+    // towards horizontal.
+    fn from_vec2_cardinal(motion: Vec2) -> Self {
+        Self::Neutral
+    }
+
+    // Given a Vec2, return one of the four cardinal directions, one of the four
+    // ordinal/intercardinal directions, or neutral. Bias is whatever bc you
+    // can't get your analog inputs exact enough to notice it.
+    fn from_vec2_cardinal_ordinal(motion: Vec2) -> Self {
+        const ENE: f32 = 1.0 * FRAC_PI_8;
+        const NNE: f32 = 3.0 * FRAC_PI_8;
+        const NNW: f32 = 5.0 * FRAC_PI_8;
+        const WNW: f32 = 7.0 * FRAC_PI_8;
+        const WSW: f32 = -7.0 * FRAC_PI_8;
+        const SSW: f32 = -5.0 * FRAC_PI_8;
+        const SSE: f32 = -3.0 * FRAC_PI_8;
+        const ESE: f32 = -1.0 * FRAC_PI_8;
+        // Deal with any tricksy infinite or NaN vectors:
+        let motion = motion.normalize_or_zero();
+        if motion == Vec2::ZERO {
+            return Self::Neutral;
+        }
+        let angle = motion.angle_between(Vec2::X);
+        if angle > ESE && angle <= ENE {
+            Self::E
+        } else if angle > ENE && angle <= NNE {
+            Self::NE
+        } else if angle > NNE && angle <= NNW {
+            Self::N
+        } else if angle > NNW && angle <= WNW {
+            Self::NW
+        } else if angle > WNW || angle <= WSW { // the negative flip-over
+            Self::W
+        } else if angle > WSW && angle <= SSW {
+            Self::SW
+        } else if angle > SSW && angle <= SSE {
+            Self::S
+        } else if angle > SSE && angle <= ESE {
+            Self::SE
+        } else {
+            panic!("IDK what happened, but some angle fell through all my comparisons.")
+        }
     }
 }
