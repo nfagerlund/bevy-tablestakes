@@ -453,7 +453,28 @@ impl DiscreteDir {
     // Given a Vec2, return one of the four cardinal directions or neutral. Bias
     // towards horizontal.
     fn cardinal_from_vec2(motion: Vec2) -> Self {
-        Self::Neutral
+        const NE: f32 = FRAC_PI_4;
+        const NW: f32 = 3.0 * FRAC_PI_4;
+        const SW: f32 = -3.0 * FRAC_PI_4;
+        const SE: f32 = -FRAC_PI_4;
+
+        // Deal with any tricksy infinite or NaN vectors:
+        let motion = motion.normalize_or_zero();
+        if motion == Vec2::ZERO {
+            return Self::Neutral;
+        }
+        let angle = Vec2::X.angle_between(motion);
+        if angle >= SE && angle <= NE {
+            Self::E
+        } else if angle > NE && angle < NW {
+            Self::N
+        } else if angle >= NW || angle <= SW { // the negative flip-over
+            Self::W
+        } else if angle > SW && angle < SE {
+            Self::S
+        } else {
+            panic!("IDK what happened, but some angle didn't match a dir: {}", angle)
+        }
     }
 
     // Given a Vec2, return one of the four cardinal directions, one of the four
@@ -491,7 +512,7 @@ impl DiscreteDir {
         } else if angle > SSE && angle <= ESE {
             Self::SE
         } else {
-            panic!("IDK what happened, but some angle fell through all my comparisons.")
+            panic!("IDK what happened, but some angle didn't match a dir: {}", angle)
         }
     }
 }
