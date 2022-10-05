@@ -535,6 +535,48 @@ mod tests {
     }
 
     #[test]
+    fn test_cardinal_from_vec2() {
+        // Truly easy cases:
+        assert_eq!(DiscreteDir::cardinal_from_vec2(Vec2::new(1.0, 0.0)), DiscreteDir::E);
+        assert_eq!(DiscreteDir::cardinal_from_vec2(Vec2::new(1.0, LIL_BIT)), DiscreteDir::E);
+        assert_eq!(DiscreteDir::cardinal_from_vec2(Vec2::new(1.0, -LIL_BIT)), DiscreteDir::E);
+        assert_eq!(DiscreteDir::cardinal_from_vec2(Vec2::new(-1.0, 0.0)), DiscreteDir::W);
+        assert_eq!(DiscreteDir::cardinal_from_vec2(Vec2::new(-1.0, LIL_BIT)), DiscreteDir::W);
+        assert_eq!(DiscreteDir::cardinal_from_vec2(Vec2::new(-1.0, -LIL_BIT)), DiscreteDir::W);
+        assert_eq!(DiscreteDir::cardinal_from_vec2(Vec2::new(0.0, 1.0)), DiscreteDir::N);
+        assert_eq!(DiscreteDir::cardinal_from_vec2(Vec2::new(LIL_BIT, 1.0)), DiscreteDir::N);
+        assert_eq!(DiscreteDir::cardinal_from_vec2(Vec2::new(-LIL_BIT, 1.0)), DiscreteDir::N);
+        assert_eq!(DiscreteDir::cardinal_from_vec2(Vec2::new(0.0, -1.0)), DiscreteDir::S);
+        assert_eq!(DiscreteDir::cardinal_from_vec2(Vec2::new(LIL_BIT, -1.0)), DiscreteDir::S);
+        assert_eq!(DiscreteDir::cardinal_from_vec2(Vec2::new(-LIL_BIT, -1.0)), DiscreteDir::S);
+
+        // Clear-cut cases (inter-intercardinal):
+        // inter-intercardinal x/y components
+        let iic_short: f32 = FRAC_PI_8.sin();
+        let iic_long: f32 = FRAC_PI_8.cos();
+        assert_eq!(DiscreteDir::cardinal_from_vec2(Vec2::new(iic_long, iic_short)), DiscreteDir::E);
+        assert_eq!(DiscreteDir::cardinal_from_vec2(Vec2::new(iic_short, iic_long)), DiscreteDir::N);
+        assert_eq!(DiscreteDir::cardinal_from_vec2(Vec2::new(-iic_short, iic_long)), DiscreteDir::N);
+        assert_eq!(DiscreteDir::cardinal_from_vec2(Vec2::new(-iic_long, iic_short)), DiscreteDir::W);
+        assert_eq!(DiscreteDir::cardinal_from_vec2(Vec2::new(-iic_long, -iic_short)), DiscreteDir::W);
+        assert_eq!(DiscreteDir::cardinal_from_vec2(Vec2::new(-iic_short, -iic_long)), DiscreteDir::S);
+        assert_eq!(DiscreteDir::cardinal_from_vec2(Vec2::new(iic_short, -iic_long)), DiscreteDir::S);
+        assert_eq!(DiscreteDir::cardinal_from_vec2(Vec2::new(iic_long, -iic_short)), DiscreteDir::E);
+
+        // Edge cases (hard ordinals):
+        assert_eq!(DiscreteDir::cardinal_from_vec2(HARD_NE), DiscreteDir::E);
+        assert_eq!(DiscreteDir::cardinal_from_vec2(HARD_NW), DiscreteDir::W);
+        assert_eq!(DiscreteDir::cardinal_from_vec2(HARD_SW), DiscreteDir::W);
+        assert_eq!(DiscreteDir::cardinal_from_vec2(HARD_SE), DiscreteDir::E);
+
+        // Blank or bogus input:
+        assert_eq!(DiscreteDir::cardinal_from_vec2(Vec2::ZERO), DiscreteDir::Neutral);
+        assert_eq!(DiscreteDir::cardinal_from_vec2(Vec2::new(f32::NAN, 1.0)), DiscreteDir::Neutral);
+        assert_eq!(DiscreteDir::cardinal_from_vec2(Vec2::new(1.0, f32::INFINITY)), DiscreteDir::Neutral);
+        assert_eq!(DiscreteDir::cardinal_from_vec2(Vec2::new(f32::NEG_INFINITY, 1.0)), DiscreteDir::Neutral);
+    }
+
+    #[test]
     fn test_cardinal_ordinal_from_vec2() {
         assert_eq!(DiscreteDir::cardinal_ordinal_from_vec2(HARD_NE), DiscreteDir::NE);
         assert_eq!(DiscreteDir::cardinal_ordinal_from_vec2(HARD_NW), DiscreteDir::NW);
