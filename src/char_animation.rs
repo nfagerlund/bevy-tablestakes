@@ -507,6 +507,20 @@ mod tests {
     const LIL_BIT: f32 = 0.0001;
 
     #[test]
+    fn test_horizontal_from_vec2() {
+        assert_eq!(DiscreteDir::horizontal_from_vec2(HARD_NE), DiscreteDir::E);
+        assert_eq!(DiscreteDir::horizontal_from_vec2(Vec2::new(LIL_BIT, 1.0)), DiscreteDir::E);
+        assert_eq!(DiscreteDir::horizontal_from_vec2(Vec2::new(-LIL_BIT, 1.0)), DiscreteDir::W);
+        // on the deciding line:
+        assert_eq!(DiscreteDir::horizontal_from_vec2(Vec2::new(0.0, 1.0)), DiscreteDir::E);
+        // Blank or bogus input:
+        assert_eq!(DiscreteDir::horizontal_from_vec2(Vec2::ZERO), DiscreteDir::Neutral);
+        assert_eq!(DiscreteDir::horizontal_from_vec2(Vec2::new(f32::NAN, 1.0)), DiscreteDir::Neutral);
+        assert_eq!(DiscreteDir::horizontal_from_vec2(Vec2::new(1.0, f32::INFINITY)), DiscreteDir::Neutral);
+        assert_eq!(DiscreteDir::horizontal_from_vec2(Vec2::new(f32::NEG_INFINITY, 1.0)), DiscreteDir::Neutral);
+    }
+
+    #[test]
     fn test_vertical_from_vec2() {
         assert_eq!(DiscreteDir::vertical_from_vec2(HARD_NE), DiscreteDir::N);
         assert_eq!(DiscreteDir::vertical_from_vec2(Vec2::new(1.0, LIL_BIT)), DiscreteDir::N);
