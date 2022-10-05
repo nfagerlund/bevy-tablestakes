@@ -504,7 +504,21 @@ mod tests {
     const HARD_SE: Vec2 = Vec2::new(1.0, -1.0);
     const HARD_SW: Vec2 = Vec2::new(-1.0, -1.0);
 
-    const LIL_BIT: f32 = 0.01;
+    const LIL_BIT: f32 = 0.0001;
+
+    #[test]
+    fn test_vertical_from_vec2() {
+        assert_eq!(DiscreteDir::vertical_from_vec2(HARD_NE), DiscreteDir::N);
+        assert_eq!(DiscreteDir::vertical_from_vec2(Vec2::new(1.0, LIL_BIT)), DiscreteDir::N);
+        assert_eq!(DiscreteDir::vertical_from_vec2(Vec2::new(1.0, -LIL_BIT)), DiscreteDir::S);
+        // on the deciding line:
+        assert_eq!(DiscreteDir::vertical_from_vec2(Vec2::new(-1.0, 0.0)), DiscreteDir::S);
+        // Blank or bogus input:
+        assert_eq!(DiscreteDir::vertical_from_vec2(Vec2::ZERO), DiscreteDir::Neutral);
+        assert_eq!(DiscreteDir::vertical_from_vec2(Vec2::new(f32::NAN, 1.0)), DiscreteDir::Neutral);
+        assert_eq!(DiscreteDir::vertical_from_vec2(Vec2::new(1.0, f32::INFINITY)), DiscreteDir::Neutral);
+        assert_eq!(DiscreteDir::vertical_from_vec2(Vec2::new(f32::NEG_INFINITY, 1.0)), DiscreteDir::Neutral);
+    }
 
     #[test]
     fn test_cardinal_ordinal_from_vec2() {
@@ -532,7 +546,7 @@ mod tests {
             }
         }
 
-        // Bogus input:
+        // Blank or bogus input:
         assert_eq!(DiscreteDir::cardinal_ordinal_from_vec2(Vec2::ZERO), DiscreteDir::Neutral);
         assert_eq!(DiscreteDir::cardinal_ordinal_from_vec2(Vec2::new(f32::NAN, 1.0)), DiscreteDir::Neutral);
         assert_eq!(DiscreteDir::cardinal_ordinal_from_vec2(Vec2::new(1.0, f32::INFINITY)), DiscreteDir::Neutral);
