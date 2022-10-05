@@ -425,7 +425,9 @@ enum DiscreteDir {
 
 impl DiscreteDir {
     // Given a Vec2, return east, west, or neutral. Bias towards east.
-    fn from_vec2_horizontal(motion: Vec2) -> Self {
+    fn horizontal_from_vec2(motion: Vec2) -> Self {
+        // Deal with any tricksy infinite or NaN vectors:
+        let motion = motion.normalize_or_zero();
         if motion == Vec2::ZERO {
             Self::Neutral
         } else if motion.x < 0.0 {
@@ -436,7 +438,9 @@ impl DiscreteDir {
     }
 
     // Given a Vec2, return north, south, or neutral. Bias towards south.
-    fn from_vec2_vertical(motion: Vec2) -> Self {
+    fn vertical_from_vec2(motion: Vec2) -> Self {
+        // Deal with any tricksy infinite or NaN vectors:
+        let motion = motion.normalize_or_zero();
         if motion == Vec2::ZERO {
             Self::Neutral
         } else if motion.y > 0.0 {
@@ -448,14 +452,14 @@ impl DiscreteDir {
 
     // Given a Vec2, return one of the four cardinal directions or neutral. Bias
     // towards horizontal.
-    fn from_vec2_cardinal(motion: Vec2) -> Self {
+    fn cardinal_from_vec2(motion: Vec2) -> Self {
         Self::Neutral
     }
 
     // Given a Vec2, return one of the four cardinal directions, one of the four
     // ordinal/intercardinal directions, or neutral. Bias is whatever bc you
     // can't get your analog inputs exact enough to notice it.
-    fn from_vec2_cardinal_ordinal(motion: Vec2) -> Self {
+    fn cardinal_ordinal_from_vec2(motion: Vec2) -> Self {
         const ENE: f32 = 1.0 * FRAC_PI_8;
         const NNE: f32 = 3.0 * FRAC_PI_8;
         const NNW: f32 = 5.0 * FRAC_PI_8;
@@ -503,35 +507,35 @@ mod tests {
     const LIL_BIT: f32 = 0.01;
 
     #[test]
-    fn test_from_vec2_cardinal_ordinal() {
-        assert_eq!(DiscreteDir::from_vec2_cardinal_ordinal(HARD_NE), DiscreteDir::NE);
-        assert_eq!(DiscreteDir::from_vec2_cardinal_ordinal(HARD_NW), DiscreteDir::NW);
-        assert_eq!(DiscreteDir::from_vec2_cardinal_ordinal(HARD_SE), DiscreteDir::SE);
-        assert_eq!(DiscreteDir::from_vec2_cardinal_ordinal(HARD_SW), DiscreteDir::SW);
+    fn test_cardinal_ordinal_from_vec2() {
+        assert_eq!(DiscreteDir::cardinal_ordinal_from_vec2(HARD_NE), DiscreteDir::NE);
+        assert_eq!(DiscreteDir::cardinal_ordinal_from_vec2(HARD_NW), DiscreteDir::NW);
+        assert_eq!(DiscreteDir::cardinal_ordinal_from_vec2(HARD_SE), DiscreteDir::SE);
+        assert_eq!(DiscreteDir::cardinal_ordinal_from_vec2(HARD_SW), DiscreteDir::SW);
 
         // inter-intercardinal x/y components
         let iic_short: f32 = FRAC_PI_8.sin();
         let iic_long: f32 = FRAC_PI_8.cos();
 
         // On _just_ one side or the other of the deciding line:
-        assert_eq!(DiscreteDir::from_vec2_cardinal_ordinal(Vec2::new(iic_long + LIL_BIT, iic_short)), DiscreteDir::E);
-        assert_eq!(DiscreteDir::from_vec2_cardinal_ordinal(Vec2::new(iic_long, iic_short + LIL_BIT)), DiscreteDir::NE);
-        assert_eq!(DiscreteDir::from_vec2_cardinal_ordinal(Vec2::new(iic_long + LIL_BIT, -iic_short)), DiscreteDir::E);
-        assert_eq!(DiscreteDir::from_vec2_cardinal_ordinal(Vec2::new(iic_long, -(iic_short + LIL_BIT))), DiscreteDir::SE);
+        assert_eq!(DiscreteDir::cardinal_ordinal_from_vec2(Vec2::new(iic_long + LIL_BIT, iic_short)), DiscreteDir::E);
+        assert_eq!(DiscreteDir::cardinal_ordinal_from_vec2(Vec2::new(iic_long, iic_short + LIL_BIT)), DiscreteDir::NE);
+        assert_eq!(DiscreteDir::cardinal_ordinal_from_vec2(Vec2::new(iic_long + LIL_BIT, -iic_short)), DiscreteDir::E);
+        assert_eq!(DiscreteDir::cardinal_ordinal_from_vec2(Vec2::new(iic_long, -(iic_short + LIL_BIT))), DiscreteDir::SE);
 
         // On exactly the deciding line:
-        match DiscreteDir::from_vec2_cardinal_ordinal(Vec2::new(iic_long, iic_short)) {
+        match DiscreteDir::cardinal_ordinal_from_vec2(Vec2::new(iic_long, iic_short)) {
             DiscreteDir::E => (),
             DiscreteDir::NE => (),
             _ => {
-                panic!("pi/8 angle should be either E or NE");
+                panic!("pi/8 angle should be either E or NE (don't care which)");
             }
         }
 
         // Bogus input:
-        assert_eq!(DiscreteDir::from_vec2_cardinal_ordinal(Vec2::ZERO), DiscreteDir::Neutral);
-        assert_eq!(DiscreteDir::from_vec2_cardinal_ordinal(Vec2::new(f32::NAN, 1.0)), DiscreteDir::Neutral);
-        assert_eq!(DiscreteDir::from_vec2_cardinal_ordinal(Vec2::new(1.0, f32::INFINITY)), DiscreteDir::Neutral);
-        assert_eq!(DiscreteDir::from_vec2_cardinal_ordinal(Vec2::new(f32::NEG_INFINITY, 1.0)), DiscreteDir::Neutral);
+        assert_eq!(DiscreteDir::cardinal_ordinal_from_vec2(Vec2::ZERO), DiscreteDir::Neutral);
+        assert_eq!(DiscreteDir::cardinal_ordinal_from_vec2(Vec2::new(f32::NAN, 1.0)), DiscreteDir::Neutral);
+        assert_eq!(DiscreteDir::cardinal_ordinal_from_vec2(Vec2::new(1.0, f32::INFINITY)), DiscreteDir::Neutral);
+        assert_eq!(DiscreteDir::cardinal_ordinal_from_vec2(Vec2::new(f32::NEG_INFINITY, 1.0)), DiscreteDir::Neutral);
     }
 }
