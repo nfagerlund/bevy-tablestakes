@@ -416,6 +416,15 @@ fn copy_texture_to_atlas(
     }
 }
 
+// Mapping # of directional variants to discretedir usage:
+// - 1 (east) -- horizontal_from_vec2 and set flip if west.
+// - 2 (east, west) -- horizontal_from_vec2. (Would I ever do this?)
+// - 3 (east, north, south) -- cardinal_from_vec2 and set flip if west.
+// - 4 (east, north, west, south) -- cardinal_from_vec2.
+// - 5 (east, northeast, north, south, southeast) -- cardinal_ordinal_from_vec2 and
+//     set flip if there's a west component.
+// - 8 -- cardinal_ordinal_from_vec2
+
 #[derive(Debug, PartialEq, Eq)]
 enum DiscreteDir {
     E, N, W, S,
