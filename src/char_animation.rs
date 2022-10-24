@@ -32,56 +32,16 @@ pub struct CharAnimationVariant {
 /// corner of the sprite.
 #[derive(Debug)]
 pub struct CharAnimationFrame {
-    /// The index to use for getting this frame from this animation's
-    /// `TextureAtlas`. This can be assigned to a `TextureAtlasSprite` when it's
-    /// time to display this frame.
+    /// Index into the `TextureAtlas`.
     pub index: usize,
-    /// How long this frame should be displayed for, according to the animation
-    /// source file.
+    /// Frame duration.
     pub duration: Duration,
-    /// The origin/anchor/pivot point of the sprite. Technically I expect the
-    /// origin not to differ across frames of the same animation variant, but
-    /// it's stored on the frame for convenience.
+    /// Origin/anchor/pivot point of the sprite. Stored on the frame for
+    /// convenience, but shouldn't vary.
     pub origin: Vec2,
-    /// The bounding box that represents the projected position of the
-    /// character's feet onto the ground, for determining where they're standing
-    /// or trying to stand.
+    /// Bbox for the projected foot position on the ground.
     pub walkbox: Option<Rect>,
-    // hitbox, hurtbox,
-}
-
-/// Right, so, how do we animate these dudes? (and thus, what do we need in our state component/bundle?)
-/// Starting in media res:
-/// - Each step, tick down a TIMER (non-repeating) for the current frame.
-/// - When the timer runs out, switch your FRAME INDEX to the next frame (or, WRAP AROUND if you're configured to loop).
-
-#[derive(Component, Debug)]
-pub struct TempCharAnimationState {
-    animation: Handle<CharAnimation>,
-    variant: Option<String>, // hate the string lookup here btw, need something better.
-    // guess I could do interning and import IndexMap maybe.
-    frame: usize,
-    // To start with, we'll just always loop.
-    frame_timer: Option<Timer>,
-}
-
-impl TempCharAnimationState {
-    fn new(animation: Handle<CharAnimation>, variant: &str) -> Self {
-        TempCharAnimationState {
-            animation,
-            variant: Some(variant.to_string()),
-            // in the future I might end up wanting to blend between animations
-            // at a particular frame. Doesn't matter yet tho.
-            frame: 0,
-            frame_timer: None,
-        }
-    }
-
-    fn change_variant(&mut self, variant: &str) {
-        self.variant = Some(variant.to_string());
-        self.frame = 0;
-        self.frame_timer = None;
-    }
+    // todo: hitbox, hurtbox,
 }
 
 pub struct CharAnimationPlugin;
@@ -90,116 +50,8 @@ impl Plugin for CharAnimationPlugin {
     fn build(&self, app: &mut App) {
         app
             .add_asset::<CharAnimation>()
-            .init_asset_loader::<CharAnimationLoader>()
-            .add_startup_system(charanm_test_setup_system)
-            .add_system(charanm_test_atlas_reassign_system)
-            .add_system(charanm_test_animate_system)
-            .add_system(charanm_test_directions_system);
+            .init_asset_loader::<CharAnimationLoader>();
     }
-}
-
-fn charanm_test_directions_system(
-    mut query: Query<&mut TempCharAnimationState>,
-    keys: Res<Input<KeyCode>>,
-) {
-    for mut state in query.iter_mut() {
-        if keys.just_pressed(KeyCode::Right) {
-            state.change_variant("E");
-        } else if keys.just_pressed(KeyCode::Up) {
-            state.change_variant("N");
-        } else if keys.just_pressed(KeyCode::Left) {
-            state.change_variant("W");
-        } else if keys.just_pressed(KeyCode::Down) {
-            state.change_variant("S");
-        }
-    }
-}
-
-fn charanm_test_animate_system(
-    animations: Res<Assets<CharAnimation>>,
-    mut query: Query<(&mut TempCharAnimationState, &mut TextureAtlasSprite)>,
-    time: Res<Time>,
-) {
-    for (
-        mut state,
-        mut sprite,
-    ) in query.iter_mut() {
-        if let Some(animation) = animations.get(&state.animation) {
-            // UGH!!!
-            if let Some(variant_name) = &state.variant {
-                // get the stugff
-                let variant = animation.variants.get(variant_name).unwrap(); // UGH!!
-
-                // update the timer... or initialize it, if it's missing.
-                if let Some(frame_timer) = &mut state.frame_timer {
-                    frame_timer.tick(time.delta());
-                    if frame_timer.finished() {
-                        // increment+loop frame, and replace the timer with the new frame's duration
-                        // TODO: we're only looping rn.
-                        let frame_count = variant.frames.len();
-                        state.frame = (state.frame + 1) % frame_count;
-
-                        state.frame_timer = Some(Timer::new(variant.frames[state.frame].duration, false));
-                    }
-                } else {
-                    // must be new here. initialize the timer w/ the current
-                    // frame's duration, can start ticking on the next loop.
-                    let frame = &variant.frames[state.frame];
-                    state.frame_timer = Some(Timer::new(frame.duration, false));
-                }
-
-                // ok, where was I. Uh, dig into the variant and frame to see
-                // what actual texture index we oughtta use, and set it.
-                let frame = &variant.frames[state.frame];
-                if sprite.index != frame.index {
-                    // println!("Updating sprite index! (animating)");
-                    sprite.index = frame.index;
-                }
-            }
-        }
-    }
-}
-
-fn charanm_test_atlas_reassign_system(
-    mut commands: Commands,
-    animations: Res<Assets<CharAnimation>>,
-    query: Query<(Entity, &TempCharAnimationState, &Handle<TextureAtlas>)>,
-) {
-    for (
-            entity,
-            state,
-            atlas_handle,
-        ) in query.iter() {
-        // get the animation, get the handle off it, compare the handles, and if
-        // they don't match, issue an insert command.
-        if let Some(animation) = animations.get(&state.animation) {
-            let desired_atlas_handle = &animation.texture_atlas;
-            if desired_atlas_handle != atlas_handle {
-                println!("Replacing texture handle!");
-                commands.entity(entity).insert(desired_atlas_handle.clone());
-            }
-        }
-    }
-}
-
-fn charanm_test_setup_system(
-    mut commands: Commands,
-    asset_server: Res<AssetServer>,
-) {
-    let anim_handle: Handle<CharAnimation> = asset_server.load("sprites/sPlayerRun.aseprite");
-    commands
-        .spawn_bundle(SpriteSheetBundle {
-            transform: Transform::from_translation(Vec3::new(30.0, 60.0, 3.0)),
-            ..default()
-        })
-        .insert(TempCharAnimationState::new(anim_handle, "W"));
-
-    let test_texture_handle: Handle<Image> = asset_server.load("sprites/sPlayerRun.aseprite#texture");
-    commands.spawn_bundle(SpriteBundle {
-        texture: test_texture_handle,
-        transform: Transform::from_translation(Vec3::new(10.0, 10.0, 3.0)),
-        ..default()
-    });
 }
 
 #[derive(Default)]
@@ -345,8 +197,7 @@ fn remux_image(img: RgbaImage) -> Image {
     )
 }
 
-/// Extract the non-transparent-pixels bounding rectangle from the cel at a
-/// given layer name and frame index.
+/// Get the bounding Rect for a cel's non-transparent pixels.
 fn rect_from_cel(ase: &AsepriteFile, layer_name: &str, frame_index: u32) -> Option<Rect> {
     ase.layer_by_name(layer_name).map(|layer| {
         let cel_img = layer.frame(frame_index).image();
@@ -354,7 +205,7 @@ fn rect_from_cel(ase: &AsepriteFile, layer_name: &str, frame_index: u32) -> Opti
     }).flatten()
 }
 
-/// Find the Rect that contains all the non-transparent pixels in a cel.
+/// Get the bounding Rect for the non-transparent pixels in an RgbaImage.
 fn get_rect_lmao(img: &RgbaImage) -> Option<Rect> {
     let mut x_min: u32 = u32::MAX;
     let mut x_max: u32 = 0;
@@ -388,8 +239,8 @@ fn non_empty(pixel: &image::Rgba<u8>) -> bool {
     alpha(pixel) != 0
 }
 
-// Yoinked+hacked fn from TextureAtlasBuilder (which I can't use directly
-// because it relies on runtime asset collections):
+// Variation on a TextureAtlasBuilder fn (which I can't use directly bc it
+// relies on runtime asset collections):
 // https://github.com/bevyengine/bevy/blob/c27cc59e0/crates/bevy_sprite/src/texture_atlas_builder.rs#L95
 fn copy_texture_to_atlas(
     atlas_texture: &mut Image,
@@ -409,5 +260,156 @@ fn copy_texture_to_atlas(
         let texture_end = texture_begin + rect_width * format_size;
         atlas_texture.data[begin..end]
             .copy_from_slice(&texture.data[texture_begin..texture_end]);
+    }
+}
+
+// Right, so, how do we animate these dudes? (and thus, what do we need in our state component/bundle?)
+// Starting in media res:
+// - Each step, tick down a TIMER (non-repeating) for the current frame.
+// - When the timer runs out, switch your FRAME INDEX to the next frame (or, WRAP AROUND if you're configured to loop).
+
+#[derive(Component, Debug)]
+pub struct TempCharAnimationState {
+    animation: Handle<CharAnimation>,
+    variant: Option<String>, // hate the string lookup here btw, need something better.
+    // guess I could do interning and import IndexMap maybe.
+    frame: usize,
+    // To start with, we'll just always loop.
+    frame_timer: Option<Timer>,
+}
+
+impl TempCharAnimationState {
+    fn new(animation: Handle<CharAnimation>, variant: &str) -> Self {
+        TempCharAnimationState {
+            animation,
+            variant: Some(variant.to_string()),
+            // in the future I might end up wanting to blend between animations
+            // at a particular frame. Doesn't matter yet tho.
+            frame: 0,
+            frame_timer: None,
+        }
+    }
+
+    fn change_variant(&mut self, variant: &str) {
+        self.variant = Some(variant.to_string());
+        self.frame = 0;
+        self.frame_timer = None;
+    }
+}
+
+fn charanm_test_directions_system(
+    mut query: Query<&mut TempCharAnimationState>,
+    keys: Res<Input<KeyCode>>,
+) {
+    for mut state in query.iter_mut() {
+        if keys.just_pressed(KeyCode::Right) {
+            state.change_variant("E");
+        } else if keys.just_pressed(KeyCode::Up) {
+            state.change_variant("N");
+        } else if keys.just_pressed(KeyCode::Left) {
+            state.change_variant("W");
+        } else if keys.just_pressed(KeyCode::Down) {
+            state.change_variant("S");
+        }
+    }
+}
+
+fn charanm_test_animate_system(
+    animations: Res<Assets<CharAnimation>>,
+    mut query: Query<(&mut TempCharAnimationState, &mut TextureAtlasSprite)>,
+    time: Res<Time>,
+) {
+    for (
+        mut state,
+        mut sprite,
+    ) in query.iter_mut() {
+        if let Some(animation) = animations.get(&state.animation) {
+            // UGH!!!
+            if let Some(variant_name) = &state.variant {
+                // get the stugff
+                let variant = animation.variants.get(variant_name).unwrap(); // UGH!!
+
+                // update the timer... or initialize it, if it's missing.
+                if let Some(frame_timer) = &mut state.frame_timer {
+                    frame_timer.tick(time.delta());
+                    if frame_timer.finished() {
+                        // increment+loop frame, and replace the timer with the new frame's duration
+                        // TODO: we're only looping rn.
+                        let frame_count = variant.frames.len();
+                        state.frame = (state.frame + 1) % frame_count;
+
+                        state.frame_timer = Some(Timer::new(variant.frames[state.frame].duration, false));
+                    }
+                } else {
+                    // must be new here. initialize the timer w/ the current
+                    // frame's duration, can start ticking on the next loop.
+                    let frame = &variant.frames[state.frame];
+                    state.frame_timer = Some(Timer::new(frame.duration, false));
+                }
+
+                // ok, where was I. Uh, dig into the variant and frame to see
+                // what actual texture index we oughtta use, and set it.
+                let frame = &variant.frames[state.frame];
+                if sprite.index != frame.index {
+                    // println!("Updating sprite index! (animating)");
+                    sprite.index = frame.index;
+                }
+            }
+        }
+    }
+}
+
+fn charanm_test_atlas_reassign_system(
+    mut commands: Commands,
+    animations: Res<Assets<CharAnimation>>,
+    query: Query<(Entity, &TempCharAnimationState, &Handle<TextureAtlas>)>,
+) {
+    for (
+            entity,
+            state,
+            atlas_handle,
+        ) in query.iter() {
+        // get the animation, get the handle off it, compare the handles, and if
+        // they don't match, issue an insert command.
+        if let Some(animation) = animations.get(&state.animation) {
+            let desired_atlas_handle = &animation.texture_atlas;
+            if desired_atlas_handle != atlas_handle {
+                println!("Replacing texture handle!");
+                commands.entity(entity).insert(desired_atlas_handle.clone());
+            }
+        }
+    }
+}
+
+fn charanm_test_setup_system(
+    mut commands: Commands,
+    asset_server: Res<AssetServer>,
+) {
+    let anim_handle: Handle<CharAnimation> = asset_server.load("sprites/sPlayerRun.aseprite");
+    commands
+        .spawn_bundle(SpriteSheetBundle {
+            transform: Transform::from_translation(Vec3::new(30.0, 60.0, 3.0)),
+            ..default()
+        })
+        .insert(TempCharAnimationState::new(anim_handle, "W"));
+
+    let test_texture_handle: Handle<Image> = asset_server.load("sprites/sPlayerRun.aseprite#texture");
+    commands.spawn_bundle(SpriteBundle {
+        texture: test_texture_handle,
+        transform: Transform::from_translation(Vec3::new(10.0, 10.0, 3.0)),
+        ..default()
+    });
+}
+
+
+pub struct TestCharAnimationPlugin;
+
+impl Plugin for TestCharAnimationPlugin {
+    fn build(&self, app: &mut App) {
+        app
+        .add_startup_system(charanm_test_setup_system)
+        .add_system(charanm_test_atlas_reassign_system)
+        .add_system(charanm_test_animate_system)
+        .add_system(charanm_test_directions_system);
     }
 }

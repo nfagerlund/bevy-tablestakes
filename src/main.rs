@@ -44,6 +44,7 @@ fn main() {
         .insert_resource(ImageSettings::default_nearest()) // prevents blurry sprites
         .add_plugins(DefaultPlugins)
         .add_plugin(CharAnimationPlugin)
+        .add_plugin(TestCharAnimationPlugin)
         .insert_resource(RecentFrameTimes{ buffer: VecDeque::new() })
         .insert_resource(SmoothedTime {
             delta: Duration::new(0, 0),
