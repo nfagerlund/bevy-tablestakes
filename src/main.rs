@@ -26,6 +26,7 @@ mod hellow;
 mod junk;
 mod input;
 mod char_animation;
+mod compass;
 
 const PIXEL_SCALE: f32 = 1.0;
 
