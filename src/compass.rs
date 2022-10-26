@@ -1,5 +1,6 @@
 use std::f32::consts::*;
 use bevy::prelude::Vec2;
+use std::fmt;
 
 // Mapping # of directional animation variants to discrete direction usage:
 // - 1 (east) -- horizontal() and set flip if west.
@@ -10,11 +11,45 @@ use bevy::prelude::Vec2;
 //     set flip if there's a west component.
 // - 8 -- ordinal().
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
 pub enum Dir {
     E, N, W, S,
     NE, NW, SW, SE,
     Neutral,
+}
+
+#[derive(Debug)]
+pub struct CantDirError(String);
+
+impl fmt::Display for CantDirError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", &self.0)
+    }
+}
+
+impl std::error::Error for CantDirError {}
+
+impl TryFrom<&str> for Dir {
+    type Error = CantDirError;
+
+    fn try_from(name: &str) -> Result<Self, Self::Error> {
+        let trimmed_lc = name.trim().to_lowercase();
+        match trimmed_lc.as_str() {
+            "e" => Ok(Self::E),
+            "n" => Ok(Self::N),
+            "w" => Ok(Self::W),
+            "s" => Ok(Self::S),
+
+            "ne" => Ok(Self::NE),
+            "nw" => Ok(Self::NW),
+            "sw" => Ok(Self::SW),
+            "se" => Ok(Self::SE),
+
+            "neutral" => Ok(Self::Neutral),
+
+            _ => Err(CantDirError(format!("Couldn't resolve '{}' to a compass::Dir", name))),
+        }
+    }
 }
 
 impl Dir {
