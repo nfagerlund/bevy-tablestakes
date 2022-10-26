@@ -14,18 +14,26 @@ use std::collections::HashMap;
 use asefile::AsepriteFile;
 use image::RgbaImage;
 
+use crate::compass::{self, Dir};
+
 #[derive(Debug, TypeUuid)]
 #[uuid = "585e2e41-4a97-42ef-a13e-55761c854bb4"]
 pub struct CharAnimation {
-    pub variants: HashMap<String, CharAnimationVariant>,
+    pub variants: VariantsMap,
     pub texture_atlas: Handle<TextureAtlas>,
 }
 
 #[derive(Debug)]
 pub struct CharAnimationVariant {
-    pub name: String,
+    pub name: VariantName,
     pub frames: Vec<CharAnimationFrame>,
 }
+
+// I've changed my mind about tags: I'm gonna start out with a rigid enum,
+// enforce tag names at load time, and expand behavior as needed later. Duping
+// the Dir type for easier refactors later??
+pub type VariantName = compass::Dir;
+type VariantsMap = HashMap<VariantName, CharAnimationVariant>;
 
 /// Data for an individual animation frame. This struct contains coordinates for
 /// some points and rectangles; in all cases, these are relative to the top left
@@ -141,10 +149,10 @@ fn load_aseprite(bytes: &[u8], load_context: &mut LoadContext) -> anyhow::Result
     );
 
     // Since our final frame indices are reliable, processing tags is easy.
-    let mut variants: HashMap<String, CharAnimationVariant> = HashMap::new();
+    let mut variants: VariantsMap = HashMap::new();
 
     for tag in (0..ase.num_tags()).map(|i| ase.tag(i)) {
-        let name = tag.name().to_string();
+        let name: VariantName = tag.name().try_into()?; // Just propagate error, don't continue load.
         let frame_range = tag.from_frame()..=tag.to_frame(); // inclusive
         let frames: Vec<CharAnimationFrame> = frame_range.map(|i| {
             let frame = ase.frame(i);
@@ -168,7 +176,7 @@ fn load_aseprite(bytes: &[u8], load_context: &mut LoadContext) -> anyhow::Result
             }
         }).collect();
 
-        let variant = CharAnimationVariant { name: name.clone(), frames };
+        let variant = CharAnimationVariant { name, frames };
         variants.insert(name, variant);
     }
 
@@ -271,7 +279,7 @@ fn copy_texture_to_atlas(
 #[derive(Component, Debug)]
 pub struct TempCharAnimationState {
     animation: Handle<CharAnimation>,
-    variant: Option<String>, // hate the string lookup here btw, need something better.
+    variant: Option<VariantName>, // hate the string lookup here btw, need something better.
     // guess I could do interning and import IndexMap maybe.
     frame: usize,
     // To start with, we'll just always loop.
@@ -279,10 +287,10 @@ pub struct TempCharAnimationState {
 }
 
 impl TempCharAnimationState {
-    fn new(animation: Handle<CharAnimation>, variant: &str) -> Self {
+    fn new(animation: Handle<CharAnimation>, variant: VariantName) -> Self {
         TempCharAnimationState {
             animation,
-            variant: Some(variant.to_string()),
+            variant: Some(variant),
             // in the future I might end up wanting to blend between animations
             // at a particular frame. Doesn't matter yet tho.
             frame: 0,
@@ -290,8 +298,8 @@ impl TempCharAnimationState {
         }
     }
 
-    fn change_variant(&mut self, variant: &str) {
-        self.variant = Some(variant.to_string());
+    fn change_variant(&mut self, variant: VariantName) {
+        self.variant = Some(variant);
         self.frame = 0;
         self.frame_timer = None;
     }
@@ -303,13 +311,13 @@ fn charanm_test_directions_system(
 ) {
     for mut state in query.iter_mut() {
         if keys.just_pressed(KeyCode::Right) {
-            state.change_variant("E");
+            state.change_variant(Dir::E);
         } else if keys.just_pressed(KeyCode::Up) {
-            state.change_variant("N");
+            state.change_variant(Dir::N);
         } else if keys.just_pressed(KeyCode::Left) {
-            state.change_variant("W");
+            state.change_variant(Dir::W);
         } else if keys.just_pressed(KeyCode::Down) {
-            state.change_variant("S");
+            state.change_variant(Dir::S);
         }
     }
 }
@@ -391,7 +399,7 @@ fn charanm_test_setup_system(
             transform: Transform::from_translation(Vec3::new(30.0, 60.0, 3.0)),
             ..default()
         })
-        .insert(TempCharAnimationState::new(anim_handle, "W"));
+        .insert(TempCharAnimationState::new(anim_handle, Dir::W));
 
     let test_texture_handle: Handle<Image> = asset_server.load("sprites/sPlayerRun.aseprite#texture");
     commands.spawn_bundle(SpriteBundle {
