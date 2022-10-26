@@ -220,7 +220,7 @@ fn move_player_system(
     };
 
     // move, maybe! TODO: multiplayer :|
-    // Cribbing from this Maddie post:
+    // Cribbing from this Maddy post:
     // https://maddythorson.medium.com/celeste-and-towerfall-physics-d24bd2ae0fc5
     let solids: Vec<AbsBBox> = solids_q.iter().map(|(transform, origin_offset, walkbox)| {
         let origin = transform.translation.truncate() + origin_offset.0;
