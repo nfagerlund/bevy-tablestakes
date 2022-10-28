@@ -282,12 +282,12 @@ pub struct TempCharAnimationState {
     variant: Option<VariantName>, // hate the string lookup here btw, need something better.
     // guess I could do interning and import IndexMap maybe.
     frame: usize,
-    // To start with, we'll just always loop.
     frame_timer: Option<Timer>,
+    looping: bool,
 }
 
 impl TempCharAnimationState {
-    fn new(animation: Handle<CharAnimation>, variant: VariantName) -> Self {
+    fn new(animation: Handle<CharAnimation>, variant: VariantName, looping: bool) -> Self {
         TempCharAnimationState {
             animation,
             variant: Some(variant),
@@ -295,6 +295,7 @@ impl TempCharAnimationState {
             // at a particular frame. Doesn't matter yet tho.
             frame: 0,
             frame_timer: None,
+            looping,
         }
     }
 
@@ -332,10 +333,9 @@ fn charanm_test_animate_system(
         mut sprite,
     ) in query.iter_mut() {
         if let Some(animation) = animations.get(&state.animation) {
-            // UGH!!!
             if let Some(variant_name) = &state.variant {
                 // get the stugff
-                let variant = animation.variants.get(variant_name).unwrap(); // UGH!!
+                let variant = animation.variants.get(variant_name).unwrap();
 
                 // update the timer... or initialize it, if it's missing.
                 if let Some(frame_timer) = &mut state.frame_timer {
@@ -399,7 +399,7 @@ fn charanm_test_setup_system(
             transform: Transform::from_translation(Vec3::new(30.0, 60.0, 3.0)),
             ..default()
         })
-        .insert(TempCharAnimationState::new(anim_handle, Dir::W));
+        .insert(TempCharAnimationState::new(anim_handle, Dir::W, true));
 
     let test_texture_handle: Handle<Image> = asset_server.load("sprites/sPlayerRun.aseprite#texture");
     commands.spawn_bundle(SpriteBundle {
