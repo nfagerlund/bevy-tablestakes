@@ -36,8 +36,9 @@ pub type VariantName = compass::Dir;
 type VariantsMap = HashMap<VariantName, CharAnimationVariant>;
 
 /// Data for an individual animation frame. This struct contains coordinates for
-/// some points and rectangles; in all cases, these are relative to the top left
-/// corner of the sprite.
+/// some points and rectangles. The points have some particular frame of
+/// reference (described in comments), but the rectangles are all relative to
+/// the origin point and laid out in Bevy spatial coordinate space (y-up).
 #[derive(Debug)]
 pub struct CharAnimationFrame {
     /// Index into the `TextureAtlas`.
@@ -177,13 +178,20 @@ fn load_aseprite(bytes: &[u8], load_context: &mut LoadContext) -> anyhow::Result
             let duration_ms = frame.duration() as u64;
             let duration = Duration::from_millis(duration_ms);
 
-            let walkbox = rect_from_cel(&ase, "walkbox", i);
-
             // Wasteful, bc we could exit early on first non-clear px, but meh.
             let origin = match rect_from_cel(&ase, "origin", i) {
                 Some(origin_rect) => origin_rect.min,
                 None => Vec2::ZERO, // Origin's non-optional.
             };
+
+            // Get the walkbox, offset it relative to the origin, THEN flip the Y.
+            let absolute_walkbox = rect_from_cel(&ase, "walkbox", i);
+            let walkbox = absolute_walkbox.map(|wbox| {
+                Rect {
+                    min: invert_vec2_y(wbox.min - origin),
+                    max: invert_vec2_y(wbox.max - origin),
+                }
+            });
 
             let anchor = anchor_transform.transform_point2(origin);
 
@@ -226,6 +234,12 @@ fn remux_image(img: RgbaImage) -> Image {
         img.into_raw(),
         TextureFormat::Rgba8UnormSrgb,
     )
+}
+
+/// Invert the Y coordinates of a Vec2, because source image coordinates go
+/// Y-down but bevy spatial coordinates go Y-up.
+fn invert_vec2_y(v: Vec2) -> Vec2 {
+    Vec2::new(v.x, -(v.y))
 }
 
 /// Get the bounding Rect for a cel's non-transparent pixels.
