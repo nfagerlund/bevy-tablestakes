@@ -21,6 +21,7 @@ use crate::compass::{self, Dir};
 pub struct CharAnimation {
     pub variants: VariantsMap,
     pub texture_atlas: Handle<TextureAtlas>,
+    pub size: Vec2,
 }
 
 #[derive(Debug)]
@@ -181,7 +182,11 @@ fn load_aseprite(bytes: &[u8], load_context: &mut LoadContext) -> anyhow::Result
     }
 
     // The whole enchilada:
-    let animation = CharAnimation { variants, texture_atlas: atlas_handle };
+    let animation = CharAnimation {
+        variants,
+        texture_atlas: atlas_handle,
+        size: Vec2::new(width as f32, height as f32),
+    };
 
     // And, cut!
     load_context.set_default_asset(LoadedAsset::new(animation));
