@@ -1,7 +1,7 @@
 use bevy::asset::{
     AssetServer, AssetLoader, BoxedFuture, Handle, LoadContext, LoadedAsset,
 };
-use bevy::math::prelude::*;
+use bevy::math::{Affine2, prelude::*};
 use bevy::prelude::*;
 use bevy::reflect::TypeUuid;
 use bevy::render::{
@@ -21,7 +21,6 @@ use crate::compass::{self, Dir};
 pub struct CharAnimation {
     pub variants: VariantsMap,
     pub texture_atlas: Handle<TextureAtlas>,
-    pub size: Vec2,
 }
 
 #[derive(Debug)]
@@ -45,9 +44,13 @@ pub struct CharAnimationFrame {
     pub index: usize,
     /// Frame duration.
     pub duration: Duration,
-    /// Origin/anchor/pivot point of the sprite. Stored on the frame for
-    /// convenience, but shouldn't vary.
+    /// Origin point of the sprite in pixel coordinates, where 0,0 is top left.
+    /// Stored on the frame for convenience, but shouldn't vary.
     pub origin: Vec2,
+    /// Anchor point that can be assigned to a TextureAtlasSprite. Same as
+    /// origin, but transformed to normalized coordinates relative to the
+    /// texture size (where 0,0 is the center and -.5,-.5 is bottom left).
+    pub anchor: Vec2,
     /// Bbox for the projected foot position on the ground.
     pub walkbox: Option<Rect>,
     // todo: hitbox, hurtbox,
@@ -83,6 +86,10 @@ impl AssetLoader for CharAnimationLoader {
     }
 }
 
+const REFLECT_Y_COMPONENTS: [f32; 4] = [1.0, 0.0, 0.0, -1.0];
+const REFLECT_Y: Mat2 = Mat2::from_cols_array(&REFLECT_Y_COMPONENTS);
+const OFFSET_TO_CENTER: Vec2 = Vec2::new(-0.5, 0.5);
+
 /// Loads an aseprite file and uses it to construct a sprite sheet `#texture`, a
 /// `#texture_atlas` that indexes into that sprite sheet, and a top-level
 /// `CharAnimation`. The individual `CharAnimationFrames` in the
@@ -100,6 +107,15 @@ fn load_aseprite(bytes: &[u8], load_context: &mut LoadContext) -> anyhow::Result
     let width = ase.width();
     let height = ase.height();
     let num_frames = ase.num_frames();
+
+    // Build an affine transform for converting the pixel origin point to a
+    // relative anchor position.
+    let texture_size = Vec2::new(width as f32, height as f32);
+    let normalize_scale = Mat2::from_diagonal(texture_size);
+    let anchor_transform = Affine2::from_mat2_translation(
+        normalize_scale * REFLECT_Y,
+        OFFSET_TO_CENTER,
+    );
 
     // Build the texture atlas, ensuring that its sub-texture indices match the
     // original Aseprite file's frame indices.
@@ -169,10 +185,13 @@ fn load_aseprite(bytes: &[u8], load_context: &mut LoadContext) -> anyhow::Result
                 None => Vec2::ZERO, // Origin's non-optional.
             };
 
+            let anchor = anchor_transform.transform_point2(origin);
+
             CharAnimationFrame {
                 index,
                 duration,
                 origin,
+                anchor,
                 walkbox,
             }
         }).collect();
@@ -185,7 +204,6 @@ fn load_aseprite(bytes: &[u8], load_context: &mut LoadContext) -> anyhow::Result
     let animation = CharAnimation {
         variants,
         texture_atlas: atlas_handle,
-        size: Vec2::new(width as f32, height as f32),
     };
 
     // And, cut!
