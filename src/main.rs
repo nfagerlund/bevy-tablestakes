@@ -225,7 +225,7 @@ fn move_player_system(
     // https://maddythorson.medium.com/celeste-and-towerfall-physics-d24bd2ae0fc5
     let solids: Vec<AbsBBox> = solids_q.iter().map(|(transform, origin_offset, walkbox)| {
         let origin = transform.translation.truncate() + origin_offset.0;
-        AbsBBox::from_bbox(walkbox.0, origin)
+        AbsBBox::from_rect(walkbox.0, origin)
     }).collect();
 
     let (mut player_tf, mut move_remainder, speed, origin_offset, walkbox) = player_q.single_mut();
@@ -238,7 +238,7 @@ fn move_player_system(
     while move_x != 0. {
         let next_loc = player_tf.translation + Vec3::new(sign_x, 0., 0.);
         let next_origin = next_loc.truncate() + origin_offset.0;
-        let next_box = AbsBBox::from_bbox(walkbox.0, next_origin);
+        let next_box = AbsBBox::from_rect(walkbox.0, next_origin);
         if let None = solids.iter().find(|s| s.collide(next_box)) {
             player_tf.translation.x += sign_x;
             move_x -= sign_x;
@@ -252,7 +252,7 @@ fn move_player_system(
     while move_y != 0. {
         let next_loc = player_tf.translation + Vec3::new(0., sign_y, 0.);
         let next_origin = next_loc.truncate() + origin_offset.0;
-        let next_box = AbsBBox::from_bbox(walkbox.0, next_origin);
+        let next_box = AbsBBox::from_rect(walkbox.0, next_origin);
         if let None = solids.iter().find(|s| s.collide(next_box)) {
             player_tf.translation.y += sign_y;
             move_y -= sign_y;
@@ -379,7 +379,7 @@ fn setup_sprites(
         })
         // some nasty hardcoded bbox numbers that should be in an asset somewhere:
         .insert(OriginOffset(Vec2::new(8., 0.)))
-        .insert(Walkbox(BBox::bottom_centered(10., 5.)))
+        .insert(Walkbox(bottom_centered_rect(10., 5.)))
         // come back to those later!
         .insert(SubTransform{ translation: Vec3::new(0.0, 0.0, 3.0) })
         .insert(MoveRemainder(Vec2::ZERO))
@@ -422,13 +422,14 @@ struct SubTransform {
 }
 
 /// The offset of a sprite-based entity's "real" origin point, relative to the
-/// anchor point of its Transform.
+/// anchor point of its Transform. Hmm. Might be able to remove this once I'm
+/// using Anchor::Custom for TextureAtlasSprite anchor.
 #[derive(Component)]
 struct OriginOffset(Vec2);
 
 /// BBox defining the space an entity takes up on the ground.
 #[derive(Component)]
-struct Walkbox(BBox);
+struct Walkbox(Rect);
 
 /// BBox defining the space where an entity can be hit by attacks.
 #[derive(Component)]
@@ -466,6 +467,25 @@ impl BBox {
         }
     }
 }
+
+fn centered_rect(width: f32, height: f32) -> Rect {
+    let min = Vec2::new(-width/2., -height/2.);
+    let max = Vec2::new(width/2., height/2.);
+    Rect {
+        min,
+        max,
+    }
+}
+
+fn bottom_centered_rect(width: f32, height: f32) -> Rect {
+    let min = Vec2::new(-width/2., 0.);
+    let max = Vec2::new(width/2., height);
+    Rect {
+        min,
+        max,
+    }
+}
+
 
 /// An AABB that's located in absolute space, probably produced by combining a
 /// BBox with an origin offset.
@@ -541,7 +561,7 @@ impl LdtkIntCell for Wall {
         let grid_size = layer_instance.grid_size as f32;
         Wall {
             solid: Solid,
-            walkbox: Walkbox(BBox::centered(grid_size, grid_size)),
+            walkbox: Walkbox(centered_rect(grid_size, grid_size)),
             // the plugin puts tile anchor points in the center:
             origin_offset: OriginOffset(Vec2::ZERO),
             bbox: BBoxOld {
