@@ -441,37 +441,33 @@ struct Hitbox(BBox);
 /// checked against each other.
 #[derive(Copy, Clone, Debug)]
 pub struct BBox {
-    pub l: f32,
-    pub r: f32,
-    pub t: f32,
-    pub b: f32,
+    pub min: Vec2,
+    pub max: Vec2,
 }
 
 impl BBox {
     fn bottom_centered(width: f32, height: f32) -> Self {
+        let min = Vec2::new(-width/2., 0.);
+        let max = Vec2::new(width/2., height);
         Self {
-            l: -width/2.,
-            r: width/2.,
-            t: height,
-            b: 0.,
+            min,
+            max,
         }
     }
     fn centered(width: f32, height: f32) -> Self {
+        let min = Vec2::new(-width/2., -height/2.);
+        let max = Vec2::new(width/2., height/2.);
         Self {
-            l: -width/2.,
-            r: width/2.,
-            t: height/2.,
-            b: -height/2.,
+            min,
+            max,
         }
     }
     /// Convert a relative bbox to an absolutely positioned one that can be
     /// compared against other entity bboxes.
     fn locate(&self, origin: Vec2) -> AbsBBox {
         AbsBBox {
-            l: self.l + origin.x,
-            r: self.r + origin.x,
-            t: self.t + origin.y,
-            b: self.b + origin.y,
+            min: self.min + origin,
+            max: self.max + origin,
         }
     }
 }
@@ -480,25 +476,23 @@ impl BBox {
 /// BBox with an origin offset.
 #[derive(Copy, Clone, Debug)]
 pub struct AbsBBox {
-    pub l: f32,
-    pub r: f32,
-    pub t: f32,
-    pub b: f32,
+    pub min: Vec2,
+    pub max: Vec2,
 }
 
 impl AbsBBox {
     /// Check whether an absolutely positioned bbox overlaps with another one.
     fn collide(&self, other: Self) -> bool {
-        if self.l > other.r {
+        if self.min.x > other.max.x {
             // we're right of other
             false
-        } else if self.r < other.l {
+        } else if self.max.x < other.min.x {
             // we're left of other
             false
-        } else if self.t < other.b {
+        } else if self.max.y < other.min.y {
             // we're below other
             false
-        } else if self.b > other.t {
+        } else if self.min.y > other.max.y {
             // we're above other
             false
         } else {
