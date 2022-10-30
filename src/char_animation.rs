@@ -112,7 +112,7 @@ fn load_aseprite(bytes: &[u8], load_context: &mut LoadContext) -> anyhow::Result
     // Build an affine transform for converting the pixel origin point to a
     // relative anchor position.
     let texture_size = Vec2::new(width as f32, height as f32);
-    let normalize_scale = Mat2::from_diagonal(texture_size);
+    let normalize_scale = Mat2::from_diagonal(texture_size).inverse();
     let anchor_transform = Affine2::from_mat2_translation(
         normalize_scale * REFLECT_Y,
         OFFSET_TO_CENTER,
