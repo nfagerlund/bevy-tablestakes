@@ -8,13 +8,14 @@ use bevy::render::{
     render_resource::{Extent3d, TextureDimension, TextureFormat},
     texture::{Image, TextureFormatPixelInfo}
 };
-use bevy::sprite::{Rect, TextureAtlas};
+use bevy::sprite::{Rect, TextureAtlas, Anchor};
 use bevy::utils::Duration;
 use std::collections::HashMap;
 use asefile::AsepriteFile;
 use image::RgbaImage;
 
 use crate::compass::{self, Dir};
+use crate::Walkbox;
 
 #[derive(Debug, TypeUuid)]
 #[uuid = "585e2e41-4a97-42ef-a13e-55761c854bb4"]
@@ -361,23 +362,27 @@ fn charanm_test_directions_system(
 
 fn charanm_test_animate_system(
     animations: Res<Assets<CharAnimation>>,
-    mut query: Query<(&mut TempCharAnimationState, &mut TextureAtlasSprite)>,
+    mut query: Query<(&mut TempCharAnimationState, &mut TextureAtlasSprite, Entity)>,
     time: Res<Time>,
+    mut commands: Commands,
 ) {
     for (
         mut state,
         mut sprite,
+        entity,
     ) in query.iter_mut() {
         if let Some(animation) = animations.get(&state.animation) {
             // UGH!!!
             if let Some(variant_name) = &state.variant {
                 // get the stugff
                 let variant = animation.variants.get(variant_name).unwrap(); // UGH!!
+                let mut updating_frame = false;
 
                 // update the timer... or initialize it, if it's missing.
                 if let Some(frame_timer) = &mut state.frame_timer {
                     frame_timer.tick(time.delta());
                     if frame_timer.finished() {
+                        updating_frame = true;
                         // increment+loop frame, and replace the timer with the new frame's duration
                         // TODO: we're only looping rn.
                         let frame_count = variant.frames.len();
@@ -388,16 +393,25 @@ fn charanm_test_animate_system(
                 } else {
                     // must be new here. initialize the timer w/ the current
                     // frame's duration, can start ticking on the next loop.
+                    updating_frame = true;
                     let frame = &variant.frames[state.frame];
                     state.frame_timer = Some(Timer::new(frame.duration, false));
                 }
 
-                // ok, where was I. Uh, dig into the variant and frame to see
-                // what actual texture index we oughtta use, and set it.
-                let frame = &variant.frames[state.frame];
-                if sprite.index != frame.index {
-                    // println!("Updating sprite index! (animating)");
+                // ok, where was I.
+                if updating_frame {
+                    // Uh, dig into the variant and frame to see what actual
+                    // texture index we oughtta use, and set it.
+                    let frame = &variant.frames[state.frame];
                     sprite.index = frame.index;
+                    // Also, set the origin:
+                    sprite.anchor = Anchor::Custom(frame.anchor);
+                    // Also, set the walkbox:
+                    if let Some(walkbox) = frame.walkbox {
+                        commands.entity(entity).insert(Walkbox(walkbox));
+                    } else {
+                        commands.entity(entity).remove::<Walkbox>();
+                    }
                 }
             }
         }
