@@ -5,6 +5,7 @@ use bevy::{
     // },
     prelude::*,
     utils::Duration,
+    sprite::Rect,
     render::texture::ImageSettings, // remove eventually, was added to prelude shortly after 0.8
 };
 use bevy_ecs_ldtk::prelude::*;
@@ -224,7 +225,7 @@ fn move_player_system(
     // https://maddythorson.medium.com/celeste-and-towerfall-physics-d24bd2ae0fc5
     let solids: Vec<AbsBBox> = solids_q.iter().map(|(transform, origin_offset, walkbox)| {
         let origin = transform.translation.truncate() + origin_offset.0;
-        walkbox.0.locate(origin)
+        AbsBBox::from_bbox(walkbox.0, origin)
     }).collect();
 
     let (mut player_tf, mut move_remainder, speed, origin_offset, walkbox) = player_q.single_mut();
@@ -236,7 +237,8 @@ fn move_player_system(
     let sign_x = move_x.signum();
     while move_x != 0. {
         let next_loc = player_tf.translation + Vec3::new(sign_x, 0., 0.);
-        let next_box = walkbox.0.locate(next_loc.truncate() + origin_offset.0);
+        let next_origin = next_loc.truncate() + origin_offset.0;
+        let next_box = AbsBBox::from_bbox(walkbox.0, next_origin);
         if let None = solids.iter().find(|s| s.collide(next_box)) {
             player_tf.translation.x += sign_x;
             move_x -= sign_x;
@@ -249,7 +251,8 @@ fn move_player_system(
     let sign_y = move_y.signum();
     while move_y != 0. {
         let next_loc = player_tf.translation + Vec3::new(0., sign_y, 0.);
-        let next_box = walkbox.0.locate(next_loc.truncate() + origin_offset.0);
+        let next_origin = next_loc.truncate() + origin_offset.0;
+        let next_box = AbsBBox::from_bbox(walkbox.0, next_origin);
         if let None = solids.iter().find(|s| s.collide(next_box)) {
             player_tf.translation.y += sign_y;
             move_y -= sign_y;
@@ -462,14 +465,6 @@ impl BBox {
             max,
         }
     }
-    /// Convert a relative bbox to an absolutely positioned one that can be
-    /// compared against other entity bboxes.
-    fn locate(&self, origin: Vec2) -> AbsBBox {
-        AbsBBox {
-            min: self.min + origin,
-            max: self.max + origin,
-        }
-    }
 }
 
 /// An AABB that's located in absolute space, probably produced by combining a
@@ -481,6 +476,21 @@ pub struct AbsBBox {
 }
 
 impl AbsBBox {
+    /// Locate a rect in space, given an origin point
+    fn from_rect(rect: Rect, origin: Vec2) -> Self {
+        Self {
+            min: rect.min + origin,
+            max: rect.max + origin,
+        }
+    }
+
+    fn from_bbox(bbox: BBox, origin: Vec2) -> Self {
+        Self {
+            min: bbox.min + origin,
+            max: bbox.max + origin,
+        }
+    }
+
     /// Check whether an absolutely positioned bbox overlaps with another one.
     fn collide(&self, other: Self) -> bool {
         if self.min.x > other.max.x {
