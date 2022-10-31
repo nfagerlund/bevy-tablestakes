@@ -316,16 +316,16 @@ fn copy_texture_to_atlas(
 
 #[derive(Component, Debug)]
 pub struct TempCharAnimationState {
-    animation: Handle<CharAnimation>,
-    variant: Option<VariantName>, // hate the string lookup here btw, need something better.
+    pub animation: Handle<CharAnimation>,
+    pub variant: Option<VariantName>, // hate the string lookup here btw, need something better.
     // guess I could do interning and import IndexMap maybe.
-    frame: usize,
+    pub frame: usize,
     // To start with, we'll just always loop.
-    frame_timer: Option<Timer>,
+    pub frame_timer: Option<Timer>,
 }
 
 impl TempCharAnimationState {
-    fn new(animation: Handle<CharAnimation>, variant: VariantName) -> Self {
+    pub fn new(animation: Handle<CharAnimation>, variant: VariantName) -> Self {
         TempCharAnimationState {
             animation,
             variant: Some(variant),
@@ -336,10 +336,19 @@ impl TempCharAnimationState {
         }
     }
 
-    fn change_variant(&mut self, variant: VariantName) {
+    pub fn change_variant(&mut self, variant: VariantName) {
         self.variant = Some(variant);
         self.frame = 0;
         self.frame_timer = None;
+    }
+
+    pub fn change_animation(&mut self, animation: Handle<CharAnimation>) {
+        self.animation = animation;
+        // TODO: I'm leaving the variant the same, but actually I don't know if
+        // that's the right move -- question is whether I'd ever switch to an
+        // animation with fewer variants.
+        self.frame_timer = None;
+        self.frame = 0;
     }
 }
 
