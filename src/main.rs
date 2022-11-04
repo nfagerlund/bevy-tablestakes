@@ -22,6 +22,7 @@ use bevy_inspector_egui::{
 };
 use crate::input::*;
 use crate::char_animation::*;
+use crate::compass::*;
 
 mod hellow;
 mod junk;
@@ -73,11 +74,15 @@ fn main() {
         .insert_resource(LevelSelection::Index(1))
         .register_ldtk_int_cell_for_layer::<Wall>("StructureKind", 1)
 
+        // CAMERA
+        .add_startup_system(setup_camera)
+
         // PLAYER STUFF
-        .add_startup_system(setup_sprites)
+        .add_startup_system(setup_player)
         .add_system(animate_sprites_system)
         .add_system(connect_gamepads_system)
         .add_system(move_player_system)
+        // .add_system(charanm_test_animate_system)
         .add_system(dumb_move_camera_system.after(move_player_system))
         .add_system(snap_pixel_positions_system.after(dumb_move_camera_system))
 
@@ -197,11 +202,18 @@ fn move_player_system(
     time: Res<Time>,
     // time: Res<StaticTime>,
     // time: Res<SmoothedTime>,
-    mut player_q: Query<(&mut SubTransform, &mut MoveRemainder, &Speed, &OriginOffset, &Walkbox), With<Player>>,
+    mut player_q: Query<(&mut SubTransform, &mut MoveRemainder, &Speed, &Walkbox), With<Player>>,
     solids_q: Query<(&Transform, &OriginOffset, &Walkbox), With<Solid>>,
     // ^^ Hmmmmmm probably gonna need a QuerySet later for this. In the meantime
     // I can probably get away with it temporarily.
 ) {
+    // Take the chance to exit early if there's no suitable player:
+    let Ok((mut player_tf, mut move_remainder, speed, walkbox)) = player_q.get_single_mut()
+    else { // rust 1.65 baby
+        println!("Zero players found! Probably missing walkbox or something.");
+        return;
+    };
+
     let delta = time.delta_seconds();
 
     // get movement intent
@@ -228,7 +240,6 @@ fn move_player_system(
         AbsBBox::from_rect(walkbox.0, origin)
     }).collect();
 
-    let (mut player_tf, mut move_remainder, speed, origin_offset, walkbox) = player_q.single_mut();
     move_remainder.0 += movement * speed.0 * delta;
     let move_pixels = move_remainder.0.round();
     move_remainder.0 -= move_pixels;
@@ -237,7 +248,7 @@ fn move_player_system(
     let sign_x = move_x.signum();
     while move_x != 0. {
         let next_loc = player_tf.translation + Vec3::new(sign_x, 0., 0.);
-        let next_origin = next_loc.truncate() + origin_offset.0;
+        let next_origin = next_loc.truncate();
         let next_box = AbsBBox::from_rect(walkbox.0, next_origin);
         if let None = solids.iter().find(|s| s.collide(next_box)) {
             player_tf.translation.x += sign_x;
@@ -251,7 +262,7 @@ fn move_player_system(
     let sign_y = move_y.signum();
     while move_y != 0. {
         let next_loc = player_tf.translation + Vec3::new(0., sign_y, 0.);
-        let next_origin = next_loc.truncate() + origin_offset.0;
+        let next_origin = next_loc.truncate();
         let next_box = AbsBBox::from_rect(walkbox.0, next_origin);
         if let None = solids.iter().find(|s| s.collide(next_box)) {
             player_tf.translation.y += sign_y;
@@ -350,40 +361,42 @@ fn setup_level(
     }).insert(LdtkWorld);
 }
 
-fn setup_sprites(
+fn setup_camera(
     mut commands: Commands,
-    asset_server: Res<AssetServer>,
-    mut texture_atlases: ResMut<Assets<TextureAtlas>>,
 ) {
-    let texture_handle: Handle<Image> = asset_server.load("sprites/sPlayerRun_strip32.png");
-    // vv AH ha, and here's the bit I would want some automation for. Should be easy lol.
-    let texture_atlas = TextureAtlas::from_grid(texture_handle, Vec2::new(17.0, 24.0), 32, 1);
-    let texture_atlas_handle = texture_atlases.add(texture_atlas);
-
     let mut camera_bundle = Camera2dBundle::default();
     camera_bundle.projection.scale = 1.0/3.0;
     commands.spawn_bundle(camera_bundle)
         .insert(SubTransform{ translation: Vec3::new(0.0, 0.0, 999.0) });
         // ^^ hack: I looked up the Z coord on new_2D and fudged it so we won't accidentally round it to 1000.
+}
+
+fn setup_player(
+    mut commands: Commands,
+    asset_server: Res<AssetServer>,
+    mut texture_atlases: ResMut<Assets<TextureAtlas>>,
+) {
+    let anim_handle: Handle<CharAnimation> = asset_server.load("sprites/sPlayerRun.aseprite");
+
     // IT'S THE PLAYER, GIVE IT UP!!
     commands
         .spawn_bundle(SpriteSheetBundle {
-            texture_atlas: texture_atlas_handle,
-            sprite: TextureAtlasSprite {
-                anchor: bevy::sprite::Anchor::BottomLeft,
-                ..Default::default()
-            },
             transform: Transform::from_translation(Vec3::new(0.0, 0.0, 3.0))
                 .with_scale(Vec3::splat(PIXEL_SCALE)),
             ..Default::default()
         })
+
+        // --- New animation system
+        .insert(CharAnimationState::new(anim_handle, Dir::E))
+
+        // --- Stuff I think I don't need anymore:
         // some nasty hardcoded bbox numbers that should be in an asset somewhere:
-        .insert(OriginOffset(Vec2::new(8., 0.)))
-        .insert(Walkbox(bottom_centered_rect(10., 5.)))
-        // come back to those later!
+        // .insert(OriginOffset(Vec2::new(8., 0.)))
+        // .insert(Walkbox(bottom_centered_rect(10., 5.)))
+        // .insert(SpriteTimer{ timer: Timer::from_seconds(0.1, true) })
+
         .insert(SubTransform{ translation: Vec3::new(0.0, 0.0, 3.0) })
         .insert(MoveRemainder(Vec2::ZERO))
-        .insert(SpriteTimer{ timer: Timer::from_seconds(0.1, true) })
         // ^^ 0.1 = inverse FPS. Could be way more ergonomic.
         .insert(Speed(120.0))
         .insert(Player);

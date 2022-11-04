@@ -315,18 +315,17 @@ fn copy_texture_to_atlas(
 // - When the timer runs out, switch your FRAME INDEX to the next frame (or, WRAP AROUND if you're configured to loop).
 
 #[derive(Component, Debug)]
-pub struct TempCharAnimationState {
+pub struct CharAnimationState {
     pub animation: Handle<CharAnimation>,
-    pub variant: Option<VariantName>, // hate the string lookup here btw, need something better.
-    // guess I could do interning and import IndexMap maybe.
+    pub variant: Option<VariantName>,
     pub frame: usize,
     // To start with, we'll just always loop.
     pub frame_timer: Option<Timer>,
 }
 
-impl TempCharAnimationState {
+impl CharAnimationState {
     pub fn new(animation: Handle<CharAnimation>, variant: VariantName) -> Self {
-        TempCharAnimationState {
+        CharAnimationState {
             animation,
             variant: Some(variant),
             // in the future I might end up wanting to blend between animations
@@ -353,7 +352,7 @@ impl TempCharAnimationState {
 }
 
 fn charanm_test_directions_system(
-    mut query: Query<&mut TempCharAnimationState>,
+    mut query: Query<&mut CharAnimationState>,
     keys: Res<Input<KeyCode>>,
 ) {
     for mut state in query.iter_mut() {
@@ -369,9 +368,9 @@ fn charanm_test_directions_system(
     }
 }
 
-fn charanm_test_animate_system(
+pub fn charanm_test_animate_system(
     animations: Res<Assets<CharAnimation>>,
-    mut query: Query<(&mut TempCharAnimationState, &mut TextureAtlasSprite, Entity)>,
+    mut query: Query<(&mut CharAnimationState, &mut TextureAtlasSprite, Entity)>,
     time: Res<Time>,
     mut commands: Commands,
 ) {
@@ -430,7 +429,7 @@ fn charanm_test_animate_system(
 fn charanm_test_atlas_reassign_system(
     mut commands: Commands,
     animations: Res<Assets<CharAnimation>>,
-    query: Query<(Entity, &TempCharAnimationState, &Handle<TextureAtlas>)>,
+    query: Query<(Entity, &CharAnimationState, &Handle<TextureAtlas>)>,
 ) {
     for (
             entity,
@@ -459,7 +458,7 @@ fn charanm_test_setup_system(
             transform: Transform::from_translation(Vec3::new(30.0, 60.0, 3.0)),
             ..default()
         })
-        .insert(TempCharAnimationState::new(anim_handle, Dir::W));
+        .insert(CharAnimationState::new(anim_handle, Dir::W));
 
     let test_texture_handle: Handle<Image> = asset_server.load("sprites/sPlayerRun.aseprite#texture");
     commands.spawn_bundle(SpriteBundle {
