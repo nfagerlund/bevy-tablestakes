@@ -188,10 +188,11 @@ fn load_aseprite(bytes: &[u8], load_context: &mut LoadContext) -> anyhow::Result
             // Get the walkbox, offset it relative to the origin, THEN flip the Y.
             let absolute_walkbox = rect_from_cel(&ase, "walkbox", i);
             let walkbox = absolute_walkbox.map(|wbox| {
-                Rect {
-                    min: invert_vec2_y(wbox.min - origin),
-                    max: invert_vec2_y(wbox.max - origin),
-                }
+                let relative_walkbox = Rect {
+                    min: wbox.min - origin,
+                    max: wbox.max - origin,
+                };
+                flip_rect_y(relative_walkbox)
             });
 
             let anchor = anchor_transform.transform_point2(origin);
@@ -238,9 +239,28 @@ fn remux_image(img: RgbaImage) -> Image {
 }
 
 /// Invert the Y coordinates of a Vec2, because source image coordinates go
-/// Y-down but bevy spatial coordinates go Y-up.
+/// Y-down but bevy spatial coordinates go Y-up. Note that this is only valid to
+/// do if you're not also moving the origin point!
 fn invert_vec2_y(v: Vec2) -> Vec2 {
     Vec2::new(v.x, -(v.y))
+}
+
+/// OK, rects have "min" (smallest x, smallest y) and "max" (largest x, largest
+/// y) corners. When you create a rect within a top-down Y coordinate system,
+/// "min" is the top left, and "max" is the bottom right. But if you want to
+/// represent the same rectangle in a bottom-up Y coordinate system, "min" is
+/// the BOTTOM left, and "max" is the TOP right. So it's not just inverting the
+/// Y coordinate of each point, you also have to recombine them. If you don't,
+/// it ends up inside-out.
+fn flip_rect_y(r: Rect) -> Rect {
+    let top_left = r.min;
+    let bottom_right = r.max;
+    let bottom_left = Vec2::new(top_left.x, bottom_right.y);
+    let top_right = Vec2::new(bottom_right.x, top_left.y);
+    Rect {
+        min: invert_vec2_y(bottom_left),
+        max: invert_vec2_y(top_right),
+    }
 }
 
 /// Get the bounding Rect for a cel's non-transparent pixels.
