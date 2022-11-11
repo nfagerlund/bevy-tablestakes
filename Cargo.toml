@@ -13,6 +13,11 @@ asefile = "0.3.5"
 image = "0.23.14" # match asefile's dep
 bevy = { version = "0.8.1", features = [
     "dynamic",
+    # Tracy version support is complicated bc they break protocol versions in
+    # patch releases -- you'll have to crack open Cargo.lock and cross-reference
+    # with the table at https://lib.rs/crates/tracing-tracy. For Bevy 0.8.1, it
+    # just so happens you want Tracy 0.8.1 -- complete coincidince.
+    "trace_tracy",
 ] }
 bevy-inspector-egui = "0.12.1"
 bevy_ecs_tilemap = "0.7.0"
