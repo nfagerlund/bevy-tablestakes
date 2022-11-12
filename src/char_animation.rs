@@ -355,10 +355,13 @@ impl CharAnimationState {
         }
     }
 
+    /// Change direction of animation, unless already facing the requested direction.
     pub fn change_variant(&mut self, variant: VariantName) {
-        self.variant = Some(variant);
-        self.frame = 0;
-        self.frame_timer = None;
+        if self.variant != Some(variant) {
+            self.variant = Some(variant);
+            self.frame = 0;
+            self.frame_timer = None;
+        }
     }
 
     pub fn change_animation(&mut self, animation: Handle<CharAnimation>) {
@@ -375,15 +378,11 @@ fn charanm_test_directions_system(
     mut query: Query<&mut CharAnimationState>,
     keys: Res<Input<KeyCode>>,
 ) {
-    for mut state in query.iter_mut() {
-        if keys.just_pressed(KeyCode::Right) {
-            state.change_variant(Dir::E);
-        } else if keys.just_pressed(KeyCode::Up) {
-            state.change_variant(Dir::N);
-        } else if keys.just_pressed(KeyCode::Left) {
-            state.change_variant(Dir::W);
-        } else if keys.just_pressed(KeyCode::Down) {
-            state.change_variant(Dir::S);
+    let mvmt = crate::input::get_kb_movement_vector(keys);
+    if mvmt != Vec2::ZERO {
+        let dir = Dir::cardinal(mvmt);
+        for mut state in query.iter_mut() {
+            state.change_variant(dir);
         }
     }
 }
