@@ -157,7 +157,7 @@ fn move_player_system(
     // time: Res<StaticTime>,
     // time: Res<SmoothedTime>,
     mut player_q: Query<(&mut SubTransform, &mut MoveRemainder, &Speed, &Walkbox), With<Player>>,
-    solids_q: Query<(&Transform, &OriginOffset, &Walkbox), With<Solid>>,
+    solids_q: Query<(&Transform, &Walkbox), With<Solid>>,
     // ^^ Hmmmmmm probably gonna need a QuerySet later for this. In the meantime
     // I can probably get away with it temporarily.
 ) {
@@ -190,8 +190,8 @@ fn move_player_system(
     // Cribbing from this Maddy post:
     // https://maddythorson.medium.com/celeste-and-towerfall-physics-d24bd2ae0fc5
     // TODO: spatial partitioning so the list of solids isn't so stupid huge.
-    let solids: Vec<AbsBBox> = solids_q.iter().map(|(transform, origin_offset, walkbox)| {
-        let origin = transform.translation.truncate() + origin_offset.0;
+    let solids: Vec<AbsBBox> = solids_q.iter().map(|(transform, walkbox)| {
+        let origin = transform.translation.truncate();
         AbsBBox::from_rect(walkbox.0, origin)
     }).collect();
 
@@ -381,12 +381,6 @@ struct SubTransform {
     translation: Vec3,
 }
 
-/// The offset of a sprite-based entity's "real" origin point, relative to the
-/// anchor point of its Transform. Hmm. Might be able to remove this once I'm
-/// using Anchor::Custom for TextureAtlasSprite anchor.
-#[derive(Component)]
-struct OriginOffset(Vec2);
-
 /// BBox defining the space an entity takes up on the ground.
 #[derive(Component)]
 struct Walkbox(Rect);
@@ -465,7 +459,6 @@ struct Solid;
 struct Wall {
     solid: Solid,
     walkbox: Walkbox,
-    origin_offset: OriginOffset,
     // transform: Transform, // This is needed, but it's handled by the plugin.
 }
 
@@ -476,9 +469,8 @@ impl LdtkIntCell for Wall {
         let grid_size = layer_instance.grid_size as f32;
         Wall {
             solid: Solid,
-            walkbox: Walkbox(centered_rect(grid_size, grid_size)),
             // the plugin puts tile anchor points in the center:
-            origin_offset: OriginOffset(Vec2::ZERO),
+            walkbox: Walkbox(centered_rect(grid_size, grid_size)),
         }
     }
 }
