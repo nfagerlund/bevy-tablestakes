@@ -76,7 +76,6 @@ fn main() {
 
         // PLAYER STUFF
         .add_startup_system(setup_player)
-        .add_system(animate_sprites_system)
         .add_system(connect_gamepads_system)
         .add_system(move_player_system)
         // .add_system(charanm_test_animate_system)
@@ -285,26 +284,6 @@ fn snap_pixel_positions_system(
     }
 }
 
-// animation time!
-
-fn animate_sprites_system(
-    time: Res<Time>,
-    // time: Res<StaticTime>,
-    // time: Res<SmoothedTime>,
-    texture_atlases: Res<Assets<TextureAtlas>>,
-    mut query: Query<(&mut SpriteTimer, &mut TextureAtlasSprite, &Handle<TextureAtlas>)>,
-    // ^^ ok, the timer I added myself, and the latter two were part of the bundle.
-) {
-    for (mut sprite_timer, mut sprite, texture_atlas_handle) in query.iter_mut() {
-        sprite_timer.timer.tick(time.delta()); // ok, I remember you. advance the timer.
-        if sprite_timer.timer.finished() {
-            let texture_atlas = texture_atlases.get(texture_atlas_handle).unwrap(); // uh ok. btw, how do we avoid the unwraps in this runtime?
-            sprite.index = (sprite.index + 1) % texture_atlas.textures.len();
-            // ^^ Ah. OK. We're doing some realll basic flipbooking here. But also, note that the TextureAtlasSprite struct ONLY has color/index/flip_(x|y)/custom_size props, it's meant to always be paired with a textureatlas handle and it doesn't hold its own reference to one. ECS lifestyles.
-        }
-    }
-}
-
 fn setup_level(
     mut commands: Commands,
     asset_server: Res<AssetServer>,
@@ -368,12 +347,6 @@ struct Speed(f32);
 
 #[derive(Component)]
 struct MoveRemainder(Vec2);
-
-/// Sprite animation frame timer
-#[derive(Component)]
-struct SpriteTimer {
-    timer: Timer,
-}
 
 /// Additional transform component for things whose movements should be synced to hard pixel boundaries.
 #[derive(Component, Inspectable)]
