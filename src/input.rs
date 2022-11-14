@@ -40,7 +40,7 @@ pub fn get_kb_movement_vector(keys: Res<Input<KeyCode>>) -> Vec2 {
     if keys.pressed(KeyCode::Down) {
         y -= 1.0;
     }
-    Vec2::new(x, y)
+    Vec2::new(x, y).normalize_or_zero()
 }
 
 /// System for noticing when gamepads are added/removed and marking which
