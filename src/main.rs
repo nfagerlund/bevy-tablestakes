@@ -152,31 +152,6 @@ fn time_smoothing_system(
     }
 }
 
-fn accept_input_system(
-    active_gamepad: Option<Res<ActiveGamepad>>,
-    mut inputs: ResMut<CurrentInputs>,
-    axes: Res<Axis<GamepadAxis>>,
-    keys: Res<Input<KeyCode>>,
-) {
-    // get movement intent
-    let mut gamepad_movement = None;
-    if let Some(ActiveGamepad(pad_id)) = active_gamepad.as_deref() {
-        gamepad_movement = get_gamepad_movement_vector(*pad_id, axes);
-    }
-    let movement = match gamepad_movement {
-        Some(mvmt) => {
-            if mvmt.length() > 0.0 {
-                mvmt
-            } else {
-                get_kb_movement_vector(keys)
-            }
-        },
-        None => get_kb_movement_vector(keys),
-    };
-    // ok cool
-    inputs.movement = movement;
-}
-
 fn move_player_system(
     inputs: Res<CurrentInputs>,
     time: Res<Time>,
@@ -341,18 +316,6 @@ fn setup_player(
 }
 
 // Structs and crap!
-
-/// Resource for storing the active gamepad
-pub struct ActiveGamepad(Gamepad);
-
-/// Resource for stashing the current frame's inputs. Expect this'll expand as I
-/// add more input intent types. Also, might just switch to leafwing input or
-/// something, which would be much smarter! But in the meantime, at least it's
-/// centralized.
-#[derive(Default)]
-pub struct CurrentInputs {
-    pub movement: Vec2,
-}
 
 /// Marker component for a spawned LdtkWorldBundle
 #[derive(Component)]
