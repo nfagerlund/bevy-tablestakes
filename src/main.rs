@@ -18,7 +18,7 @@ use bevy_inspector_egui::{
     WorldInspectorPlugin,
     Inspectable,
     RegisterInspectable,
-    InspectorPlugin,
+    // InspectorPlugin,
 };
 use crate::input::*;
 use crate::char_animation::*;
@@ -65,9 +65,6 @@ fn main() {
         // INSPECTOR STUFF
         .add_plugin(WorldInspectorPlugin::new())
         .register_inspectable::<SubTransform>()
-        // .insert_resource(WonderWall::default())
-        // .add_plugin(InspectorPlugin::<WonderWall>::new())
-        // .add_system(look_for_walls_system)
 
         // LDTK STUFF
         .add_startup_system(setup_level)
@@ -88,14 +85,6 @@ fn main() {
 
         // OK BYE!!!
         .run();
-}
-
-/// resource for collision yelling
-#[derive(Inspectable, Default)]
-struct WonderWall {
-    tile_entity: Option<Entity>,
-    tile_grid_coords: Option<IVec2>,
-    num_walls: usize,
 }
 
 struct RecentFrameTimes {
@@ -125,48 +114,13 @@ impl StaticTime {
     }
 }
 
-fn look_for_walls_system(
-    mut wonderwall: ResMut<WonderWall>,
-    walls_q: Query<(&BBoxOld, &Transform, &GridCoords, Entity), With<Solid>>,
-    player_q: Query<&Transform, With<Player>>,
-) {
-    let player_transform = player_q.single();
-    wonderwall.tile_entity = None;
-    wonderwall.tile_grid_coords = None;
-    wonderwall.num_walls = walls_q.iter().count();
-    for (bbox, transform, grid_coords, entity) in walls_q.iter() {
-        if point_in_bbox(player_transform.translation.truncate(), transform.translation.truncate(), bbox.size) {
-            wonderwall.tile_entity = Some(entity);
-            wonderwall.tile_grid_coords = Some(IVec2::new(grid_coords.x, grid_coords.y));
-        }
-    }
-}
-
-// This is naive and assumes the pivot point in in the center of the bbox.
-fn point_in_bbox(point: Vec2, bbox_location: Vec2, bbox_size: Vec2) -> bool {
-    point.x >= bbox_location.x - bbox_size.x / 2.
-        && point.x <= bbox_location.x + bbox_size.x / 2.
-        && point.y >= bbox_location.y - bbox_size.y / 2.
-        && point.y <= bbox_location.y + bbox_size.y / 2.
-}
-
-#[test]
-fn point_in_bbox_test() {
-    let loc = Vec2::new(5.0, 5.0);
-    let bb_size = BBoxOld{ size: Vec2::new(16.0, 16.0) };
-    let bb_in = Vec2::new(6.0, 6.0);
-    let bb_out = Vec2::new(90.0, 90.0);
-    assert!(point_in_bbox(loc, bb_in, bb_size.size));
-    assert!(!point_in_bbox(loc, bb_out, bb_size.size));
-}
-
 fn tile_info_barfing_system(
     keys: Res<Input<KeyCode>>,
     tile_query: Query<(&IntGridCell, &GridCoords, &Transform)>,
     level_query: Query<(&Handle<LdtkLevel>, &Transform)>,
 ) {
     if keys.just_pressed(KeyCode::B) {
-        for (gridcell, coords, transform) in tile_query.iter() {
+        for (gridcell, _coords, transform) in tile_query.iter() {
             info!("{:?} at {:?}", gridcell, transform);
         }
         for (level, transform) in level_query.iter() {
@@ -235,6 +189,7 @@ fn move_player_system(
     // move, maybe! TODO: multiplayer :|
     // Cribbing from this Maddy post:
     // https://maddythorson.medium.com/celeste-and-towerfall-physics-d24bd2ae0fc5
+    // TODO: spatial partitioning so the list of solids isn't so stupid huge.
     let solids: Vec<AbsBBox> = solids_q.iter().map(|(transform, origin_offset, walkbox)| {
         let origin = transform.translation.truncate() + origin_offset.0;
         AbsBBox::from_rect(walkbox.0, origin)
@@ -374,7 +329,6 @@ fn setup_camera(
 fn setup_player(
     mut commands: Commands,
     asset_server: Res<AssetServer>,
-    mut texture_atlases: ResMut<Assets<TextureAtlas>>,
 ) {
     let anim_handle: Handle<CharAnimation> = asset_server.load("sprites/sPlayerRun.aseprite");
 
@@ -389,15 +343,8 @@ fn setup_player(
         // --- New animation system
         .insert(CharAnimationState::new(anim_handle, Dir::E))
 
-        // --- Stuff I think I don't need anymore:
-        // some nasty hardcoded bbox numbers that should be in an asset somewhere:
-        // .insert(OriginOffset(Vec2::new(8., 0.)))
-        // .insert(Walkbox(bottom_centered_rect(10., 5.)))
-        // .insert(SpriteTimer{ timer: Timer::from_seconds(0.1, true) })
-
         .insert(SubTransform{ translation: Vec3::new(0.0, 0.0, 3.0) })
         .insert(MoveRemainder(Vec2::ZERO))
-        // ^^ 0.1 = inverse FPS. Could be way more ergonomic.
         .insert(Speed(120.0))
         .insert(Player);
 }
@@ -446,40 +393,10 @@ struct Walkbox(Rect);
 
 /// BBox defining the space where an entity can be hit by attacks.
 #[derive(Component)]
-struct Hitbox(BBox);
+struct Hitbox(Rect);
 // ...and then eventually I'll want Swingbox for attacks, but, tbh I have no
 // idea how to best handle that yet. Is that even a component? Or is it a larger
 // data structure associated with an animation or something?
-
-/// An axis-aligned bounding box. When stored on an entity, these are defined in
-/// terms of the offset of each side from an origin point. (In other words, you
-/// also need an origin in order to do anything with it.) However, in transitory
-/// states they can be transformed to absolute (ish) coordinates so they can be
-/// checked against each other.
-#[derive(Copy, Clone, Debug)]
-pub struct BBox {
-    pub min: Vec2,
-    pub max: Vec2,
-}
-
-impl BBox {
-    fn bottom_centered(width: f32, height: f32) -> Self {
-        let min = Vec2::new(-width/2., 0.);
-        let max = Vec2::new(width/2., height);
-        Self {
-            min,
-            max,
-        }
-    }
-    fn centered(width: f32, height: f32) -> Self {
-        let min = Vec2::new(-width/2., -height/2.);
-        let max = Vec2::new(width/2., height/2.);
-        Self {
-            min,
-            max,
-        }
-    }
-}
 
 fn centered_rect(width: f32, height: f32) -> Rect {
     let min = Vec2::new(-width/2., -height/2.);
@@ -517,13 +434,6 @@ impl AbsBBox {
         }
     }
 
-    fn from_bbox(bbox: BBox, origin: Vec2) -> Self {
-        Self {
-            min: bbox.min + origin,
-            max: bbox.max + origin,
-        }
-    }
-
     /// Check whether an absolutely positioned bbox overlaps with another one.
     fn collide(&self, other: Self) -> bool {
         if self.min.x > other.max.x {
@@ -550,20 +460,12 @@ impl AbsBBox {
 #[derive(Component)]
 struct Solid;
 
-/// Temp bounding box size component. I'm using the f32-based Vec2 because that's what
-/// bevy::sprite::collide_aabb::collide() uses.
-#[derive(Component)]
-struct BBoxOld {
-    size: Vec2,
-}
-
 /// Wall bundle for tilemap walls
 #[derive(Bundle)]
 struct Wall {
     solid: Solid,
     walkbox: Walkbox,
     origin_offset: OriginOffset,
-    bbox: BBoxOld,
     // transform: Transform, // This is needed, but it's handled by the plugin.
 }
 
@@ -577,9 +479,6 @@ impl LdtkIntCell for Wall {
             walkbox: Walkbox(centered_rect(grid_size, grid_size)),
             // the plugin puts tile anchor points in the center:
             origin_offset: OriginOffset(Vec2::ZERO),
-            bbox: BBoxOld {
-                size: Vec2::splat(grid_size),
-            },
         }
     }
 }
