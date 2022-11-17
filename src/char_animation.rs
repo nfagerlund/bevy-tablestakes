@@ -64,7 +64,8 @@ impl Plugin for CharAnimationPlugin {
     fn build(&self, app: &mut App) {
         app
             .add_asset::<CharAnimation>()
-            .init_asset_loader::<CharAnimationLoader>();
+            .init_asset_loader::<CharAnimationLoader>()
+            .add_system(charanm_atlas_reassign_system);
     }
 }
 
@@ -445,7 +446,7 @@ pub fn charanm_test_animate_system(
     }
 }
 
-fn charanm_test_atlas_reassign_system(
+fn charanm_atlas_reassign_system(
     mut commands: Commands,
     animations: Res<Assets<CharAnimation>>,
     query: Query<(Entity, &CharAnimationState, &Handle<TextureAtlas>)>,
@@ -494,7 +495,6 @@ impl Plugin for TestCharAnimationPlugin {
     fn build(&self, app: &mut App) {
         app
         .add_startup_system(charanm_test_setup_system)
-        .add_system(charanm_test_atlas_reassign_system)
         .add_system(charanm_test_animate_system)
         .add_system(charanm_test_directions_system);
     }
