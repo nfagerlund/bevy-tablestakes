@@ -399,48 +399,46 @@ pub fn charanm_test_animate_system(
         mut sprite,
         entity,
     ) in query.iter_mut() {
-        if let Some(animation) = animations.get(&state.animation) {
-            // UGH!!!
-            if let Some(variant_name) = &state.variant {
-                // get the stugff
-                let variant = animation.variants.get(variant_name).unwrap(); // UGH!!
-                let mut updating_frame = false;
+        let Some(animation) = animations.get(&state.animation) else { break; };
+        let Some(variant_name) = &state.variant else { break; };
+        // get the stugff
+        let Some(variant) = animation.variants.get(variant_name) else { break; };
 
-                // update the timer... or initialize it, if it's missing.
-                if let Some(frame_timer) = &mut state.frame_timer {
-                    frame_timer.tick(time.delta());
-                    if frame_timer.finished() {
-                        updating_frame = true;
-                        // increment+loop frame, and replace the timer with the new frame's duration
-                        // TODO: we're only looping rn.
-                        let frame_count = variant.frames.len();
-                        state.frame = (state.frame + 1) % frame_count;
+        let mut updating_frame = false;
 
-                        state.frame_timer = Some(Timer::new(variant.frames[state.frame].duration, false));
-                    }
-                } else {
-                    // must be new here. initialize the timer w/ the current
-                    // frame's duration, can start ticking on the next loop.
-                    updating_frame = true;
-                    let frame = &variant.frames[state.frame];
-                    state.frame_timer = Some(Timer::new(frame.duration, false));
-                }
+        // update the timer... or initialize it, if it's missing.
+        if let Some(frame_timer) = &mut state.frame_timer {
+            frame_timer.tick(time.delta());
+            if frame_timer.finished() {
+                updating_frame = true;
+                // increment+loop frame, and replace the timer with the new frame's duration
+                // TODO: we're only looping rn.
+                let frame_count = variant.frames.len();
+                state.frame = (state.frame + 1) % frame_count;
 
-                // ok, where was I.
-                if updating_frame {
-                    // Uh, dig into the variant and frame to see what actual
-                    // texture index we oughtta use, and set it.
-                    let frame = &variant.frames[state.frame];
-                    sprite.index = frame.index;
-                    // Also, set the origin:
-                    sprite.anchor = Anchor::Custom(frame.anchor);
-                    // Also, set the walkbox:
-                    if let Some(walkbox) = frame.walkbox {
-                        commands.entity(entity).insert(Walkbox(walkbox));
-                    } else {
-                        commands.entity(entity).remove::<Walkbox>();
-                    }
-                }
+                state.frame_timer = Some(Timer::new(variant.frames[state.frame].duration, false));
+            }
+        } else {
+            // must be new here. initialize the timer w/ the current
+            // frame's duration, can start ticking on the next loop.
+            updating_frame = true;
+            let frame = &variant.frames[state.frame];
+            state.frame_timer = Some(Timer::new(frame.duration, false));
+        }
+
+        // ok, where was I.
+        if updating_frame {
+            // Uh, dig into the variant and frame to see what actual
+            // texture index we oughtta use, and set it.
+            let frame = &variant.frames[state.frame];
+            sprite.index = frame.index;
+            // Also, set the origin:
+            sprite.anchor = Anchor::Custom(frame.anchor);
+            // Also, set the walkbox:
+            if let Some(walkbox) = frame.walkbox {
+                commands.entity(entity).insert(Walkbox(walkbox));
+            } else {
+                commands.entity(entity).remove::<Walkbox>();
             }
         }
     }
