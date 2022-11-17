@@ -474,7 +474,7 @@ fn charanm_test_set_motion_system(
     inputs: Res<crate::input::CurrentInputs>,
 ) {
     for mut motion in query.iter_mut() {
-        motion.0 = inputs.movement;
+        motion.0 = inputs.movement * -1.0;
     }
 }
 
