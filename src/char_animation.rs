@@ -10,11 +10,13 @@ use bevy::render::{
 };
 use bevy::sprite::{Rect, TextureAtlas, Anchor};
 use bevy::utils::Duration;
+use bevy_inspector_egui::egui::Key;
 use std::collections::HashMap;
 use asefile::AsepriteFile;
 use image::RgbaImage;
 
 use crate::compass::{self, Dir};
+use crate::Motion;
 use crate::Walkbox;
 
 #[derive(Debug, TypeUuid)]
@@ -66,6 +68,7 @@ impl Plugin for CharAnimationPlugin {
             .add_asset::<CharAnimation>()
             .init_asset_loader::<CharAnimationLoader>()
             .add_system(charanm_atlas_reassign_system)
+            .add_system(charanm_set_directions_system)
             .add_system(charanm_animate_system);
     }
 }
@@ -376,14 +379,12 @@ impl CharAnimationState {
     }
 }
 
-fn charanm_test_directions_system(
-    mut query: Query<&mut CharAnimationState>,
-    keys: Res<Input<KeyCode>>,
+fn charanm_set_directions_system(
+    mut query: Query<(&mut CharAnimationState, &Motion)>,
 ) {
-    let mvmt = crate::input::get_kb_movement_vector(keys);
-    if mvmt != Vec2::ZERO {
-        let dir = Dir::cardinal(mvmt);
-        for mut state in query.iter_mut() {
+    for (mut state, motion) in query.iter_mut() {
+        if motion.0 != Vec2::ZERO {
+            let dir = Dir::cardinal(motion.0);
             state.change_variant(dir);
         }
     }
@@ -467,6 +468,16 @@ fn charanm_atlas_reassign_system(
     }
 }
 
+// Follow the birdie
+fn charanm_test_set_motion_system(
+    mut query: Query<&mut Motion, With<Goofus>>,
+    inputs: Res<crate::input::CurrentInputs>,
+) {
+    for mut motion in query.iter_mut() {
+        motion.0 = inputs.movement;
+    }
+}
+
 fn charanm_test_setup_system(
     mut commands: Commands,
     asset_server: Res<AssetServer>,
@@ -477,7 +488,9 @@ fn charanm_test_setup_system(
             transform: Transform::from_translation(Vec3::new(30.0, 60.0, 3.0)),
             ..default()
         })
-        .insert(CharAnimationState::new(anim_handle, Dir::W));
+        .insert(CharAnimationState::new(anim_handle, Dir::W))
+        .insert(Motion(Vec2::ZERO))
+        .insert(Goofus);
 
     let test_texture_handle: Handle<Image> = asset_server.load("sprites/sPlayerRun.aseprite#texture");
     commands.spawn_bundle(SpriteBundle {
@@ -487,6 +500,9 @@ fn charanm_test_setup_system(
     });
 }
 
+#[derive(Component)]
+struct Goofus;
+
 
 pub struct TestCharAnimationPlugin;
 
@@ -494,6 +510,6 @@ impl Plugin for TestCharAnimationPlugin {
     fn build(&self, app: &mut App) {
         app
         .add_startup_system(charanm_test_setup_system)
-        .add_system(charanm_test_directions_system);
+        .add_system(charanm_test_set_motion_system);
     }
 }

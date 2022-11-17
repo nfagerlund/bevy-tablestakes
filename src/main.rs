@@ -157,13 +157,13 @@ fn move_player_system(
     time: Res<Time>,
     // time: Res<StaticTime>,
     // time: Res<SmoothedTime>,
-    mut player_q: Query<(&mut SubTransform, &mut MoveRemainder, &Speed, &Walkbox), With<Player>>,
+    mut player_q: Query<(&mut SubTransform, &mut Motion, &mut MoveRemainder, &Speed, &Walkbox), With<Player>>,
     solids_q: Query<(&Transform, &Walkbox), With<Solid>>,
     // ^^ Hmmmmmm probably gonna need a QuerySet later for this. In the meantime
     // I can probably get away with it temporarily.
 ) {
     // Take the chance to exit early if there's no suitable player:
-    let Ok((mut player_tf, mut move_remainder, speed, walkbox)) = player_q.get_single_mut()
+    let Ok((mut player_tf, mut motion, mut move_remainder, speed, walkbox)) = player_q.get_single_mut()
     else { // rust 1.65 baby
         println!("Zero players found! Probably missing walkbox or something.");
         return;
@@ -171,6 +171,7 @@ fn move_player_system(
 
     let delta = time.delta_seconds();
     let movement = inputs.movement;
+    motion.0 = movement;
 
     // move, maybe! TODO: multiplayer :|
     // Cribbing from this Maddy post:
@@ -308,6 +309,7 @@ fn setup_player(
 
         // --- New animation system
         .insert(CharAnimationState::new(anim_handle, Dir::E))
+        .insert(Motion(Vec2::ZERO))
 
         .insert(SubTransform{ translation: Vec3::new(0.0, 0.0, 3.0) })
         .insert(MoveRemainder(Vec2::ZERO))
@@ -328,6 +330,10 @@ pub struct Player;
 /// Speed in pixels... per... second?
 #[derive(Component)]
 struct Speed(f32);
+
+/// The intended motion for the current frame, which a variety of things might be interested in.
+#[derive(Component)]
+struct Motion(Vec2);
 
 #[derive(Component)]
 struct MoveRemainder(Vec2);
