@@ -10,7 +10,6 @@ use bevy::render::{
 };
 use bevy::sprite::{Rect, TextureAtlas, Anchor};
 use bevy::utils::Duration;
-use bevy_inspector_egui::egui::Key;
 use std::collections::HashMap;
 use asefile::AsepriteFile;
 use image::RgbaImage;
