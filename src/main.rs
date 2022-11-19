@@ -29,6 +29,7 @@ mod junk;
 mod input;
 mod char_animation;
 mod compass;
+mod player_states;
 
 const PIXEL_SCALE: f32 = 1.0;
 
@@ -329,33 +330,33 @@ pub struct Player;
 
 /// Speed in pixels... per... second?
 #[derive(Component)]
-struct Speed(f32);
+pub struct Speed(f32);
 
 /// The intended motion for the current frame, which a variety of things might be interested in.
 #[derive(Component)]
-struct Motion(Vec2);
+pub struct Motion(Vec2);
 
 #[derive(Component)]
-struct MoveRemainder(Vec2);
+pub struct MoveRemainder(Vec2);
 
 /// Additional transform component for things whose movements should be synced to hard pixel boundaries.
 #[derive(Component, Inspectable)]
-struct SubTransform {
+pub struct SubTransform {
     translation: Vec3,
 }
 
 /// BBox defining the space an entity takes up on the ground.
 #[derive(Component)]
-struct Walkbox(Rect);
+pub struct Walkbox(Rect);
 
 /// BBox defining the space where an entity can be hit by attacks.
 #[derive(Component)]
-struct Hitbox(Rect);
+pub struct Hitbox(Rect);
 // ...and then eventually I'll want Swingbox for attacks, but, tbh I have no
 // idea how to best handle that yet. Is that even a component? Or is it a larger
 // data structure associated with an animation or something?
 
-fn centered_rect(width: f32, height: f32) -> Rect {
+pub fn centered_rect(width: f32, height: f32) -> Rect {
     let min = Vec2::new(-width/2., -height/2.);
     let max = Vec2::new(width/2., height/2.);
     Rect {
@@ -364,7 +365,7 @@ fn centered_rect(width: f32, height: f32) -> Rect {
     }
 }
 
-fn bottom_centered_rect(width: f32, height: f32) -> Rect {
+pub fn bottom_centered_rect(width: f32, height: f32) -> Rect {
     let min = Vec2::new(-width/2., 0.);
     let max = Vec2::new(width/2., height);
     Rect {
@@ -384,7 +385,7 @@ pub struct AbsBBox {
 
 impl AbsBBox {
     /// Locate a rect in space, given an origin point
-    fn from_rect(rect: Rect, origin: Vec2) -> Self {
+    pub fn from_rect(rect: Rect, origin: Vec2) -> Self {
         Self {
             min: rect.min + origin,
             max: rect.max + origin,
@@ -392,7 +393,7 @@ impl AbsBBox {
     }
 
     /// Check whether an absolutely positioned bbox overlaps with another one.
-    fn collide(&self, other: Self) -> bool {
+    pub fn collide(&self, other: Self) -> bool {
         if self.min.x > other.max.x {
             // we're right of other
             false
@@ -415,7 +416,7 @@ impl AbsBBox {
 
 /// Collidable solid component... but you also need a position Vec3 and a size Vec2 from somewhere.
 #[derive(Component)]
-struct Solid;
+pub struct Solid;
 
 /// Wall bundle for tilemap walls
 #[derive(Bundle)]
