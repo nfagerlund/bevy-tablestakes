@@ -84,7 +84,7 @@ fn main() {
         .add_startup_system(setup_player)
         .add_system(new_move_player_system)
         // .add_system(charanm_test_animate_system) // in CharAnimationPlugin or somethin'
-        .add_system(dumb_move_camera_system.after(move_player_system))
+        .add_system(dumb_move_camera_system.after(new_move_player_system))
         .add_system(snap_pixel_positions_system.after(dumb_move_camera_system))
 
         // OK BYE!!!
