@@ -157,7 +157,7 @@ fn move_and_collide(
     origin: Vec2,
     movement_intent: Vec2,
     walkbox: Rect,
-    solids: Vec<AbsBBox>,
+    solids: &[AbsBBox],
 ) -> Movement {
     let mut location = origin;
     let mut collided = false;
@@ -235,7 +235,7 @@ fn new_move_player_system(
         player_tf.translation.truncate(),
         move_pixels,
         walkbox.0,
-        solids,
+        &solids,
     );
 
     // Commit it
