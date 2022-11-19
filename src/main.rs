@@ -217,6 +217,7 @@ fn new_move_player_system(
 
     let delta = time.delta_seconds();
     let move_input = inputs.movement;
+    // Publish movement intent for anyone who needs it later
     motion.0 = move_input;
 
     let solids: Vec<AbsBBox> = solids_q.iter().map(|(transform, walkbox)| {
@@ -238,7 +239,8 @@ fn new_move_player_system(
     );
 
     // Commit it
-    player_tf.translation += movement.new_location.extend(0.0);
+    player_tf.translation.x = movement.new_location.x;
+    player_tf.translation.y = movement.new_location.y;
 }
 
 fn move_player_system(
