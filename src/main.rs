@@ -82,7 +82,7 @@ fn main() {
 
         // PLAYER STUFF
         .add_startup_system(setup_player)
-        .add_system(move_player_system)
+        .add_system(new_move_player_system)
         // .add_system(charanm_test_animate_system) // in CharAnimationPlugin or somethin'
         .add_system(dumb_move_camera_system.after(move_player_system))
         .add_system(snap_pixel_positions_system.after(dumb_move_camera_system))
@@ -151,6 +151,94 @@ fn time_smoothing_system(
     } else {
         smoothed_time.delta = delta;
     }
+}
+
+fn move_and_collide(
+    origin: Vec2,
+    movement_intent: Vec2,
+    walkbox: Rect,
+    solids: Vec<AbsBBox>,
+) -> Movement {
+    let mut location = origin;
+    let mut collided = false;
+
+    let mut move_x = movement_intent.x;
+    let sign_x = move_x.signum();
+    while move_x != 0. {
+        let next_location = location + Vec2::new(sign_x, 0.0);
+        let next_box = AbsBBox::from_rect(walkbox, next_location);
+        if let None = solids.iter().find(|s| s.collide(next_box)) {
+            location.x += sign_x;
+            move_x -= sign_x;
+        } else {
+            // Hit a wall
+            collided = true;
+            break;
+        }
+    }
+    let mut move_y = movement_intent.y;
+    let sign_y = move_y.signum();
+    while move_y != 0. {
+        let next_origin = location + Vec2::new(0.0, sign_y);
+        let next_box = AbsBBox::from_rect(walkbox, next_origin);
+        if let None = solids.iter().find(|s| s.collide(next_box)) {
+            location.y += sign_y;
+            move_y -= sign_y;
+        } else {
+            // Hit a wall
+            collided = true;
+            break;
+        }
+    }
+
+    Movement {
+        collided,
+        new_location: location,
+    }
+}
+
+pub struct Movement {
+    pub collided: bool,
+    pub new_location: Vec2,
+}
+
+fn new_move_player_system(
+    inputs: Res<CurrentInputs>,
+    time: Res<Time>,
+    mut player_q: Query<(&mut SubTransform, &mut Motion, &mut MoveRemainder, &Speed, &Walkbox), With<Player>>,
+    solids_q: Query<(&Transform, &Walkbox), With<Solid>>,
+) {
+    // Take the chance to exit early if there's no suitable player:
+    let Ok((mut player_tf, mut motion, mut move_remainder, speed, walkbox)) = player_q.get_single_mut()
+    else { // rust 1.65 baby
+        println!("Zero players found! Probably missing walkbox or something.");
+        return;
+    };
+
+    let delta = time.delta_seconds();
+    let move_input = inputs.movement;
+    motion.0 = move_input;
+
+    let solids: Vec<AbsBBox> = solids_q.iter().map(|(transform, walkbox)| {
+        let origin = transform.translation.truncate();
+        AbsBBox::from_rect(walkbox.0, origin)
+    }).collect();
+
+    // Determine the actual pixel distance we're going to try to move, and stash the remainder
+    move_remainder.0 += move_input * speed.0 * delta;
+    let move_pixels = move_remainder.0.round();
+    move_remainder.0 -= move_pixels;
+
+    // See where we were actually able to move to, and what happened:
+    let movement = move_and_collide(
+        player_tf.translation.truncate(),
+        move_pixels,
+        walkbox.0,
+        solids,
+    );
+
+    // Commit it
+    player_tf.translation += movement.new_location.extend(0.0);
 }
 
 fn move_player_system(
