@@ -82,9 +82,9 @@ fn main() {
 
         // PLAYER STUFF
         .add_startup_system(setup_player)
-        .add_system(new_move_player_system)
+        .add_system(move_player_system)
         // .add_system(charanm_test_animate_system) // in CharAnimationPlugin or somethin'
-        .add_system(dumb_move_camera_system.after(new_move_player_system))
+        .add_system(dumb_move_camera_system.after(move_player_system))
         .add_system(snap_pixel_positions_system.after(dumb_move_camera_system))
 
         // OK BYE!!!
@@ -202,7 +202,7 @@ pub struct Movement {
     pub new_location: Vec2,
 }
 
-fn new_move_player_system(
+fn move_player_system(
     inputs: Res<CurrentInputs>,
     time: Res<Time>,
     mut player_q: Query<(&mut SubTransform, &mut Motion, &mut MoveRemainder, &Speed, &Walkbox), With<Player>>,
@@ -241,75 +241,6 @@ fn new_move_player_system(
     // Commit it
     player_tf.translation.x = movement.new_location.x;
     player_tf.translation.y = movement.new_location.y;
-}
-
-fn move_player_system(
-    inputs: Res<CurrentInputs>,
-    time: Res<Time>,
-    // time: Res<StaticTime>,
-    // time: Res<SmoothedTime>,
-    mut player_q: Query<(&mut SubTransform, &mut Motion, &mut MoveRemainder, &Speed, &Walkbox), With<Player>>,
-    solids_q: Query<(&Transform, &Walkbox), With<Solid>>,
-    // ^^ Hmmmmmm probably gonna need a QuerySet later for this. In the meantime
-    // I can probably get away with it temporarily.
-) {
-    // Take the chance to exit early if there's no suitable player:
-    let Ok((mut player_tf, mut motion, mut move_remainder, speed, walkbox)) = player_q.get_single_mut()
-    else { // rust 1.65 baby
-        println!("Zero players found! Probably missing walkbox or something.");
-        return;
-    };
-
-    let delta = time.delta_seconds();
-    let movement = inputs.movement;
-    motion.0 = movement;
-
-    // move, maybe! TODO: multiplayer :|
-    // Cribbing from this Maddy post:
-    // https://maddythorson.medium.com/celeste-and-towerfall-physics-d24bd2ae0fc5
-    // TODO: spatial partitioning so the list of solids isn't so stupid huge.
-    let solids: Vec<AbsBBox> = solids_q.iter().map(|(transform, walkbox)| {
-        let origin = transform.translation.truncate();
-        AbsBBox::from_rect(walkbox.0, origin)
-    }).collect();
-
-    move_remainder.0 += movement * speed.0 * delta;
-    let move_pixels = move_remainder.0.round();
-    move_remainder.0 -= move_pixels;
-
-    let mut move_x = move_pixels.x;
-    let sign_x = move_x.signum();
-    while move_x != 0. {
-        let next_loc = player_tf.translation + Vec3::new(sign_x, 0., 0.);
-        let next_origin = next_loc.truncate();
-        let next_box = AbsBBox::from_rect(walkbox.0, next_origin);
-        if let None = solids.iter().find(|s| s.collide(next_box)) {
-            player_tf.translation.x += sign_x;
-            move_x -= sign_x;
-        } else {
-            // Hit a wall, theoretically we should do something additional but for now,
-            break;
-        }
-    }
-    let mut move_y = move_pixels.y;
-    let sign_y = move_y.signum();
-    while move_y != 0. {
-        let next_loc = player_tf.translation + Vec3::new(0., sign_y, 0.);
-        let next_origin = next_loc.truncate();
-        let next_box = AbsBBox::from_rect(walkbox.0, next_origin);
-        if let None = solids.iter().find(|s| s.collide(next_box)) {
-            player_tf.translation.y += sign_y;
-            move_y -= sign_y;
-        } else {
-            // Hit a wall, theoretically we should do something additional but for now,
-            break;
-        }
-    }
-
-    // Old version of move:
-    // for (mut player_tf, speed) in player_q.iter_mut() {
-    //     player_tf.translation += (movement * speed.0 * delta).extend(0.0);
-    // }
 }
 
 fn move_camera_system(
