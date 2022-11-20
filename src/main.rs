@@ -66,6 +66,9 @@ fn main() {
         // INSPECTOR STUFF
         .add_plugin(WorldInspectorPlugin::new())
         .register_inspectable::<SubTransform>()
+        .register_inspectable::<Speed>()
+        .register_inspectable::<Walkbox>()
+        .register_inspectable::<Hitbox>()
 
         // LDTK STUFF
         .add_startup_system(setup_level)
@@ -337,7 +340,7 @@ fn setup_player(
 
         .insert(SubTransform{ translation: Vec3::new(0.0, 0.0, 3.0) })
         .insert(MoveRemainder(Vec2::ZERO))
-        .insert(Speed(120.0))
+        .insert(Speed(180.0))
         .insert(Player);
 }
 
@@ -352,7 +355,7 @@ pub struct LdtkWorld;
 pub struct Player;
 
 /// Speed in pixels... per... second?
-#[derive(Component)]
+#[derive(Component, Inspectable)]
 pub struct Speed(f32);
 
 /// The intended motion for the current frame, which a variety of things might be interested in.
@@ -369,11 +372,11 @@ pub struct SubTransform {
 }
 
 /// BBox defining the space an entity takes up on the ground.
-#[derive(Component)]
+#[derive(Component, Inspectable)]
 pub struct Walkbox(Rect);
 
 /// BBox defining the space where an entity can be hit by attacks.
-#[derive(Component)]
+#[derive(Component, Inspectable)]
 pub struct Hitbox(Rect);
 // ...and then eventually I'll want Swingbox for attacks, but, tbh I have no
 // idea how to best handle that yet. Is that even a component? Or is it a larger
