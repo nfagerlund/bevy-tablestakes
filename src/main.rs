@@ -217,8 +217,10 @@ fn move_player_system(
 
     let delta = time.delta_seconds();
     let move_input = inputs.movement;
+    let raw_movement_intent = move_input * speed.0 * delta;
+
     // Publish movement intent for anyone who needs it later
-    motion.0 = move_input;
+    motion.0 = raw_movement_intent;
 
     let solids: Vec<AbsBBox> = solids_q.iter().map(|(transform, walkbox)| {
         let origin = transform.translation.truncate();
@@ -226,7 +228,7 @@ fn move_player_system(
     }).collect();
 
     // Determine the actual pixel distance we're going to try to move, and stash the remainder
-    move_remainder.0 += move_input * speed.0 * delta;
+    move_remainder.0 += raw_movement_intent;
     let move_pixels = move_remainder.0.round();
     move_remainder.0 -= move_pixels;
 
