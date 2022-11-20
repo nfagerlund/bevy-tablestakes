@@ -9,6 +9,8 @@ use bevy::{
     render::texture::ImageSettings, // remove eventually, was added to prelude shortly after 0.8
 };
 use bevy_ecs_ldtk::prelude::*;
+use std::collections::HashMap;
+use std::ops::Deref;
 // use bevy_ecs_tilemap::prelude::*;
 use std::{
     collections::VecDeque,
@@ -208,11 +210,11 @@ pub struct Movement {
 fn move_player_system(
     inputs: Res<CurrentInputs>,
     time: Res<Time>,
-    mut player_q: Query<(&mut SubTransform, &mut Motion, &mut MoveRemainder, &Speed, &Walkbox), With<Player>>,
+    mut player_q: Query<(&mut SubTransform, &mut Motion, &mut MoveRemainder, &Speed, &Walkbox, &AnimationsMap, &mut CharAnimationState), With<Player>>,
     solids_q: Query<(&Transform, &Walkbox), With<Solid>>,
 ) {
     // Take the chance to exit early if there's no suitable player:
-    let Ok((mut player_tf, mut motion, mut move_remainder, speed, walkbox)) = player_q.get_single_mut()
+    let Ok((mut player_tf, mut motion, mut move_remainder, speed, walkbox, animations_map, mut animation_state)) = player_q.get_single_mut()
     else { // rust 1.65 baby
         println!("Zero players found! Probably missing walkbox or something.");
         return;
@@ -222,18 +224,32 @@ fn move_player_system(
     let move_input = inputs.movement;
     let raw_movement_intent = move_input * speed.0 * delta;
 
-    // Publish movement intent for anyone who needs it later
+    // Publish movement intent for anyone who needs it later (this is where
+    // sprite direction gets derived from)
     motion.0 = raw_movement_intent;
 
-    let solids: Vec<AbsBBox> = solids_q.iter().map(|(transform, walkbox)| {
-        let origin = transform.translation.truncate();
-        AbsBBox::from_rect(walkbox.0, origin)
-    }).collect();
+    // If we're not moving, stop running and bail. Right now I'm not doing
+    // change detection, so I can just do an unconditional hard assign w/ those
+    // handles...
+    if raw_movement_intent.length() == 0.0 {
+        let idle = animations_map.get("idle").unwrap().clone();
+        animation_state.change_animation(idle);
+        return;
+    }
+
+    // OK, we're running
+    let run = animations_map.get("run").unwrap().clone();
+    animation_state.change_animation(run);
 
     // Determine the actual pixel distance we're going to try to move, and stash the remainder
     move_remainder.0 += raw_movement_intent;
     let move_pixels = move_remainder.0.round();
     move_remainder.0 -= move_pixels;
+
+    let solids: Vec<AbsBBox> = solids_q.iter().map(|(transform, walkbox)| {
+        let origin = transform.translation.truncate();
+        AbsBBox::from_rect(walkbox.0, origin)
+    }).collect();
 
     // See where we were actually able to move to, and what happened:
     let movement = move_and_collide(
@@ -324,7 +340,16 @@ fn setup_player(
     mut commands: Commands,
     asset_server: Res<AssetServer>,
 ) {
-    let anim_handle: Handle<CharAnimation> = asset_server.load("sprites/sPlayerRun.aseprite");
+    let run: Handle<CharAnimation> = asset_server.load("sprites/sPlayerRun.aseprite");
+    let idle: Handle<CharAnimation> = asset_server.load("sprites/sPlayer.aseprite");
+
+    let initial_animation = idle.clone();
+
+    // Okay, I'm going to be lazy here: hashmap w/ string literals. SORRY. I'll
+    // come back to it later.
+    let mut animations: AnimationsMapInner = HashMap::new();
+    animations.insert("run", run);
+    animations.insert("idle", idle);
 
     // IT'S THE PLAYER, GIVE IT UP!!
     commands
@@ -335,8 +360,9 @@ fn setup_player(
         })
 
         // --- New animation system
-        .insert(CharAnimationState::new(anim_handle, Dir::E))
+        .insert(CharAnimationState::new(initial_animation, Dir::E))
         .insert(Motion(Vec2::ZERO))
+        .insert(AnimationsMap(animations))
 
         .insert(SubTransform{ translation: Vec3::new(0.0, 0.0, 3.0) })
         .insert(MoveRemainder(Vec2::ZERO))
@@ -345,6 +371,17 @@ fn setup_player(
 }
 
 // Structs and crap!
+
+type AnimationsMapInner = HashMap<&'static str, Handle<CharAnimation>>;
+
+#[derive(Component)]
+pub struct AnimationsMap(AnimationsMapInner);
+impl Deref for AnimationsMap {
+    type Target = AnimationsMapInner;
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
 
 /// Marker component for a spawned LdtkWorldBundle
 #[derive(Component)]
