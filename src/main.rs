@@ -366,7 +366,7 @@ fn setup_player(
 
         .insert(SubTransform{ translation: Vec3::new(0.0, 0.0, 3.0) })
         .insert(MoveRemainder(Vec2::ZERO))
-        .insert(Speed(180.0))
+        .insert(Speed(Speed::RUN))
         .insert(Player);
 }
 
@@ -394,6 +394,9 @@ pub struct Player;
 /// Speed in pixels... per... second?
 #[derive(Component, Inspectable)]
 pub struct Speed(f32);
+impl Speed {
+    const RUN: f32 = 180.0;
+}
 
 /// The intended motion for the current frame, which a variety of things might be interested in.
 #[derive(Component)]
