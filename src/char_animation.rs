@@ -66,13 +66,13 @@ impl Plugin for CharAnimationPlugin {
         app
             .add_asset::<CharAnimation>()
             .init_asset_loader::<CharAnimationLoader>()
-            // OK... app code is allowed to call change_variant and change_animation on the animation state,
-            // which impacts all of these systems, and set_directions is additionally impacted by changes to
-            // Motion. So these should run after any app code that might do that. Finally, atlas_reassign uses
-            // Commands to ...actually wait. Maybe it shouldn't.
-            .add_system(charanm_atlas_reassign_system)
-            .add_system(charanm_set_directions_system)
-            .add_system(charanm_animate_system);
+            // These systems should run after any app code that might mutate
+            // CharAnimationState or Motion. And set_directions might have
+            // mutated the animation state, so that should take effect before
+            // the main animate system.
+            .add_system_to_stage(CoreStage::PostUpdate, charanm_atlas_reassign_system)
+            .add_system_to_stage(CoreStage::PostUpdate, charanm_set_directions_system)
+            .add_system_to_stage(CoreStage::PostUpdate, charanm_animate_system.after(charanm_set_directions_system));
     }
 }
 
