@@ -1,3 +1,4 @@
+use bevy::ecs::component;
 use bevy::{
     // diagnostic::{
     //     Diagnostics,
@@ -210,7 +211,7 @@ pub struct Movement {
 fn move_player_system(
     inputs: Res<CurrentInputs>,
     time: Res<Time>,
-    mut player_q: Query<(&mut SubTransform, &mut Motion, &mut MoveRemainder, &Speed, &Walkbox, &AnimationsMap, &mut CharAnimationState), With<Player>>,
+    mut player_q: Query<(&mut SubTransform, &mut Motion, &mut MoveRemainder, &Speed, &Walkbox, &AnimationsMap, &mut CharAnimationState), (With<Player>, With<PlayerFree>)>,
     solids_q: Query<(&Transform, &Walkbox), With<Solid>>,
 ) {
     // Take the chance to exit early if there's no suitable player:
@@ -364,9 +365,13 @@ fn setup_player(
         .insert(Motion(Vec2::ZERO))
         .insert(AnimationsMap(animations))
 
+        // Initial values
         .insert(SubTransform{ translation: Vec3::new(0.0, 0.0, 3.0) })
         .insert(MoveRemainder(Vec2::ZERO))
         .insert(Speed(Speed::RUN))
+        .insert(PlayerFree)
+
+        // Remember who u are
         .insert(Player);
 }
 
@@ -382,6 +387,15 @@ impl Deref for AnimationsMap {
         &self.0
     }
 }
+
+/// Player state: freely able to move (but might be idling, idk)
+#[derive(Component)]
+#[component(storage = "SparseSet")]
+pub struct PlayerFree;
+// ^^ That SparseSet storage might be useful or might not (I haven't profiled
+// it), but this IS the specific use case it is suggested for (marker components
+// that don't contain much data, don't get iterated over en masse on the
+// regular, and get added and removed extremely frequently.)
 
 /// Marker component for a spawned LdtkWorldBundle
 #[derive(Component)]
