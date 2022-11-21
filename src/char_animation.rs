@@ -66,6 +66,10 @@ impl Plugin for CharAnimationPlugin {
         app
             .add_asset::<CharAnimation>()
             .init_asset_loader::<CharAnimationLoader>()
+            // OK... app code is allowed to call change_variant and change_animation on the animation state,
+            // which impacts all of these systems, and set_directions is additionally impacted by changes to
+            // Motion. So these should run after any app code that might do that. Finally, atlas_reassign uses
+            // Commands to ...actually wait. Maybe it shouldn't.
             .add_system(charanm_atlas_reassign_system)
             .add_system(charanm_set_directions_system)
             .add_system(charanm_animate_system);
@@ -448,22 +452,17 @@ pub fn charanm_animate_system(
 }
 
 fn charanm_atlas_reassign_system(
-    mut commands: Commands,
     animations: Res<Assets<CharAnimation>>,
-    query: Query<(Entity, &CharAnimationState, &Handle<TextureAtlas>)>,
+    mut query: Query<(&CharAnimationState, &mut Handle<TextureAtlas>)>,
 ) {
-    for (
-            entity,
-            state,
-            atlas_handle,
-        ) in query.iter() {
+    for (state, mut atlas_handle) in query.iter_mut() {
         // get the animation, get the handle off it, compare the handles, and if
-        // they don't match, issue an insert command.
+        // they don't match, replace the value.
         if let Some(animation) = animations.get(&state.animation) {
             let desired_atlas_handle = &animation.texture_atlas;
-            if desired_atlas_handle != atlas_handle {
+            if *desired_atlas_handle != *atlas_handle {
                 println!("Replacing texture handle!");
-                commands.entity(entity).insert(desired_atlas_handle.clone());
+                *atlas_handle = desired_atlas_handle.clone();
             }
         }
     }
