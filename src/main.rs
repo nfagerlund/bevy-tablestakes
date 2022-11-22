@@ -26,6 +26,7 @@ use bevy_inspector_egui::{
 use crate::input::*;
 use crate::char_animation::*;
 use crate::compass::*;
+// use crate::goofy_time::*;
 
 mod hellow;
 mod junk;
@@ -33,6 +34,7 @@ mod input;
 mod char_animation;
 mod compass;
 mod player_states;
+mod goofy_time;
 
 const PIXEL_SCALE: f32 = 1.0;
 
@@ -51,12 +53,6 @@ fn main() {
         .add_plugins(DefaultPlugins)
         .add_plugin(CharAnimationPlugin)
         .add_plugin(TestCharAnimationPlugin)
-        .insert_resource(RecentFrameTimes{ buffer: VecDeque::new() })
-        .insert_resource(SmoothedTime {
-            delta: Duration::new(0, 0),
-        })
-        .insert_resource(StaticTime)
-        // .add_system_to_stage(CoreStage::PreUpdate, time_smoothing_system)
         .add_plugin(LdtkPlugin)
 
         // NOISY DEBUG STUFF
@@ -97,33 +93,6 @@ fn main() {
         .run();
 }
 
-struct RecentFrameTimes {
-    buffer: VecDeque<Duration>,
-}
-struct SmoothedTime {
-    delta: Duration,
-}
-
-impl SmoothedTime {
-    fn delta_seconds(&self) -> f32 {
-        self.delta.as_secs_f32()
-    }
-    fn delta(&self) -> Duration {
-        self.delta
-    }
-}
-
-struct StaticTime;
-
-impl StaticTime {
-    fn delta_seconds(&self) -> f32 {
-        1./60.
-    }
-    fn delta(&self) -> Duration {
-        Duration::new(1, 0) / 60
-    }
-}
-
 fn tile_info_barfing_system(
     keys: Res<Input<KeyCode>>,
     tile_query: Query<(&IntGridCell, &GridCoords, &Transform)>,
@@ -136,26 +105,6 @@ fn tile_info_barfing_system(
         for (level, transform) in level_query.iter() {
             info!("level {:?} at {:?}", level, transform);
         }
-    }
-}
-
-// Smooth out delta time before doing anything with it. This is unoptimized, but that might not matter.
-fn time_smoothing_system(
-    time: Res<Time>,
-    mut recent_time: ResMut<RecentFrameTimes>,
-    mut smoothed_time: ResMut<SmoothedTime>,
-) {
-    let window: usize = 11;
-    let delta = time.delta();
-    recent_time.buffer.push_back(delta);
-    if recent_time.buffer.len() >= window + 1 {
-        recent_time.buffer.pop_front();
-        let mut sorted: Vec<Duration> = recent_time.buffer.clone().into();
-        sorted.sort_unstable();
-        let sum = &sorted[2..(window - 2)].iter().fold(Duration::new(0, 0), |acc, x| acc + *x);
-        smoothed_time.delta = *sum / (window as u32 - 4);
-    } else {
-        smoothed_time.delta = delta;
     }
 }
 
