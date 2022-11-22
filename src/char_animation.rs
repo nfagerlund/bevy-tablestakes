@@ -349,6 +349,21 @@ pub struct CharAnimationState {
     pub frame: usize,
     // To start with, we'll just always loop.
     pub frame_timer: Option<Timer>,
+    /// Optionally override the animation's frame timings, setting every frame
+    /// to the provided length in milliseconds. If you need frames to be
+    /// different lengths, that belongs in the animation data, not the
+    pub frame_time_override: FrameTimeOverride,
+}
+
+/// Allow programmatically overriding the frame times from the animation source
+/// data, for things like stretching out a motion to fit it to a particular
+/// total duration.
+#[derive(Debug)]
+pub enum FrameTimeOverride {
+    None,
+    Ms(u64),
+    Scale(f32),
+    TotalMs(u64),
 }
 
 impl CharAnimationState {
@@ -360,6 +375,7 @@ impl CharAnimationState {
             // at a particular frame. Doesn't matter yet tho.
             frame: 0,
             frame_timer: None,
+            frame_time_override: FrameTimeOverride::None,
         }
     }
 
@@ -369,6 +385,7 @@ impl CharAnimationState {
             self.variant = Some(variant);
             self.frame = 0;
             self.frame_timer = None;
+            self.frame_time_override = FrameTimeOverride::None;
         }
     }
 
@@ -380,7 +397,20 @@ impl CharAnimationState {
             // animation with fewer variants.
             self.frame_timer = None;
             self.frame = 0;
+            self.frame_time_override = FrameTimeOverride::None;
         }
+    }
+
+    pub fn set_frame_times_to(&mut self, millis: u64) {
+        self.frame_time_override = FrameTimeOverride::Ms(millis);
+    }
+
+    pub fn scale_frame_times_by(&mut self, scale: f32) {
+        self.frame_time_override = FrameTimeOverride::Scale(scale);
+    }
+
+    pub fn set_total_run_time_to(&mut self, millis: u64) {
+        self.frame_time_override = FrameTimeOverride::TotalMs(millis);
     }
 }
 
@@ -430,7 +460,16 @@ pub fn charanm_animate_system(
             // frame's duration, can start ticking on the next loop.
             updating_frame = true;
             let frame = &variant.frames[state.frame];
-            state.frame_timer = Some(Timer::new(frame.duration, false));
+            let duration = match state.frame_time_override {
+                FrameTimeOverride::None => frame.duration,
+                FrameTimeOverride::Ms(millis) => Duration::from_millis(millis),
+                FrameTimeOverride::Scale(scale) => frame.duration.mul_f32(scale),
+                FrameTimeOverride::TotalMs(total_millis) => {
+                    let millis = total_millis / (variant.frames.len() as u64); // nearest ms is fine
+                    Duration::from_millis(millis)
+                },
+            };
+            state.frame_timer = Some(Timer::new(duration, false));
         }
 
         // ok, where was I.
