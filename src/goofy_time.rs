@@ -27,26 +27,26 @@ impl Plugin for SmoothedTimePlugin {
 struct RecentFrameTimes {
     buffer: VecDeque<Duration>,
 }
-struct SmoothedTime {
+pub struct SmoothedTime {
     delta: Duration,
 }
 
 impl SmoothedTime {
-    fn delta_seconds(&self) -> f32 {
+    pub fn delta_seconds(&self) -> f32 {
         self.delta.as_secs_f32()
     }
-    fn delta(&self) -> Duration {
+    pub fn delta(&self) -> Duration {
         self.delta
     }
 }
 
-struct StaticTime;
+pub struct StaticTime;
 
 impl StaticTime {
-    fn delta_seconds(&self) -> f32 {
+    pub fn delta_seconds(&self) -> f32 {
         1./60.
     }
-    fn delta(&self) -> Duration {
+    pub fn delta(&self) -> Duration {
         Duration::new(1, 0) / 60
     }
 }
