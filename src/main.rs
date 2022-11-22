@@ -292,6 +292,8 @@ fn setup_player(
 ) {
     let run: Handle<CharAnimation> = asset_server.load("sprites/sPlayerRun.aseprite");
     let idle: Handle<CharAnimation> = asset_server.load("sprites/sPlayer.aseprite");
+    let hurt: Handle<CharAnimation> = asset_server.load("sprites/sPlayerHurt.aseprite");
+    let roll: Handle<CharAnimation> = asset_server.load("sprites/sPlayerRoll.aseprite");
 
     let initial_animation = idle.clone();
 
@@ -300,6 +302,8 @@ fn setup_player(
     let mut animations: AnimationsMapInner = HashMap::new();
     animations.insert("run", run);
     animations.insert("idle", idle);
+    animations.insert("hurt", hurt);
+    animations.insert("roll", roll);
 
     // IT'S THE PLAYER, GIVE IT UP!!
     commands
