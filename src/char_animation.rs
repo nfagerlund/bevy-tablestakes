@@ -418,10 +418,9 @@ fn charanm_set_directions_system(
     mut query: Query<(&mut CharAnimationState, &Motion)>,
 ) {
     for (mut state, motion) in query.iter_mut() {
-        if motion.0 != Vec2::ZERO {
-            let dir = Dir::cardinal(motion.0);
-            state.change_variant(dir);
-        }
+        // just doing this unconditionally and letting change_variant sort it out.
+        let dir = Dir::cardinal_from_angle(motion.direction);
+        state.change_variant(dir);
     }
 }
 
@@ -513,7 +512,7 @@ fn charanm_test_set_motion_system(
     inputs: Res<crate::input::CurrentInputs>,
 ) {
     for mut motion in query.iter_mut() {
-        motion.0 = inputs.movement * -1.0;
+        motion.update(inputs.movement * -1.0);
     }
 }
 
@@ -528,7 +527,7 @@ fn charanm_test_setup_system(
             ..default()
         })
         .insert(CharAnimationState::new(anim_handle, Dir::W))
-        .insert(Motion(Vec2::ZERO))
+        .insert(Motion::new(Vec2::ZERO))
         .insert(Goofus);
 
     let test_texture_handle: Handle<Image> = asset_server.load("sprites/sPlayerRun.aseprite#texture");

@@ -84,17 +84,23 @@ impl Dir {
     /// Given a Vec2, return one of the four cardinal directions or neutral.
     /// Bias towards horizontal when given an exact diagonal.
     pub fn cardinal(motion: Vec2) -> Self {
-        const NE: f32 = FRAC_PI_4;
-        const NW: f32 = 3.0 * FRAC_PI_4;
-        const SW: f32 = -3.0 * FRAC_PI_4;
-        const SE: f32 = -FRAC_PI_4;
-
         // Deal with any tricksy infinite or NaN vectors:
         let motion = motion.normalize_or_zero();
         if motion == Vec2::ZERO {
             return Self::Neutral;
         }
         let angle = Vec2::X.angle_between(motion);
+        Self::cardinal_from_angle(angle)
+    }
+
+    /// Given an angle, return one of the four cardinal directions or neutral.
+    /// Bias towards horizontal when given an exact diagonal.
+    pub fn cardinal_from_angle(angle: f32) -> Self {
+        const NE: f32 = FRAC_PI_4;
+        const NW: f32 = 3.0 * FRAC_PI_4;
+        const SW: f32 = -3.0 * FRAC_PI_4;
+        const SE: f32 = -FRAC_PI_4;
+
         if angle >= SE && angle <= NE {
             Self::E
         } else if angle > NE && angle < NW {
@@ -112,6 +118,19 @@ impl Dir {
     /// given an exact inter-intercardinal direction is ~whatever,~ bc you can't
     /// get your analog inputs exact enough to notice it.
     pub fn ordinal(motion: Vec2) -> Self {
+        // Deal with any tricksy infinite or NaN vectors:
+        let motion = motion.normalize_or_zero();
+        if motion == Vec2::ZERO {
+            return Self::Neutral;
+        }
+        let angle = Vec2::X.angle_between(motion);
+        Self::ordinal_from_angle(angle)
+    }
+
+    /// Given an angle, return one of eight directions, or neutral. Bias when
+    /// given an exact inter-intercardinal direction is ~whatever,~ bc you can't
+    /// get your analog inputs exact enough to notice it.
+    pub fn ordinal_from_angle(angle: f32) -> Self {
         const ENE: f32 = 1.0 * FRAC_PI_8;
         const NNE: f32 = 3.0 * FRAC_PI_8;
         const NNW: f32 = 5.0 * FRAC_PI_8;
@@ -120,12 +139,7 @@ impl Dir {
         const SSW: f32 = -5.0 * FRAC_PI_8;
         const SSE: f32 = -3.0 * FRAC_PI_8;
         const ESE: f32 = -1.0 * FRAC_PI_8;
-        // Deal with any tricksy infinite or NaN vectors:
-        let motion = motion.normalize_or_zero();
-        if motion == Vec2::ZERO {
-            return Self::Neutral;
-        }
-        let angle = Vec2::X.angle_between(motion);
+
         if angle > ESE && angle <= ENE {
             Self::E
         } else if angle > ENE && angle <= NNE {

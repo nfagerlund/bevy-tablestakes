@@ -176,7 +176,7 @@ fn move_player_system(
 
     // Publish movement intent for anyone who needs it later (this is where
     // sprite direction gets derived from)
-    motion.0 = raw_movement_intent;
+    motion.update(raw_movement_intent);
 
     // If we're not moving, stop running and bail. Right now I'm not doing
     // change detection, so I can just do an unconditional hard assign w/ those
@@ -315,7 +315,7 @@ fn setup_player(
 
         // --- New animation system
         .insert(CharAnimationState::new(initial_animation, Dir::E))
-        .insert(Motion(Vec2::ZERO))
+        .insert(Motion::new(Vec2::ZERO))
         .insert(AnimationsMap(animations))
 
         // Initial values
@@ -365,9 +365,32 @@ impl Speed {
     const RUN: f32 = 180.0;
 }
 
-/// The intended motion for the current frame, which a variety of things might be interested in.
+/// Information about what the entity is doing, spatially speaking.
 #[derive(Component)]
-pub struct Motion(Vec2);
+pub struct Motion {
+    /// The planned motion for the current frame, which a variety of things might be interested in.
+    pub planned_motion: Vec2,
+    /// The direction the entity is currently facing. Tracked separately because
+    /// it persists even when no motion is planned.
+    pub direction: f32,
+}
+impl Motion {
+    pub fn new(motion: Vec2) -> Self {
+        let mut thing = Self {
+            planned_motion: Vec2::ZERO,
+            direction: 0.0, // facing east on the unit circle
+        };
+        thing.update(motion);
+        thing
+    }
+
+    pub fn update(&mut self, motion: Vec2) {
+        if motion != Vec2::ZERO {
+            self.direction = Vec2::X.angle_between(motion);
+        }
+        self.planned_motion = motion;
+    }
+}
 
 #[derive(Component)]
 pub struct MoveRemainder(Vec2);
