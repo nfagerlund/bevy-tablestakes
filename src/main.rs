@@ -85,10 +85,11 @@ fn main() {
 
         // PLAYER STUFF
         .add_startup_system(setup_player)
-        .add_system(move_player_system)
-        .add_system(roll_player_system)
+        .add_system(planned_move_system)
+        .add_system(player_free_plan_move.after(planned_move_system))
+        // .add_system(roll_player_system)
         // .add_system(charanm_test_animate_system) // in CharAnimationPlugin or somethin'
-        .add_system(dumb_move_camera_system.after(move_player_system))
+        .add_system(dumb_move_camera_system.after(planned_move_system))
         .add_system(snap_pixel_positions_system.after(dumb_move_camera_system))
 
         // OK BYE!!!
@@ -110,180 +111,190 @@ fn tile_info_barfing_system(
     }
 }
 
-fn move_and_collide(
-    origin: Vec2,
-    movement_intent: Vec2,
-    walkbox: Rect,
-    solids: &[AbsBBox],
-) -> Movement {
-    let mut location = origin;
-    let mut collided = false;
-    let move_pixels = movement_intent.round();
-    let remainder = movement_intent - move_pixels;
-
-    let mut move_x = move_pixels.x;
-    let sign_x = move_x.signum();
-    while move_x != 0. {
-        let next_location = location + Vec2::new(sign_x, 0.0);
-        let next_box = AbsBBox::from_rect(walkbox, next_location);
-        if let None = solids.iter().find(|s| s.collide(next_box)) {
-            location.x += sign_x;
-            move_x -= sign_x;
-        } else {
-            // Hit a wall
-            collided = true;
-            break;
-        }
-    }
-    let mut move_y = move_pixels.y;
-    let sign_y = move_y.signum();
-    while move_y != 0. {
-        let next_origin = location + Vec2::new(0.0, sign_y);
-        let next_box = AbsBBox::from_rect(walkbox, next_origin);
-        if let None = solids.iter().find(|s| s.collide(next_box)) {
-            location.y += sign_y;
-            move_y -= sign_y;
-        } else {
-            // Hit a wall
-            collided = true;
-            break;
-        }
-    }
-
-    Movement {
-        collided,
-        new_location: location,
-        remainder,
-    }
-}
-
-pub struct Movement {
-    pub collided: bool,
-    pub new_location: Vec2,
-    /// Leftover sub-pixels of the requested motion, to be banked for later by
-    /// the caller. I'm starting to think I really don't like this whole-pixel
-    /// rounding setup, but we'll come back to that later.
-    pub remainder: Vec2,
-}
-
-fn move_player_system(
+fn player_free_plan_move(
     inputs: Res<CurrentInputs>,
     time: Res<Time>,
-    mut player_q: Query<(&mut SubTransform, &mut Motion, &mut MoveRemainder, &mut Speed, &Walkbox, &AnimationsMap, &mut CharAnimationState, &mut PlayerFree), With<Player>>,
-    solids_q: Query<(&Transform, &Walkbox), With<Solid>>,
-) {
-    // Take the chance to exit early if there's no suitable player:
-    let Ok((mut player_tf, mut motion, mut move_remainder, mut speed, walkbox, animations_map, mut animation_state, mut player_free)) = player_q.get_single_mut()
-    else { // rust 1.65 baby
-        return;
-    };
-
-    if player_free.just_started {
-        speed.0 = Speed::RUN;
-        player_free.just_started = false;
-    }
-
-    let delta = time.delta_seconds();
-    let move_input = inputs.movement;
-    let raw_movement_intent = move_input * speed.0 * delta;
-
-    // Publish movement intent for anyone who needs it later (this is where
-    // sprite direction gets derived from)
-    motion.update(raw_movement_intent);
-
-    // If we're not moving, stop running and bail. Right now I'm not doing
-    // change detection, so I can just do an unconditional hard assign w/ those
-    // handles...
-    if raw_movement_intent.length() == 0.0 {
-        // Don't hold onto sub-pixel remainders from previous move sequences once we stop
-        move_remainder.0 = Vec2::ZERO;
-        // Go idle
-        let idle = animations_map.get("idle").unwrap().clone();
-        animation_state.change_animation(idle);
-        return;
-    }
-
-    // Bring in any remainder
-    let movement_intent = raw_movement_intent + move_remainder.0;
-
-    // OK, we're running
-    let run = animations_map.get("run").unwrap().clone();
-    animation_state.change_animation(run);
-
-    let solids: Vec<AbsBBox> = solids_q.iter().map(|(transform, walkbox)| {
-        let origin = transform.translation.truncate();
-        AbsBBox::from_rect(walkbox.0, origin)
-    }).collect();
-
-    // See where we were actually able to move to, and what happened:
-    let movement = move_and_collide(
-        player_tf.translation.truncate(),
-        movement_intent,
-        walkbox.0,
-        &solids,
-    );
-
-    // Commit it
-    player_tf.translation.x = movement.new_location.x;
-    player_tf.translation.y = movement.new_location.y;
-    move_remainder.0 = movement.remainder;
-}
-
-fn roll_player_system(
-    // lol we don't actually need inputs at all
-    time: Res<Time>,
     mut player_q: Query<
-        (&mut SubTransform, &mut Motion, &mut MoveRemainder, &mut Speed, &Walkbox,
-            &mut PlayerRoll,
-            &AnimationsMap, &mut CharAnimationState),
+        (
+            &mut Motion,
+            &mut Speed,
+            &AnimationsMap,
+            &mut CharAnimationState,
+            &mut PlayerFree,
+        ),
         With<Player>
     >,
+) {
+    for (
+        mut motion,
+        mut speed,
+        animations_map,
+        mut animation_state,
+        mut player_free,
+    ) in player_q.iter_mut() {
+        if player_free.just_started {
+            speed.0 = Speed::RUN; // TODO hey what's the value here
+            player_free.just_started = false;
+        }
+
+        let delta = time.delta_seconds();
+        let move_input = inputs.movement;
+
+        if move_input.length() > 0.0 {
+            // OK, we're running
+            let run = animations_map.get("run").unwrap().clone();
+            animation_state.change_animation(run);
+        } else {
+            // Chill
+            let idle = animations_map.get("idle").unwrap().clone();
+            animation_state.change_animation(idle);
+        }
+
+        let raw_movement_intent = move_input * speed.0 * delta;
+
+        // Publish movement intent
+        motion.update_plan(raw_movement_intent);
+    }
+}
+
+fn player_free_postmove() {}
+
+/// Shared system for Moving Crap Around. Consumes a planned movement from
+/// Motion component, updates direction on same as needed, writes result to...
+fn planned_move_system(
+    mut player_q: Query<(&mut SubTransform, &mut Motion, &Walkbox), With<Player>>,
     solids_q: Query<(&Transform, &Walkbox), With<Solid>>,
 ) {
-    // Take the chance to exit early if there's no suitable player:
-    let Ok((
-        mut player_tf, mut motion, mut move_remainder,
-        mut speed, walkbox,
-        mut player_roll,
-        animations_map, mut animation_state)) = player_q.get_single_mut()
-    else { // rust 1.65 baby
-        return;
-    };
+    for (
+        mut transform,
+        mut motion,
+        walkbox,
+    ) in player_q.iter_mut() {
+        let raw_movement_intent = motion.planned;
+        motion.planned = Vec2::ZERO; // TODO should probably have this be an Option -> .take()
 
-    if player_roll.just_started {
-        let roll = animations_map.get("roll").unwrap().clone();
-        animation_state.change_animation(roll);
-        speed.0 = Speed::ROLL;
-        move_remainder.0 = Vec2::ZERO;
-        player_roll.roll_input = Vec2::from_angle(motion.direction);
-        player_roll.just_started = false;
+
+        // If we're not moving, stop running and bail. Right now I'm not doing
+        // change detection, so I can just do an unconditional hard assign w/ those
+        // handles...
+        if raw_movement_intent.length() == 0.0 {
+            // Don't hold onto sub-pixel remainders from previous move sequences once we stop
+            motion.remainder = Vec2::ZERO;
+            // No result
+            motion.result = None;
+            // Direction unchanged.
+        } else {
+            // Ok go for it!!
+
+            let mut location = transform.translation.truncate();
+            let mut collided = false;
+            // Bring in any remainder
+            let movement_intent = raw_movement_intent + motion.remainder;
+            let move_pixels = movement_intent.round();
+            let remainder = movement_intent - move_pixels;
+
+            let solids: Vec<AbsBBox> = solids_q.iter().map(|(transform, walkbox)| {
+                let origin = transform.translation.truncate();
+                AbsBBox::from_rect(walkbox.0, origin)
+            }).collect();
+
+            let mut move_x = move_pixels.x;
+            let sign_x = move_x.signum();
+            while move_x != 0. {
+                let next_location = location + Vec2::new(sign_x, 0.0);
+                let next_box = AbsBBox::from_rect(walkbox.0, next_location);
+                if let None = solids.iter().find(|s| s.collide(next_box)) {
+                    location.x += sign_x;
+                    move_x -= sign_x;
+                } else {
+                    // Hit a wall
+                    collided = true;
+                    break;
+                }
+            }
+            let mut move_y = move_pixels.y;
+            let sign_y = move_y.signum();
+            while move_y != 0. {
+                let next_origin = location + Vec2::new(0.0, sign_y);
+                let next_box = AbsBBox::from_rect(walkbox.0, next_origin);
+                if let None = solids.iter().find(|s| s.collide(next_box)) {
+                    location.y += sign_y;
+                    move_y -= sign_y;
+                } else {
+                    // Hit a wall
+                    collided = true;
+                    break;
+                }
+            }
+
+            // Commit it
+            transform.translation.x = location.x;
+            transform.translation.y = location.y;
+            motion.remainder = remainder;
+            motion.result = Some(MotionResult {
+                collided,
+                new_location: location,
+            });
+        }
     }
 
-    let delta = time.delta_seconds();
-    let raw_roll_intent = player_roll.roll_input * speed.0 * delta;
-    let roll_intent = (raw_roll_intent + move_remainder.0).clamp_length_max(player_roll.distance_remaining);
-    motion.update(roll_intent);
-
-    // Ok, let's get moving:
-    let solids: Vec<AbsBBox> = solids_q.iter().map(|(transform, walkbox)| {
-        let origin = transform.translation.truncate();
-        AbsBBox::from_rect(walkbox.0, origin)
-    }).collect();
-
-    let movement = move_and_collide(
-        player_tf.translation.truncate(),
-        roll_intent,
-        walkbox.0,
-        &solids,
-    );
-
-    // Commit it?
-    player_tf.translation.x = movement.new_location.x;
-    player_tf.translation.y = movement.new_location.y;
-    move_remainder.0 = movement.remainder;
-
-    // and HERE is where we should transition to bonk if we hit a thing
 }
+
+// fn roll_player_system(
+//     // lol we don't actually need inputs at all
+//     time: Res<Time>,
+//     mut player_q: Query<
+//         (&mut SubTransform, &mut Motion, &mut MoveRemainder, &mut Speed, &Walkbox,
+//             &mut PlayerRoll,
+//             &AnimationsMap, &mut CharAnimationState),
+//         With<Player>
+//     >,
+//     solids_q: Query<(&Transform, &Walkbox), With<Solid>>,
+// ) {
+//     // Take the chance to exit early if there's no suitable player:
+//     let Ok((
+//         mut player_tf, mut motion, mut move_remainder,
+//         mut speed, walkbox,
+//         mut player_roll,
+//         animations_map, mut animation_state)) = player_q.get_single_mut()
+//     else { // rust 1.65 baby
+//         return;
+//     };
+
+//     if player_roll.just_started {
+//         let roll = animations_map.get("roll").unwrap().clone();
+//         animation_state.change_animation(roll);
+//         speed.0 = Speed::ROLL;
+//         move_remainder.0 = Vec2::ZERO;
+//         player_roll.roll_input = Vec2::from_angle(motion.direction);
+//         player_roll.just_started = false;
+//     }
+
+//     let delta = time.delta_seconds();
+//     let raw_roll_intent = player_roll.roll_input * speed.0 * delta;
+//     let roll_intent = (raw_roll_intent + move_remainder.0).clamp_length_max(player_roll.distance_remaining);
+//     motion.update_plan(roll_intent);
+
+//     // Ok, let's get moving:
+//     let solids: Vec<AbsBBox> = solids_q.iter().map(|(transform, walkbox)| {
+//         let origin = transform.translation.truncate();
+//         AbsBBox::from_rect(walkbox.0, origin)
+//     }).collect();
+
+//     let movement = move_and_collide(
+//         player_tf.translation.truncate(),
+//         roll_intent,
+//         walkbox.0,
+//         &solids,
+//     );
+
+//     // Commit it?
+//     player_tf.translation.x = movement.new_location.x;
+//     player_tf.translation.y = movement.new_location.y;
+//     move_remainder.0 = movement.remainder;
+
+//     // and HERE is where we should transition to bonk if we hit a thing
+// }
 
 fn move_camera_system(
     time: Res<Time>,
@@ -488,27 +499,38 @@ impl Speed {
 #[derive(Component)]
 pub struct Motion {
     /// The planned motion for the current frame, which a variety of things might be interested in.
-    pub planned_motion: Vec2,
-    /// The direction the entity is currently facing. Tracked separately because
-    /// it persists even when no motion is planned.
+    pub planned: Vec2,
+    /// The direction the entity is currently facing, in radians. Tracked
+    /// separately because it persists even when no motion is planned.
     pub direction: f32,
+    pub remainder: Vec2,
+    pub result: Option<MotionResult>,
 }
 impl Motion {
     pub fn new(motion: Vec2) -> Self {
         let mut thing = Self {
-            planned_motion: Vec2::ZERO,
+            planned: Vec2::ZERO,
             direction: 0.0, // facing east on the unit circle
+            remainder: Vec2::ZERO,
+            result: None,
         };
-        thing.update(motion);
+        thing.update_plan(motion);
         thing
     }
 
-    pub fn update(&mut self, motion: Vec2) {
-        if motion != Vec2::ZERO {
+    pub fn update_plan(&mut self, motion: Vec2) {
+        if motion == Vec2::ZERO {
+            self.remainder = Vec2::ZERO;
+        } else {
             self.direction = Vec2::X.angle_between(motion);
         }
-        self.planned_motion = motion;
+        self.planned = motion;
     }
+}
+
+pub struct MotionResult {
+    pub collided: bool,
+    pub new_location: Vec2,
 }
 
 #[derive(Component)]
