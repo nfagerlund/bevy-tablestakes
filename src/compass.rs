@@ -96,10 +96,10 @@ impl Dir {
     /// Given an angle, return one of the four cardinal directions or neutral.
     /// Bias towards horizontal when given an exact diagonal.
     pub fn cardinal_from_angle(angle: f32) -> Self {
-        const NE: f32 = FRAC_PI_4;
-        const NW: f32 = 3.0 * FRAC_PI_4;
-        const SW: f32 = -3.0 * FRAC_PI_4;
-        const SE: f32 = -FRAC_PI_4;
+        const NE: f32 = FRAC_PI_4 + f32::EPSILON;
+        const NW: f32 = 3.0 * FRAC_PI_4 - f32::EPSILON;
+        const SW: f32 = -3.0 * FRAC_PI_4 + f32::EPSILON;
+        const SE: f32 = -FRAC_PI_4 - f32::EPSILON;
 
         if angle >= SE && angle <= NE {
             Self::E

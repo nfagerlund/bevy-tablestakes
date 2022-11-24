@@ -382,7 +382,6 @@ impl CharAnimationState {
     /// Change direction of animation, unless already facing the requested direction.
     pub fn change_variant(&mut self, variant: VariantName) {
         if self.variant != Some(variant) {
-            println!("changing dir: {:?}", &variant);
             self.variant = Some(variant);
             self.frame = 0;
             self.frame_timer = None;
