@@ -1,4 +1,5 @@
 use bevy::ecs::component;
+use bevy::ecs::system::Command;
 use bevy::{
     // diagnostic::{
     //     Diagnostics,
@@ -11,7 +12,7 @@ use bevy::{
 };
 use bevy_ecs_ldtk::prelude::*;
 use std::collections::HashMap;
-use std::ops::Deref;
+use std::ops::{Deref, DerefMut};
 // use bevy_ecs_tilemap::prelude::*;
 use std::{
     collections::VecDeque,
@@ -85,6 +86,7 @@ fn main() {
         // PLAYER STUFF
         .add_startup_system(setup_player)
         .add_system(move_player_system)
+        .add_system(roll_player_system)
         // .add_system(charanm_test_animate_system) // in CharAnimationPlugin or somethin'
         .add_system(dumb_move_camera_system.after(move_player_system))
         .add_system(snap_pixel_positions_system.after(dumb_move_camera_system))
@@ -116,8 +118,10 @@ fn move_and_collide(
 ) -> Movement {
     let mut location = origin;
     let mut collided = false;
+    let move_pixels = movement_intent.round();
+    let remainder = movement_intent - move_pixels;
 
-    let mut move_x = movement_intent.x;
+    let mut move_x = move_pixels.x;
     let sign_x = move_x.signum();
     while move_x != 0. {
         let next_location = location + Vec2::new(sign_x, 0.0);
@@ -131,7 +135,7 @@ fn move_and_collide(
             break;
         }
     }
-    let mut move_y = movement_intent.y;
+    let mut move_y = move_pixels.y;
     let sign_y = move_y.signum();
     while move_y != 0. {
         let next_origin = location + Vec2::new(0.0, sign_y);
@@ -149,26 +153,35 @@ fn move_and_collide(
     Movement {
         collided,
         new_location: location,
+        remainder,
     }
 }
 
 pub struct Movement {
     pub collided: bool,
     pub new_location: Vec2,
+    /// Leftover sub-pixels of the requested motion, to be banked for later by
+    /// the caller. I'm starting to think I really don't like this whole-pixel
+    /// rounding setup, but we'll come back to that later.
+    pub remainder: Vec2,
 }
 
 fn move_player_system(
     inputs: Res<CurrentInputs>,
     time: Res<Time>,
-    mut player_q: Query<(&mut SubTransform, &mut Motion, &mut MoveRemainder, &Speed, &Walkbox, &AnimationsMap, &mut CharAnimationState), (With<Player>, With<PlayerFree>)>,
+    mut player_q: Query<(&mut SubTransform, &mut Motion, &mut MoveRemainder, &mut Speed, &Walkbox, &AnimationsMap, &mut CharAnimationState, &mut PlayerFree), With<Player>>,
     solids_q: Query<(&Transform, &Walkbox), With<Solid>>,
 ) {
     // Take the chance to exit early if there's no suitable player:
-    let Ok((mut player_tf, mut motion, mut move_remainder, speed, walkbox, animations_map, mut animation_state)) = player_q.get_single_mut()
+    let Ok((mut player_tf, mut motion, mut move_remainder, mut speed, walkbox, animations_map, mut animation_state, mut player_free)) = player_q.get_single_mut()
     else { // rust 1.65 baby
-        println!("Zero players found! Probably missing walkbox or something.");
         return;
     };
+
+    if player_free.just_started {
+        speed.0 = Speed::RUN;
+        player_free.just_started = false;
+    }
 
     let delta = time.delta_seconds();
     let move_input = inputs.movement;
@@ -182,19 +195,20 @@ fn move_player_system(
     // change detection, so I can just do an unconditional hard assign w/ those
     // handles...
     if raw_movement_intent.length() == 0.0 {
+        // Don't hold onto sub-pixel remainders from previous move sequences once we stop
+        move_remainder.0 = Vec2::ZERO;
+        // Go idle
         let idle = animations_map.get("idle").unwrap().clone();
         animation_state.change_animation(idle);
         return;
     }
 
+    // Bring in any remainder
+    let movement_intent = raw_movement_intent + move_remainder.0;
+
     // OK, we're running
     let run = animations_map.get("run").unwrap().clone();
     animation_state.change_animation(run);
-
-    // Determine the actual pixel distance we're going to try to move, and stash the remainder
-    move_remainder.0 += raw_movement_intent;
-    let move_pixels = move_remainder.0.round();
-    move_remainder.0 -= move_pixels;
 
     let solids: Vec<AbsBBox> = solids_q.iter().map(|(transform, walkbox)| {
         let origin = transform.translation.truncate();
@@ -204,7 +218,7 @@ fn move_player_system(
     // See where we were actually able to move to, and what happened:
     let movement = move_and_collide(
         player_tf.translation.truncate(),
-        move_pixels,
+        movement_intent,
         walkbox.0,
         &solids,
     );
@@ -212,6 +226,63 @@ fn move_player_system(
     // Commit it
     player_tf.translation.x = movement.new_location.x;
     player_tf.translation.y = movement.new_location.y;
+    move_remainder.0 = movement.remainder;
+}
+
+fn roll_player_system(
+    // lol we don't actually need inputs at all
+    time: Res<Time>,
+    mut player_q: Query<
+        (&mut SubTransform, &mut Motion, &mut MoveRemainder, &mut Speed, &Walkbox,
+            &mut PlayerRoll,
+            &AnimationsMap, &mut CharAnimationState),
+        With<Player>
+    >,
+    solids_q: Query<(&Transform, &Walkbox), With<Solid>>,
+) {
+    // Take the chance to exit early if there's no suitable player:
+    let Ok((
+        mut player_tf, mut motion, mut move_remainder,
+        mut speed, walkbox,
+        mut player_roll,
+        animations_map, mut animation_state)) = player_q.get_single_mut()
+    else { // rust 1.65 baby
+        return;
+    };
+
+    if player_roll.just_started {
+        let roll = animations_map.get("roll").unwrap().clone();
+        animation_state.change_animation(roll);
+        speed.0 = Speed::ROLL;
+        move_remainder.0 = Vec2::ZERO;
+        player_roll.roll_input = Vec2::from_angle(motion.direction);
+        player_roll.just_started = false;
+    }
+
+    let delta = time.delta_seconds();
+    let raw_roll_intent = player_roll.roll_input * speed.0 * delta;
+    let roll_intent = (raw_roll_intent + move_remainder.0).clamp_length_max(player_roll.distance_remaining);
+    motion.update(roll_intent);
+
+    // Ok, let's get moving:
+    let solids: Vec<AbsBBox> = solids_q.iter().map(|(transform, walkbox)| {
+        let origin = transform.translation.truncate();
+        AbsBBox::from_rect(walkbox.0, origin)
+    }).collect();
+
+    let movement = move_and_collide(
+        player_tf.translation.truncate(),
+        roll_intent,
+        walkbox.0,
+        &solids,
+    );
+
+    // Commit it?
+    player_tf.translation.x = movement.new_location.x;
+    player_tf.translation.y = movement.new_location.y;
+    move_remainder.0 = movement.remainder;
+
+    // and HERE is where we should transition to bonk if we hit a thing
 }
 
 fn move_camera_system(
@@ -322,7 +393,10 @@ fn setup_player(
         .insert(SubTransform{ translation: Vec3::new(0.0, 0.0, 3.0) })
         .insert(MoveRemainder(Vec2::ZERO))
         .insert(Speed(Speed::RUN))
-        .insert(PlayerFree)
+
+        // Gameplay state crap
+        .insert(StateQueue::default())
+        .insert(PlayerFree { just_started: true })
 
         // Remember who u are
         .insert(Player);
@@ -341,14 +415,57 @@ impl Deref for AnimationsMap {
     }
 }
 
+/// Keepin' it stupid: Right now we're just going to treat this as a way to add
+/// commands later, so we can preserve current sync-boundary-like behavior post
+/// stageless. But we might need to get more sophisticated later, idk.
+#[derive(Component, Default)]
+pub struct StateQueue(Vec<Box<dyn Command>>);
+impl Deref for StateQueue {
+    type Target = Vec<Box<dyn Command>>;
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+impl DerefMut for StateQueue {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+
 /// Player state: freely able to move (but might be idling, idk)
 #[derive(Component)]
 #[component(storage = "SparseSet")]
-pub struct PlayerFree;
+pub struct PlayerFree {
+    pub just_started: bool,
+}
 // ^^ That SparseSet storage might be useful or might not (I haven't profiled
 // it), but this IS the specific use case it is suggested for (marker components
 // that don't contain much data, don't get iterated over en masse on the
 // regular, and get added and removed extremely frequently.)
+/// Player state: rollin at the speed of sound
+#[derive(Component)]
+#[component(storage = "SparseSet")]
+pub struct PlayerRoll {
+    pub distance_remaining: f32,
+    pub just_started: bool,
+    pub roll_input: Vec2,
+}
+impl PlayerRoll {
+    const DISTANCE: f32 = 52.0;
+
+    pub fn new() -> Self {
+        PlayerRoll {
+            distance_remaining: Self::DISTANCE,
+            just_started: true,
+            roll_input: Vec2::ZERO,
+        }
+    }
+}
+/// Player state: bonkin'
+#[derive(Component)]
+#[component(storage = "SparseSet")]
+pub struct PlayerBonk;
+
 
 /// Marker component for a spawned LdtkWorldBundle
 #[derive(Component)]
@@ -362,7 +479,9 @@ pub struct Player;
 #[derive(Component, Inspectable)]
 pub struct Speed(f32);
 impl Speed {
-    const RUN: f32 = 180.0;
+    const RUN: f32 = 150.0;
+    const ROLL: f32 = 180.0;
+    const BONK: f32 = 60.0;
 }
 
 /// Information about what the entity is doing, spatially speaking.
