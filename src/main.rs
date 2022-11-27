@@ -294,6 +294,18 @@ fn player_roll_plan_move(
     }
 }
 
+fn player_state_transition_system(
+    commands: Commands,
+    mut player_q: Query<&mut StateQueue>, // wait is that all??
+) {
+    for mut queue in player_q.iter_mut() {
+        for cmd in queue.drain(0..) {
+            commands.add(cmd.into_inner());
+            // OMFG. OK. one, gotta call into_inner as an assoc' function on Box, not a method. Two, it's nightly. feck! Three!!! you can't GET the inner value out directly into a stack variable, because its type has been forgotten for dynamic dispatch purposes! Ok, time to re-read that  fish people code and see what I can extract here. wow!!!!!
+        }
+    }
+}
+
 fn move_camera_system(
     time: Res<Time>,
     // time: Res<StaticTime>,
