@@ -89,6 +89,7 @@ fn main() {
         .add_system(planned_move_system)
         .add_system(player_free_plan_move.before(planned_move_system))
         .add_system(player_roll_plan_move.before(planned_move_system))
+        .add_system_to_stage(CoreStage::PostUpdate, player_roll_out)
         // .add_system(charanm_test_animate_system) // in CharAnimationPlugin or somethin'
         .add_system(dumb_move_camera_system.after(planned_move_system))
         .add_system(snap_pixel_positions_system.after(dumb_move_camera_system))
@@ -243,7 +244,7 @@ fn planned_move_system(
 
 fn player_roll_plan_move(
     mut player_q: Query<
-        (Entity, &mut Motion, &mut Speed, &AnimationsMap, &mut CharAnimationState, &mut PlayerRoll, &mut StateQueue),
+        (&mut Motion, &mut Speed, &AnimationsMap, &mut CharAnimationState, &mut PlayerRoll),
         With<Player>
     >,
     time: Res<Time>,
@@ -252,7 +253,7 @@ fn player_roll_plan_move(
     // Motion struct, and oh wait, also mess with the animation timings.
     // I guess first things first:
 
-    for (entity, mut motion, mut speed, animations_map, mut animation_state, mut player_roll, mut state_queue) in player_q.iter_mut() {
+    for (mut motion, mut speed, animations_map, mut animation_state, mut player_roll) in player_q.iter_mut() {
         if player_roll.just_started {
             player_roll.just_started = false;
             speed.0 = Speed::ROLL;
@@ -272,36 +273,25 @@ fn player_roll_plan_move(
 
         if player_roll.distance_remaining <= 0.0 {
             // Roll came to natural end and we want to transition to free.
-            // except actually, we need a case to transition to bonk if we hit
-            // something, and we won't know that until after the planned motion
-            // system, so maybe we should handle all the transitions out during
-            // that third post-move system. Anyway, we can't transition at all
-            // yet. Let's start without bonk for now, and then we can just sort
-            // it out here.
-            let ins_cmd = Insert {
-                entity,
-                component: PlayerFree::new(),
-            };
-            let rem_cmd = Remove::<PlayerRoll> {
-                entity,
-                phantom: PhantomData,
-            };
-            state_queue.push(Box::new(ins_cmd));
-            state_queue.push(Box::new(rem_cmd));
-            // Okay!!! that was awkward!!! need some ergonomics in here!
-            // but uh, first let's see if it even works.
+            // Bonk transition has to shake out post-move in another system, but for now:
+            player_roll.transition = PlayerRollTransition::Free(PlayerFree::new());
         }
     }
 }
 
-fn player_state_transition_system(
-    commands: Commands,
-    mut player_q: Query<&mut StateQueue>, // wait is that all??
+fn player_roll_out(
+    mut commands: Commands,
+    mut player_q: Query<(Entity, &PlayerRoll), With<Player>>,
 ) {
-    for mut queue in player_q.iter_mut() {
-        for cmd in queue.drain(0..) {
-            commands.add(cmd.into_inner());
-            // OMFG. OK. one, gotta call into_inner as an assoc' function on Box, not a method. Two, it's nightly. feck! Three!!! you can't GET the inner value out directly into a stack variable, because its type has been forgotten for dynamic dispatch purposes! Ok, time to re-read that  fish people code and see what I can extract here. wow!!!!!
+    for (entity, player_roll) in player_q.iter_mut() {
+        match &player_roll.transition {
+            PlayerRollTransition::None => (),
+            PlayerRollTransition::Bonk(_) => (),
+            PlayerRollTransition::Free(free) => {
+                commands.entity(entity)
+                    .remove::<PlayerRoll>()
+                    .insert(free.clone());
+            },
         }
     }
 }
@@ -454,7 +444,7 @@ impl DerefMut for StateQueue {
 }
 
 /// Player state: freely able to move (but might be idling, idk)
-#[derive(Component)]
+#[derive(Component, Clone)]
 #[component(storage = "SparseSet")]
 pub struct PlayerFree {
     pub just_started: bool,
@@ -469,7 +459,7 @@ impl PlayerFree {
 // that don't contain much data, don't get iterated over en masse on the
 // regular, and get added and removed extremely frequently.)
 /// Player state: rollin at the speed of sound
-#[derive(Component)]
+#[derive(Component, Clone)]
 #[component(storage = "SparseSet")]
 pub struct PlayerRoll {
     pub distance_remaining: f32,
@@ -477,6 +467,13 @@ pub struct PlayerRoll {
     /// The "player input" equivalent to use when planning motion; a length-1.0
     /// vector locked to the direction we were facing when starting our roll.
     pub roll_input: Vec2,
+    pub transition: PlayerRollTransition,
+}
+#[derive(Clone)]
+pub enum PlayerRollTransition {
+    None,
+    Bonk(PlayerBonk),
+    Free(PlayerFree),
 }
 impl PlayerRoll {
     const DISTANCE: f32 = 52.0;
@@ -486,11 +483,12 @@ impl PlayerRoll {
             distance_remaining: Self::DISTANCE,
             just_started: true,
             roll_input: Vec2::from_angle(direction),
+            transition: PlayerRollTransition::None,
         }
     }
 }
 /// Player state: bonkin'
-#[derive(Component)]
+#[derive(Component, Clone)]
 #[component(storage = "SparseSet")]
 pub struct PlayerBonk;
 
