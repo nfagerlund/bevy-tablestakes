@@ -87,7 +87,7 @@ fn main() {
         .add_startup_system(setup_player)
         .add_system(planned_move_system)
         .add_system(player_free_plan_move.before(planned_move_system))
-        // .add_system(roll_player_system)
+        .add_system(player_roll_plan_move.before(planned_move_system))
         // .add_system(charanm_test_animate_system) // in CharAnimationPlugin or somethin'
         .add_system(dumb_move_camera_system.after(planned_move_system))
         .add_system(snap_pixel_positions_system.after(dumb_move_camera_system))
@@ -240,61 +240,44 @@ fn planned_move_system(
 
 }
 
-// fn roll_player_system(
-//     // lol we don't actually need inputs at all
-//     time: Res<Time>,
-//     mut player_q: Query<
-//         (&mut SubTransform, &mut Motion, &mut MoveRemainder, &mut Speed, &Walkbox,
-//             &mut PlayerRoll,
-//             &AnimationsMap, &mut CharAnimationState),
-//         With<Player>
-//     >,
-//     solids_q: Query<(&Transform, &Walkbox), With<Solid>>,
-// ) {
-//     // Take the chance to exit early if there's no suitable player:
-//     let Ok((
-//         mut player_tf, mut motion, mut move_remainder,
-//         mut speed, walkbox,
-//         mut player_roll,
-//         animations_map, mut animation_state)) = player_q.get_single_mut()
-//     else { // rust 1.65 baby
-//         return;
-//     };
+fn player_roll_plan_move(
+    mut player_q: Query<
+        (&mut Motion, &mut Speed, &AnimationsMap, &mut CharAnimationState, &mut PlayerRoll),
+        With<Player>
+    >,
+    time: Res<Time>,
+) {
+    // OK great, so... we just need to plan our motion and encode it in the
+    // Motion struct, and oh wait, also mess with the animation timings.
+    // I guess first things first:
 
-//     if player_roll.just_started {
-//         let roll = animations_map.get("roll").unwrap().clone();
-//         animation_state.change_animation(roll);
-//         speed.0 = Speed::ROLL;
-//         move_remainder.0 = Vec2::ZERO;
-//         player_roll.roll_input = Vec2::from_angle(motion.direction);
-//         player_roll.just_started = false;
-//     }
+    for (mut motion, mut speed, animations_map, mut animation_state, mut player_roll) in player_q.iter_mut() {
+        if player_roll.just_started {
+            player_roll.just_started = false;
+            speed.0 = Speed::ROLL;
+            let roll = animations_map.get("roll").unwrap().clone();
+            animation_state.change_animation(roll);
+            motion.remainder = Vec2::ZERO; // HMM, actually not 100% sure about that. Well anyway!!
+        }
 
-//     let delta = time.delta_seconds();
-//     let raw_roll_intent = player_roll.roll_input * speed.0 * delta;
-//     let roll_intent = (raw_roll_intent + move_remainder.0).clamp_length_max(player_roll.distance_remaining);
-//     motion.update_plan(roll_intent);
+        let delta = time.delta_seconds();
+        let raw_movement_intent = player_roll.roll_input * speed.0 * delta;
+        let movement_intent = raw_movement_intent.clamp_length_max(player_roll.distance_remaining);
 
-//     // Ok, let's get moving:
-//     let solids: Vec<AbsBBox> = solids_q.iter().map(|(transform, walkbox)| {
-//         let origin = transform.translation.truncate();
-//         AbsBBox::from_rect(walkbox.0, origin)
-//     }).collect();
+        motion.update_plan(movement_intent);
+        player_roll.distance_remaining -= movement_intent.length();
+        // ^^ You know, it occurs to me we could chip away at a long vector
+        // instead. Not actually sure which is nicer yet!
 
-//     let movement = move_and_collide(
-//         player_tf.translation.truncate(),
-//         roll_intent,
-//         walkbox.0,
-//         &solids,
-//     );
-
-//     // Commit it?
-//     player_tf.translation.x = movement.new_location.x;
-//     player_tf.translation.y = movement.new_location.y;
-//     move_remainder.0 = movement.remainder;
-
-//     // and HERE is where we should transition to bonk if we hit a thing
-// }
+        if player_roll.distance_remaining <= 0.0 {
+            // Roll came to natural end and we want to transition to free.
+            // except actually, we need a case to transition to bonk if we hit
+            // something, and we won't know that until after the planned motion
+            // system, so maybe we should handle all the transitions out during
+            // that third post-move system. Anyway, we can't transition at all yet.
+        }
+    }
+}
 
 fn move_camera_system(
     time: Res<Time>,
@@ -458,16 +441,18 @@ pub struct PlayerFree {
 pub struct PlayerRoll {
     pub distance_remaining: f32,
     pub just_started: bool,
+    /// The "player input" equivalent to use when planning motion; a length-1.0
+    /// vector locked to the direction we were facing when starting our roll.
     pub roll_input: Vec2,
 }
 impl PlayerRoll {
     const DISTANCE: f32 = 52.0;
 
-    pub fn new() -> Self {
+    pub fn new(direction: f32) -> Self {
         PlayerRoll {
             distance_remaining: Self::DISTANCE,
             just_started: true,
-            roll_input: Vec2::ZERO,
+            roll_input: Vec2::from_angle(direction),
         }
     }
 }
