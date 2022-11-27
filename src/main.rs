@@ -86,7 +86,7 @@ fn main() {
         // PLAYER STUFF
         .add_startup_system(setup_player)
         .add_system(planned_move_system)
-        .add_system(player_free_plan_move.after(planned_move_system))
+        .add_system(player_free_plan_move.before(planned_move_system))
         // .add_system(roll_player_system)
         // .add_system(charanm_test_animate_system) // in CharAnimationPlugin or somethin'
         .add_system(dumb_move_camera_system.after(planned_move_system))
