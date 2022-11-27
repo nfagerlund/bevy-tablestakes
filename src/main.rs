@@ -162,14 +162,14 @@ fn player_free_postmove() {}
 /// Shared system for Moving Crap Around. Consumes a planned movement from
 /// Motion component, updates direction on same as needed, writes result to...
 fn planned_move_system(
-    mut player_q: Query<(&mut SubTransform, &mut Motion, &Walkbox), With<Player>>,
+    mut mover_q: Query<(&mut SubTransform, &mut Motion, &Walkbox), With<Player>>,
     solids_q: Query<(&Transform, &Walkbox), With<Solid>>,
 ) {
     for (
         mut transform,
         mut motion,
         walkbox,
-    ) in player_q.iter_mut() {
+    ) in mover_q.iter_mut() {
         let raw_movement_intent = motion.planned;
         motion.planned = Vec2::ZERO; // TODO should probably have this be an Option -> .take()
 
@@ -402,7 +402,6 @@ fn setup_player(
 
         // Initial values
         .insert(SubTransform{ translation: Vec3::new(0.0, 0.0, 3.0) })
-        .insert(MoveRemainder(Vec2::ZERO))
         .insert(Speed(Speed::RUN))
 
         // Gameplay state crap
@@ -532,9 +531,6 @@ pub struct MotionResult {
     pub collided: bool,
     pub new_location: Vec2,
 }
-
-#[derive(Component)]
-pub struct MoveRemainder(Vec2);
 
 /// Additional transform component for things whose movements should be synced to hard pixel boundaries.
 #[derive(Component, Inspectable)]
