@@ -1,5 +1,5 @@
 use bevy::ecs::component;
-use bevy::ecs::system::Command;
+use bevy::ecs::system::{Command, Insert, Remove};
 use bevy::{
     // diagnostic::{
     //     Diagnostics,
@@ -12,6 +12,7 @@ use bevy::{
 };
 use bevy_ecs_ldtk::prelude::*;
 use std::collections::HashMap;
+use std::marker::PhantomData;
 use std::ops::{Deref, DerefMut};
 // use bevy_ecs_tilemap::prelude::*;
 use std::{
@@ -242,7 +243,7 @@ fn planned_move_system(
 
 fn player_roll_plan_move(
     mut player_q: Query<
-        (&mut Motion, &mut Speed, &AnimationsMap, &mut CharAnimationState, &mut PlayerRoll),
+        (Entity, &mut Motion, &mut Speed, &AnimationsMap, &mut CharAnimationState, &mut PlayerRoll, &mut StateQueue),
         With<Player>
     >,
     time: Res<Time>,
@@ -251,7 +252,7 @@ fn player_roll_plan_move(
     // Motion struct, and oh wait, also mess with the animation timings.
     // I guess first things first:
 
-    for (mut motion, mut speed, animations_map, mut animation_state, mut player_roll) in player_q.iter_mut() {
+    for (entity, mut motion, mut speed, animations_map, mut animation_state, mut player_roll, mut state_queue) in player_q.iter_mut() {
         if player_roll.just_started {
             player_roll.just_started = false;
             speed.0 = Speed::ROLL;
@@ -274,7 +275,21 @@ fn player_roll_plan_move(
             // except actually, we need a case to transition to bonk if we hit
             // something, and we won't know that until after the planned motion
             // system, so maybe we should handle all the transitions out during
-            // that third post-move system. Anyway, we can't transition at all yet.
+            // that third post-move system. Anyway, we can't transition at all
+            // yet. Let's start without bonk for now, and then we can just sort
+            // it out here.
+            let ins_cmd = Insert {
+                entity,
+                component: PlayerFree::new(),
+            };
+            let rem_cmd = Remove::<PlayerRoll> {
+                entity,
+                phantom: PhantomData,
+            };
+            state_queue.push(Box::new(ins_cmd));
+            state_queue.push(Box::new(rem_cmd));
+            // Okay!!! that was awkward!!! need some ergonomics in here!
+            // but uh, first let's see if it even works.
         }
     }
 }
@@ -389,7 +404,8 @@ fn setup_player(
 
         // Gameplay state crap
         .insert(StateQueue::default())
-        .insert(PlayerFree { just_started: true })
+        // .insert(PlayerFree { just_started: true })
+        .insert(PlayerRoll::new(0.785))
 
         // Remember who u are
         .insert(Player);
@@ -430,6 +446,11 @@ impl DerefMut for StateQueue {
 #[component(storage = "SparseSet")]
 pub struct PlayerFree {
     pub just_started: bool,
+}
+impl PlayerFree {
+    fn new() -> Self {
+        PlayerFree { just_started: true }
+    }
 }
 // ^^ That SparseSet storage might be useful or might not (I haven't profiled
 // it), but this IS the specific use case it is suggested for (marker components
