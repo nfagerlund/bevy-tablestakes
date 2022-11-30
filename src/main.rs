@@ -1,11 +1,9 @@
-use bevy::ecs::component;
-use bevy::ecs::system::{Command, Insert, Remove};
 use bevy::{
-    // diagnostic::{
-    //     Diagnostics,
-    //     FrameTimeDiagnosticsPlugin
-    // },
     prelude::*,
+    ecs::{
+        component,
+        system::{Command, Insert, Remove}
+    },
     utils::Duration,
     sprite::Rect,
     render::texture::ImageSettings, // remove eventually, was added to prelude shortly after 0.8
