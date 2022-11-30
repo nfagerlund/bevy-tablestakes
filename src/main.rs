@@ -89,6 +89,7 @@ fn main() {
         .add_system(player_free_plan_move.before(planned_move_system))
         .add_system(player_roll_plan_move.before(planned_move_system))
         .add_system_to_stage(CoreStage::PostUpdate, player_roll_out)
+        .add_system_to_stage(CoreStage::PostUpdate, player_free_out)
         // .add_system(charanm_test_animate_system) // in CharAnimationPlugin or somethin'
         .add_system(dumb_move_camera_system.after(planned_move_system))
         .add_system(snap_pixel_positions_system.after(dumb_move_camera_system))
@@ -155,10 +156,30 @@ fn player_free_plan_move(
 
         // Publish movement intent
         motion.update_plan(raw_movement_intent);
+
+        // OK, that's movement. Are we doing anything else this frame? For example, an action?
+        if inputs.actioning {
+            // Right now there is only roll.
+            player_free.transition = PlayerFreeTransition::Roll { direction: motion.direction };
+        }
     }
 }
 
-fn player_free_postmove() {}
+fn player_free_out(
+    mut commands: Commands,
+    player_q: Query<(Entity, &PlayerFree)>,
+) {
+    for (entity, player_roll) in player_q.iter() {
+        match &player_roll.transition {
+            PlayerFreeTransition::None => (),
+            PlayerFreeTransition::Roll { direction } => {
+                commands.entity(entity)
+                    .remove::<PlayerFree>()
+                    .insert(PlayerRoll::new(*direction));
+            },
+        }
+    }
+}
 
 /// Shared system for Moving Crap Around. Consumes a planned movement from
 /// Motion component, updates direction on same as needed, writes result to...
@@ -523,7 +544,7 @@ pub struct Player;
 #[derive(Component, Inspectable)]
 pub struct Speed(f32);
 impl Speed {
-    const RUN: f32 = 150.0;
+    const RUN: f32 = 120.0;
     const ROLL: f32 = 180.0;
     const BONK: f32 = 60.0;
 }
