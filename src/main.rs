@@ -280,16 +280,17 @@ fn player_roll_plan_move(
 
 fn player_roll_out(
     mut commands: Commands,
-    mut player_q: Query<(Entity, &PlayerRoll), With<Player>>,
+    mut player_q: Query<(Entity, &mut PlayerRoll), With<Player>>,
 ) {
-    for (entity, player_roll) in player_q.iter_mut() {
-        match &player_roll.transition {
+    for (entity, mut player_roll) in player_q.iter_mut() {
+        let transition = std::mem::take(&mut player_roll.transition);
+        match transition {
             PlayerRollTransition::None => (),
             PlayerRollTransition::Bonk(_) => (),
             PlayerRollTransition::Free(free) => {
                 commands.entity(entity)
                     .remove::<PlayerRoll>()
-                    .insert(free.clone());
+                    .insert(free);
             },
         }
     }
@@ -473,6 +474,11 @@ pub enum PlayerRollTransition {
     None,
     Bonk(PlayerBonk),
     Free(PlayerFree),
+}
+impl Default for PlayerRollTransition {
+    fn default() -> Self {
+        Self::None
+    }
 }
 impl PlayerRoll {
     const DISTANCE: f32 = 52.0;
