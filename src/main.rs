@@ -448,10 +448,24 @@ impl DerefMut for StateQueue {
 #[component(storage = "SparseSet")]
 pub struct PlayerFree {
     pub just_started: bool,
+    pub transition: PlayerFreeTransition,
 }
 impl PlayerFree {
     fn new() -> Self {
-        PlayerFree { just_started: true }
+        PlayerFree {
+            just_started: true,
+            transition: PlayerFreeTransition::None,
+        }
+    }
+}
+#[derive(Clone)]
+pub enum PlayerFreeTransition {
+    None,
+    Roll(PlayerRoll),
+}
+impl Default for PlayerFreeTransition {
+    fn default() -> Self {
+        Self::None
     }
 }
 // ^^ That SparseSet storage might be useful or might not (I haven't profiled
