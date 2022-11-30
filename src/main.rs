@@ -280,9 +280,9 @@ fn player_roll_plan_move(
 
 fn player_roll_out(
     mut commands: Commands,
-    mut player_q: Query<(Entity, &PlayerRoll), With<Player>>,
+    player_q: Query<(Entity, &PlayerRoll), With<Player>>,
 ) {
-    for (entity, player_roll) in player_q.iter_mut() {
+    for (entity, player_roll) in player_q.iter() {
         match &player_roll.transition {
             PlayerRollTransition::None => (),
             PlayerRollTransition::Bonk => (),
