@@ -7,6 +7,7 @@ use bevy::prelude::*;
 #[derive(Default)]
 pub struct CurrentInputs {
     pub movement: Vec2,
+    pub actioning: bool,
 }
 
 /// Resource for storing the active gamepad
@@ -25,7 +26,7 @@ pub fn get_gamepad_movement_vector(gamepad: Gamepad, axes: Res<Axis<GamepadAxis>
 }
 
 /// helper function: forward keycodes to it, get a vec back.
-pub fn get_kb_movement_vector(keys: Res<Input<KeyCode>>) -> Vec2 {
+pub fn get_kb_movement_vector(keys: &Res<Input<KeyCode>>) -> Vec2 {
     let mut x = 0f32;
     let mut y = 0f32;
     if keys.pressed(KeyCode::Left) {
@@ -114,11 +115,14 @@ pub fn accept_input_system(
             if mvmt.length() > 0.0 {
                 mvmt
             } else {
-                get_kb_movement_vector(keys)
+                get_kb_movement_vector(&keys)
             }
         },
-        None => get_kb_movement_vector(keys),
+        None => get_kb_movement_vector(&keys),
     };
     // ok cool
     inputs.movement = movement;
+
+    // How about action button? Start w/ just keyboard to get basics working.
+    inputs.actioning = keys.just_pressed(KeyCode::Space);
 }
