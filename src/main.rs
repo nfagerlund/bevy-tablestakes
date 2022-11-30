@@ -273,24 +273,23 @@ fn player_roll_plan_move(
         if player_roll.distance_remaining <= 0.0 {
             // Roll came to natural end and we want to transition to free.
             // Bonk transition has to shake out post-move in another system, but for now:
-            player_roll.transition = PlayerRollTransition::Free(PlayerFree::new());
+            player_roll.transition = PlayerRollTransition::Free;
         }
     }
 }
 
 fn player_roll_out(
     mut commands: Commands,
-    mut player_q: Query<(Entity, &mut PlayerRoll), With<Player>>,
+    mut player_q: Query<(Entity, &PlayerRoll), With<Player>>,
 ) {
-    for (entity, mut player_roll) in player_q.iter_mut() {
-        let transition = std::mem::take(&mut player_roll.transition);
-        match transition {
+    for (entity, player_roll) in player_q.iter_mut() {
+        match &player_roll.transition {
             PlayerRollTransition::None => (),
-            PlayerRollTransition::Bonk(_) => (),
-            PlayerRollTransition::Free(free) => {
+            PlayerRollTransition::Bonk => (),
+            PlayerRollTransition::Free => {
                 commands.entity(entity)
                     .remove::<PlayerRoll>()
-                    .insert(free);
+                    .insert(PlayerFree::new());
             },
         }
     }
@@ -461,7 +460,7 @@ impl PlayerFree {
 #[derive(Clone)]
 pub enum PlayerFreeTransition {
     None,
-    Roll(PlayerRoll),
+    Roll { direction: f32 },
 }
 impl Default for PlayerFreeTransition {
     fn default() -> Self {
@@ -486,8 +485,8 @@ pub struct PlayerRoll {
 #[derive(Clone)]
 pub enum PlayerRollTransition {
     None,
-    Bonk(PlayerBonk),
-    Free(PlayerFree),
+    Bonk,
+    Free,
 }
 impl Default for PlayerRollTransition {
     fn default() -> Self {
