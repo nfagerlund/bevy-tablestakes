@@ -4,6 +4,7 @@ use bevy::{
         component,
         system::{Command, Insert, Remove}
     },
+    input::InputSystem,
     utils::Duration,
     sprite::Rect,
     render::texture::ImageSettings, // remove eventually, was added to prelude shortly after 0.8
@@ -80,7 +81,7 @@ fn main() {
         // INPUT STUFF
         .add_system(connect_gamepads_system)
         .insert_resource(CurrentInputs::default())
-        .add_system_to_stage(CoreStage::PreUpdate, accept_input_system)
+        .add_system_to_stage(CoreStage::PreUpdate, accept_input_system.after(InputSystem))
 
         // PLAYER STUFF
         .add_startup_system(setup_player)
