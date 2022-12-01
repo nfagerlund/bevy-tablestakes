@@ -279,6 +279,11 @@ fn player_roll_plan_move(
             speed.0 = Speed::ROLL;
             let roll = animations_map.get("roll").unwrap().clone();
             animation_state.change_animation(roll);
+            // Scale the animation to match the configured roll distance/speed:
+            let roll_duration_millis = (player_roll.distance_remaining / speed.0 * 1000.0) as u64;
+            animation_state.set_total_run_time_to(roll_duration_millis);
+
+            // Re-set the motion remainder because we're doing a different kind of motion now:
             motion.remainder = Vec2::ZERO; // HMM, actually not 100% sure about that. Well anyway!!
         }
 
