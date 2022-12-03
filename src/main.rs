@@ -481,7 +481,7 @@ fn debug_walkboxes_system(
             let center = walkbox.0.min + size / 2.0;
             // and of course, the anchor point of the rect is (0,0), by definition.
             transform.scale = size.extend(1.0);
-            transform.translation = center.extend(0.0);
+            transform.translation = center.extend(1.0);
         } else {
             visibility.is_visible = false;
             // we're done
