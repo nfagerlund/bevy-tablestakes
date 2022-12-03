@@ -4,13 +4,14 @@ use bevy::prelude::*;
 /// add more input intent types. Also, might just switch to leafwing input or
 /// something, which would be much smarter! But in the meantime, at least it's
 /// centralized.
-#[derive(Default)]
+#[derive(Resource, Default)]
 pub struct CurrentInputs {
     pub movement: Vec2,
     pub actioning: bool,
 }
 
 /// Resource for storing the active gamepad
+#[derive(Resource)]
 pub struct ActiveGamepad(Gamepad);
 
 // Input time!
@@ -55,7 +56,7 @@ pub fn connect_gamepads_system(
 ) {
     for GamepadEvent { gamepad, event_type } in gamepad_events.iter() {
         match event_type {
-            GamepadEventType::Connected => {
+            GamepadEventType::Connected(_) => {
                 info!("pad up: {:?}", gamepad);
                 // let's see, I de-focused the cookbook tab, so what do *I* want to have happen?
                 // First pad in gets it, but if another pad hits start, it'll take over. Nice.

@@ -12,14 +12,15 @@ struct Person;
 #[derive(Component, Debug)]
 struct Name(String);
 
+#[derive(Resource)]
 struct GreetTimer(Timer); // ??
 
 // Hmm guess add_startup_system passes it a Commands struct as an argument
 // ^^ update: now we know about SystemParams, you can ask for whatever arguments you want.
 fn add_people(mut commands: Commands) {
-    commands.spawn().insert(Person).insert(Name("Himbo Wilson".to_string()));
-    commands.spawn().insert(Person).insert(Name("Rumpo Bunkus".to_string()));
-    commands.spawn().insert(Person).insert(Name("Ryan Malarkey".to_string()));
+    commands.spawn((Person, Name("Himbo Wilson".to_string())));
+    commands.spawn((Person, Name("Rumpo Bunkus".to_string())));
+    commands.spawn((Person, Name("Ryan Malarkey".to_string())));
 }
 
 // Whoa WH A T, we're using the type signature to query entities' components???
@@ -46,7 +47,7 @@ impl Plugin for HelloPlugin {
             // the reason we call from_seconds with the true flag is to make the timer repeat itself
         // ...oh. you're just explaining the fact that the second arg to from_seconds is named `repeating`. ok.
         app
-            .insert_resource(GreetTimer(Timer::from_seconds(2.0, true)))
+            .insert_resource(GreetTimer(Timer::from_seconds(2.0, TimerMode::Repeating)))
             .add_startup_system(add_people)
             // .add_system(hellow_orld)
             .add_system(greet_peeps);

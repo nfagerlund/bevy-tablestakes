@@ -1,14 +1,14 @@
 use bevy::asset::{
     AssetServer, AssetLoader, BoxedFuture, Handle, LoadContext, LoadedAsset,
 };
-use bevy::math::{Affine2, prelude::*};
+use bevy::math::{Affine2, Rect, prelude::*};
 use bevy::prelude::*;
 use bevy::reflect::TypeUuid;
 use bevy::render::{
     render_resource::{Extent3d, TextureDimension, TextureFormat},
     texture::{Image, TextureFormatPixelInfo}
 };
-use bevy::sprite::{Rect, TextureAtlas, Anchor};
+use bevy::sprite::{TextureAtlas, Anchor};
 use bevy::utils::Duration;
 use std::collections::HashMap;
 use asefile::AsepriteFile;
@@ -162,13 +162,13 @@ fn load_aseprite(bytes: &[u8], load_context: &mut LoadContext) -> anyhow::Result
     // atlas time!!!
     // N.b.: from_grid_with_padding adds grid cells in left-to-right,
     // top-to-bottom order, and we rely on this to make the frame indices match.
-    let atlas = TextureAtlas::from_grid_with_padding(
+    let atlas = TextureAtlas::from_grid(
         texture_handle,
         Vec2::new(width as f32, height as f32),
         num_frames as usize,
         1,
-        Vec2::new(1.0, 0.0),
-        Vec2::ZERO,
+        Some(Vec2::new(1.0, 0.0)),
+        None,
     );
     let atlas_handle = load_context.set_labeled_asset(
         "texture_atlas",
@@ -452,7 +452,7 @@ pub fn charanm_animate_system(
                 let frame_count = variant.frames.len();
                 state.frame = (state.frame + 1) % frame_count;
 
-                state.frame_timer = Some(Timer::new(variant.frames[state.frame].duration, false));
+                state.frame_timer = Some(Timer::new(variant.frames[state.frame].duration, TimerMode::Once));
             }
         } else {
             // must be new here. initialize the timer w/ the current
@@ -468,7 +468,7 @@ pub fn charanm_animate_system(
                     Duration::from_millis(millis)
                 },
             };
-            state.frame_timer = Some(Timer::new(duration, false));
+            state.frame_timer = Some(Timer::new(duration, TimerMode::Once));
         }
 
         // ok, where was I.
@@ -521,17 +521,18 @@ fn charanm_test_setup_system(
     asset_server: Res<AssetServer>,
 ) {
     let anim_handle: Handle<CharAnimation> = asset_server.load("sprites/sPlayerRun.aseprite");
-    commands
-        .spawn_bundle(SpriteSheetBundle {
+    commands.spawn((
+        Goofus,
+        SpriteSheetBundle {
             transform: Transform::from_translation(Vec3::new(30.0, 60.0, 3.0)),
             ..default()
-        })
-        .insert(CharAnimationState::new(anim_handle, Dir::W))
-        .insert(Motion::new(Vec2::ZERO))
-        .insert(Goofus);
+        },
+        CharAnimationState::new(anim_handle, Dir::W),
+        Motion::new(Vec2::ZERO),
+    ));
 
     let test_texture_handle: Handle<Image> = asset_server.load("sprites/sPlayerRun.aseprite#texture");
-    commands.spawn_bundle(SpriteBundle {
+    commands.spawn(SpriteBundle {
         texture: test_texture_handle,
         transform: Transform::from_translation(Vec3::new(10.0, 10.0, 3.0)),
         ..default()

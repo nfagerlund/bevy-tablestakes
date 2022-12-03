@@ -4,8 +4,8 @@ use bevy::{
     utils::Duration,
 };
 
-pub struct StaticTimePlugin;
-impl Plugin for StaticTimePlugin {
+pub struct SmoothedTimePlugin;
+impl Plugin for SmoothedTimePlugin {
     fn build(&self, app: &mut App) {
         app
             .insert_resource(RecentFrameTimes{ buffer: VecDeque::new() })
@@ -16,17 +16,19 @@ impl Plugin for StaticTimePlugin {
     }
 }
 
-pub struct SmoothedTimePlugin;
-impl Plugin for SmoothedTimePlugin {
+pub struct StaticTimePlugin;
+impl Plugin for StaticTimePlugin {
     fn build(&self, app: &mut App) {
         app
             .insert_resource(StaticTime);
     }
 }
 
+#[derive(Resource)]
 struct RecentFrameTimes {
     buffer: VecDeque<Duration>,
 }
+#[derive(Resource)]
 pub struct SmoothedTime {
     delta: Duration,
 }
@@ -40,6 +42,7 @@ impl SmoothedTime {
     }
 }
 
+#[derive(Resource)]
 pub struct StaticTime;
 
 impl StaticTime {

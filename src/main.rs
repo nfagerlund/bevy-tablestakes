@@ -6,8 +6,7 @@ use bevy::{
     },
     input::InputSystem,
     utils::Duration,
-    sprite::Rect,
-    render::texture::ImageSettings, // remove eventually, was added to prelude shortly after 0.8
+    math::Rect,
 };
 use bevy_ecs_ldtk::prelude::*;
 use std::collections::HashMap;
@@ -40,18 +39,26 @@ mod goofy_time;
 const PIXEL_SCALE: f32 = 1.0;
 
 fn main() {
-    App::new()
-        // vv needs to go before DefaultPlugins.
-        .insert_resource(WindowDescriptor {
-            present_mode: bevy::window::PresentMode::Fifo,
-            cursor_visible: true,
-            // mode: bevy::window::WindowMode::BorderlessFullscreen,
-            // width: 1920.0,
-            // height: 1080.0,
-            ..Default::default()
+    let configured_default_plugins = DefaultPlugins
+        .set(WindowPlugin {
+            window: WindowDescriptor {
+                present_mode: bevy::window::PresentMode::Fifo,
+                cursor_visible: true,
+                // mode: bevy::window::WindowMode::BorderlessFullscreen,
+                // width: 1920.0,
+                // height: 1080.0,
+                ..default()
+            },
+            ..default()
         })
-        .insert_resource(ImageSettings::default_nearest()) // prevents blurry sprites
-        .add_plugins(DefaultPlugins)
+        .set(AssetPlugin {
+            watch_for_changes: true,
+            ..default()
+        })
+        .set(ImagePlugin::default_nearest());
+
+    App::new()
+        .add_plugins(configured_default_plugins)
         .add_plugin(CharAnimationPlugin)
         .add_plugin(TestCharAnimationPlugin)
         .add_plugin(LdtkPlugin)
@@ -376,11 +383,14 @@ fn setup_level(
     mut commands: Commands,
     asset_server: Res<AssetServer>,
 ) {
-    commands.spawn_bundle(LdtkWorldBundle {
-        ldtk_handle: asset_server.load("kittytown.ldtk"),
-        transform: Transform::from_scale(Vec3::splat(PIXEL_SCALE)),
-        ..Default::default()
-    }).insert(LdtkWorld);
+    commands.spawn((
+        LdtkWorld,
+        LdtkWorldBundle {
+            ldtk_handle: asset_server.load("kittytown.ldtk"),
+            transform: Transform::from_scale(Vec3::splat(PIXEL_SCALE)),
+            ..Default::default()
+        },
+    ));
 }
 
 fn setup_camera(
@@ -388,9 +398,11 @@ fn setup_camera(
 ) {
     let mut camera_bundle = Camera2dBundle::default();
     camera_bundle.projection.scale = 1.0/3.0;
-    commands.spawn_bundle(camera_bundle)
-        .insert(SubTransform{ translation: Vec3::new(0.0, 0.0, 999.0) });
+    commands.spawn((
+        camera_bundle,
+        SubTransform{ translation: Vec3::new(0.0, 0.0, 999.0) },
         // ^^ hack: I looked up the Z coord on new_2D and fudged it so we won't accidentally round it to 1000.
+    ));
 }
 
 fn setup_player(
@@ -413,29 +425,39 @@ fn setup_player(
     animations.insert("roll", roll);
 
     // IT'S THE PLAYER, GIVE IT UP!!
-    commands
-        .spawn_bundle(SpriteSheetBundle {
-            transform: Transform::from_translation(Vec3::new(0.0, 0.0, 3.0))
-                .with_scale(Vec3::splat(PIXEL_SCALE)),
-            ..Default::default()
-        })
+    commands.spawn((
+        PlayerBundle {
+            // Remember who u are
+            identity: Player,
+            sprite_sheet: SpriteSheetBundle {
+                transform: Transform::from_translation(Vec3::new(0.0, 0.0, 3.0))
+                    .with_scale(Vec3::splat(PIXEL_SCALE)),
+                ..Default::default()
+            },
+            sub_transform: SubTransform{ translation: Vec3::new(0.0, 0.0, 3.0) },
+            speed: Speed(Speed::RUN),
+            // --- New animation system
+            char_animation_state: CharAnimationState::new(initial_animation, Dir::E),
+            motion: Motion::new(Vec2::ZERO),
+            animations_map: AnimationsMap(animations),
+        },
+        // Initial gameplay state
+        // PlayerFree::new(),
+        PlayerRoll::new(0.785),
+    ));
+}
 
-        // --- New animation system
-        .insert(CharAnimationState::new(initial_animation, Dir::E))
-        .insert(Motion::new(Vec2::ZERO))
-        .insert(AnimationsMap(animations))
+#[derive(Bundle)]
+struct PlayerBundle {
+    identity: Player,
+    sprite_sheet: SpriteSheetBundle,
 
-        // Initial values
-        .insert(SubTransform{ translation: Vec3::new(0.0, 0.0, 3.0) })
-        .insert(Speed(Speed::RUN))
+    sub_transform: SubTransform,
+    speed: Speed,
 
-        // Gameplay state crap
-        .insert(StateQueue::default())
-        // .insert(PlayerFree { just_started: true })
-        .insert(PlayerRoll::new(0.785))
-
-        // Remember who u are
-        .insert(Player);
+    char_animation_state: CharAnimationState,
+    motion: Motion,
+    animations_map: AnimationsMap,
 }
 
 // Structs and crap!
@@ -448,23 +470,6 @@ impl Deref for AnimationsMap {
     type Target = AnimationsMapInner;
     fn deref(&self) -> &Self::Target {
         &self.0
-    }
-}
-
-/// Keepin' it stupid: Right now we're just going to treat this as a way to add
-/// commands later, so we can preserve current sync-boundary-like behavior post
-/// stageless. But we might need to get more sophisticated later, idk.
-#[derive(Component, Default)]
-pub struct StateQueue(Vec<Box<dyn Command>>);
-impl Deref for StateQueue {
-    type Target = Vec<Box<dyn Command>>;
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-impl DerefMut for StateQueue {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.0
     }
 }
 
