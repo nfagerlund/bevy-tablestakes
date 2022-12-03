@@ -5,8 +5,9 @@ use bevy::{
         system::{Command, Insert, Remove}
     },
     input::InputSystem,
+    log::{info, debug},
     utils::Duration,
-    math::Rect,
+    math::Rect, sprite::MaterialMesh2dBundle,
 };
 use bevy_ecs_ldtk::prelude::*;
 use std::collections::HashMap;
@@ -21,7 +22,7 @@ use bevy_inspector_egui::{
     WorldInspectorPlugin,
     Inspectable,
     RegisterInspectable,
-    // InspectorPlugin,
+    InspectorPlugin,
 };
 use crate::input::*;
 use crate::char_animation::*;
@@ -76,6 +77,8 @@ fn main() {
         .register_inspectable::<Speed>()
         .register_inspectable::<Walkbox>()
         .register_inspectable::<Hitbox>()
+        .add_plugin(InspectorPlugin::<DebugColliders>::new())
+        .add_system(debug_walkboxes_system)
 
         // LDTK STUFF
         .add_startup_system(setup_level)
@@ -408,6 +411,8 @@ fn setup_camera(
 fn setup_player(
     mut commands: Commands,
     asset_server: Res<AssetServer>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<ColorMaterial>>,
 ) {
     let run: Handle<CharAnimation> = asset_server.load("sprites/sPlayerRun.aseprite");
     let idle: Handle<CharAnimation> = asset_server.load("sprites/sPlayer.aseprite");
@@ -444,7 +449,44 @@ fn setup_player(
         // Initial gameplay state
         // PlayerFree::new(),
         PlayerRoll::new(0.785),
-    ));
+    )).with_children(|player| {
+        player.spawn(WalkboxDebugBundle {
+            mesh_bundle: MaterialMesh2dBundle {
+                mesh: meshes.add(Mesh::from(shape::Quad::default())).into(),
+                material: materials.add(ColorMaterial::from(Color::rgba(0.5, 0.0, 0.5, 0.6))),
+                visibility: Visibility { is_visible: false },
+                ..default()
+            },
+            ..default()
+        });
+    });
+}
+
+fn debug_walkboxes_system(
+    collider_q: Query<(Entity, &Walkbox)>,
+    mut debug_mesh_q: Query<(&Parent, &mut Transform, &mut Visibility), With<WalkboxDebug>>,
+    debug_settings: Res<DebugColliders>,
+) {
+    for (parent, mut transform, mut visibility) in debug_mesh_q.iter_mut() {
+        let Ok((_, walkbox)) = collider_q.get(parent.get()) else {
+            info!("?!?! tried to debug walkbox of some poor orphaned debug entity.");
+            continue;
+        };
+        if debug_settings.show_walkboxes {
+            visibility.is_visible = true;
+            // ok... need to set our scale to the size of the walkbox, and then
+            // offset our translation by the difference between the walkbox's
+            // center and it's actual anchor point.
+            let size = walkbox.0.max - walkbox.0.min;
+            let center = walkbox.0.min + size / 2.0;
+            // and of course, the anchor point of the rect is (0,0), by definition.
+            transform.scale = size.extend(1.0);
+            transform.translation = center.extend(0.0);
+        } else {
+            visibility.is_visible = false;
+            // we're done
+        }
+    }
 }
 
 #[derive(Bundle)]
@@ -671,6 +713,18 @@ impl AbsBBox {
     }
 }
 
+#[derive(Bundle, Default)]
+struct WalkboxDebugBundle {
+    mesh_bundle: MaterialMesh2dBundle<ColorMaterial>,
+    marker: WalkboxDebug,
+}
+/// Marker component for walkbox debug mesh
+#[derive(Component, Default)]
+struct WalkboxDebug;
+#[derive(Resource, Inspectable, Default)]
+struct DebugColliders {
+    show_walkboxes: bool,
+}
 
 /// Collidable solid component... but you also need a position Vec3 and a size Vec2 from somewhere.
 #[derive(Component)]
