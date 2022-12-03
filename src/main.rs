@@ -7,7 +7,7 @@ use bevy::{
     input::InputSystem,
     log::{info, debug},
     utils::Duration,
-    math::Rect, sprite::MaterialMesh2dBundle,
+    math::Rect, sprite::{MaterialMesh2dBundle, Mesh2dHandle},
 };
 use bevy_ecs_ldtk::prelude::*;
 use std::collections::HashMap;
@@ -79,6 +79,8 @@ fn main() {
         .register_inspectable::<Hitbox>()
         .add_plugin(InspectorPlugin::<DebugColliders>::new())
         .add_system(debug_walkboxes_system)
+        .add_startup_system(setup_debug_assets)
+        .add_system(spawn_wall_tile_collider_debugs)
 
         // LDTK STUFF
         .add_startup_system(setup_level)
@@ -380,6 +382,17 @@ fn snap_pixel_positions_system(
         // pixel_tf.translation = (global_scale * sub_tf.translation).floor();
         pixel_tf.translation = sub_tf.translation;
     }
+}
+
+fn setup_debug_assets(
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<ColorMaterial>>,
+    mut commands: Commands,
+) {
+    commands.insert_resource(DebugAssets {
+        walkbox_mesh: meshes.add(Mesh::from(shape::Quad::default())).into(),
+        walkbox_material: materials.add(ColorMaterial::from(Color::rgba(0.5, 0.0, 0.5, 0.6))),
+    });
 }
 
 fn setup_level(
@@ -726,6 +739,12 @@ struct DebugColliders {
     show_walkboxes: bool,
 }
 
+#[derive(Resource)]
+struct DebugAssets {
+    walkbox_mesh: Mesh2dHandle,
+    walkbox_material: Handle<ColorMaterial>,
+}
+
 /// Collidable solid component... but you also need a position Vec3 and a size Vec2 from somewhere.
 #[derive(Component)]
 pub struct Solid;
@@ -735,18 +754,41 @@ pub struct Solid;
 struct Wall {
     solid: Solid,
     walkbox: Walkbox,
+    int_grid_cell: IntGridCell,
     // transform: Transform, // This is needed, but it's handled by the plugin.
 }
 
 // Custom impl instead of derive bc... you'll see!
 impl LdtkIntCell for Wall {
-    fn bundle_int_cell(_: IntGridCell, layer_instance: &LayerInstance) -> Self {
+    fn bundle_int_cell(int_grid_cell: IntGridCell, layer_instance: &LayerInstance) -> Self {
         // there!! v. proud of finding this, the example just cheated w/ prior knowledge.
         let grid_size = layer_instance.grid_size as f32;
         Wall {
             solid: Solid,
             // the plugin puts tile anchor points in the center:
             walkbox: Walkbox(centered_rect(grid_size, grid_size)),
+            int_grid_cell,
         }
+    }
+}
+
+// Can't spawn child entities in bundle_int_cell, alas, so need an after-the-fact setup
+fn spawn_wall_tile_collider_debugs(
+    new_wall_q: Query<Entity, Added<IntGridCell>>,
+    mut commands: Commands,
+    debug_assets: Res<DebugAssets>,
+) {
+    for wall in new_wall_q.iter() {
+        commands.entity(wall).with_children(|parent| {
+            parent.spawn(WalkboxDebugBundle {
+                mesh_bundle: MaterialMesh2dBundle {
+                    mesh: debug_assets.walkbox_mesh.clone(),
+                    material: debug_assets.walkbox_material.clone(),
+                    visibility: Visibility { is_visible: false },
+                    ..default()
+                },
+                marker: WalkboxDebug,
+            });
+        });
     }
 }
