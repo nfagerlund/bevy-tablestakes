@@ -57,7 +57,7 @@ pub fn connect_gamepads_system(
     for GamepadEvent { gamepad, event_type } in gamepad_events.iter() {
         match event_type {
             GamepadEventType::Connected(_) => {
-                info!("pad up: {:?}", gamepad);
+                info!("pad in: {:?}", gamepad);
                 // let's see, I de-focused the cookbook tab, so what do *I* want to have happen?
                 // First pad in gets it, but if another pad hits start, it'll take over. Nice.
                 if active_gamepad.is_none() {
@@ -65,7 +65,7 @@ pub fn connect_gamepads_system(
                 }
             },
             GamepadEventType::Disconnected => {
-                info!("pad down: {:?}", gamepad);
+                info!("pad out: {:?}", gamepad);
                 // byeeee
                 // ok, I'm back to the example code, what's going on here:
                 if let Some(ActiveGamepad(old_id)) = active_gamepad.as_deref() {
