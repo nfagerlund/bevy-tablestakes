@@ -197,8 +197,21 @@ fn player_free_out(
 /// Motion component, updates direction on same as needed, writes result to...
 fn planned_move_system(
     mut mover_q: Query<(&mut SubTransform, &mut Motion, &Walkbox), With<Player>>,
-    solids_q: Query<(&Transform, &Walkbox), With<Solid>>,
+    solids_q: Query<(&GlobalTransform, &Walkbox), With<Solid>>,
 ) {
+    let solids: Vec<AbsBBox> = solids_q.iter().map(|(global_transform, walkbox)| {
+        // TODO: This can't handle solids that move, because GlobalTransform
+        // lags by one frame. I don't have a solution for this yet! Treat them
+        // separately? Manually sync frames of reference for everything?
+        // Aggressively early-update the GlobalTransform of anything mobile
+        // right after it moves? Anyway, for immobile walls we need to do *this*
+        // because as of bevy_ecs_ldtk 0.5 / bevy_ecs_tilemap 0.8+, tile
+        // entities are offset from (0,0) by a half a tile in both axes in order
+        // to make the bottom left corner of the first tile render at (0,0).
+        let origin = global_transform.translation().truncate();
+        AbsBBox::from_rect(walkbox.0, origin)
+    }).collect();
+
     for (
         mut transform,
         mut motion,
@@ -226,11 +239,6 @@ fn planned_move_system(
             let movement_intent = raw_movement_intent + motion.remainder;
             let move_pixels = movement_intent.round();
             let remainder = movement_intent - move_pixels;
-
-            let solids: Vec<AbsBBox> = solids_q.iter().map(|(transform, walkbox)| {
-                let origin = transform.translation.truncate();
-                AbsBBox::from_rect(walkbox.0, origin)
-            }).collect();
 
             let mut move_x = move_pixels.x;
             let sign_x = move_x.signum();
