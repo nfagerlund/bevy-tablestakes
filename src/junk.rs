@@ -29,31 +29,34 @@ pub fn setup_fps_debug(
         color: Color::rgb(0.0, 1.0, 0.0),
     };
     // borrowing this from the bevymark example
-    commands.spawn_bundle(TextBundle {
-        text: Text {
-            sections: vec![
-                TextSection {
-                    value: "FPS: ".to_string(),
-                    style: style.clone(),
-                },
-                TextSection {
-                    value: "".to_string(),
-                    style: style.clone(),
-                },
-            ],
-            ..Default::default() // alignment
-        },
-        style: Style {
-            position_type: PositionType::Absolute,
-            position: UiRect {
-                top: Val::Px(5.0),
-                left: Val::Px(5.0),
-                ..Default::default()
+    commands.spawn((
+        FPSCounter,
+        TextBundle {
+            text: Text {
+                sections: vec![
+                    TextSection {
+                        value: "FPS: ".to_string(),
+                        style: style.clone(),
+                    },
+                    TextSection {
+                        value: "".to_string(),
+                        style: style.clone(),
+                    },
+                ],
+                ..Default::default() // alignment
             },
-            ..Default::default() // boy, LOTS of these
-        },
-        ..Default::default()
-    }).insert(FPSCounter);
+            style: Style {
+                position_type: PositionType::Absolute,
+                position: UiRect {
+                    top: Val::Px(5.0),
+                    left: Val::Px(5.0),
+                    ..Default::default()
+                },
+                ..Default::default() // boy, LOTS of these
+            },
+            ..Default::default()
+        }
+    ));
 }
 
 // again borrowed from bevymark example
