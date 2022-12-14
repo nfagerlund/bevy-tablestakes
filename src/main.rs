@@ -5,8 +5,11 @@ use bevy::{
         system::{Command, Insert, Remove}
     },
     input::InputSystem,
-    log::{info, debug},
-    utils::Duration,
+    log::{info, LogPlugin},
+    utils::{
+        Duration,
+        tracing,
+    },
     math::Rect, sprite::{MaterialMesh2dBundle, Mesh2dHandle},
 };
 use bevy_ecs_ldtk::prelude::*;
@@ -56,7 +59,11 @@ fn main() {
             watch_for_changes: true,
             ..default()
         })
-        .set(ImagePlugin::default_nearest());
+        .set(ImagePlugin::default_nearest())
+        .set(LogPlugin {
+            level: tracing::Level::INFO,
+            filter: "wgpu=error".to_string(),
+        });
 
     App::new()
         .add_plugins(configured_default_plugins)
