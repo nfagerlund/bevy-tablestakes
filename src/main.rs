@@ -789,7 +789,7 @@ impl LdtkIntCell for Wall {
 
 // Can't spawn child entities in bundle_int_cell, alas, so need an after-the-fact setup
 fn spawn_wall_tile_collider_debugs(
-    new_wall_q: Query<Entity, Added<IntGridCell>>,
+    new_wall_q: Query<Entity, Added<Solid>>,
     mut commands: Commands,
     debug_assets: Res<DebugAssets>,
 ) {
