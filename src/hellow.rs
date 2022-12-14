@@ -15,11 +15,17 @@ struct Name(String);
 #[derive(Resource)]
 struct GreetTimer(Timer); // ??
 
+#[derive(Component, Debug)]
+enum Crumbo {
+    Gunk(&'static str),
+    Zilch,
+}
+
 // Hmm guess add_startup_system passes it a Commands struct as an argument
 // ^^ update: now we know about SystemParams, you can ask for whatever arguments you want.
 fn add_people(mut commands: Commands) {
-    commands.spawn((Person, Name("Himbo Wilson".to_string())));
-    commands.spawn((Person, Name("Rumpo Bunkus".to_string())));
+    commands.spawn((Person, Name("Himbo Wilson".to_string()), Crumbo::Zilch));
+    commands.spawn((Person, Name("Rumpo Bunkus".to_string()), Crumbo::Gunk("blub")));
     commands.spawn((Person, Name("Ryan Malarkey".to_string())));
 }
 
@@ -39,6 +45,17 @@ fn greet_peeps(
     }
 }
 
+fn blunch(
+    timer: Res<GreetTimer>,
+    query: Query<(&Name, &Crumbo), With<Person>>,
+) {
+    if timer.0.just_finished() {
+        for (name, crumbo) in query.iter() {
+            println!("{} has {:?}", name.0, crumbo);
+        }
+    }
+}
+
 pub struct HelloPlugin;
 impl Plugin for HelloPlugin {
     fn build(&self, app: &mut App) {
@@ -50,7 +67,8 @@ impl Plugin for HelloPlugin {
             .insert_resource(GreetTimer(Timer::from_seconds(2.0, TimerMode::Repeating)))
             .add_startup_system(add_people)
             // .add_system(hellow_orld)
-            .add_system(greet_peeps);
+            .add_system(greet_peeps)
+            .add_system(blunch.after(greet_peeps));
 
     }
 }
