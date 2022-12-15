@@ -71,12 +71,15 @@ fn main() {
         .add_plugin(TestCharAnimationPlugin)
         .add_plugin(LdtkPlugin)
 
-        // NOISY DEBUG STUFF
+        // DEBUG STUFF
         // .add_plugin(FrameTimeDiagnosticsPlugin)
         // .add_startup_system(junk::setup_fps_debug)
         // .add_system(junk::update_fps_debug_system)
         // .add_system(junk::debug_z_system)
         .add_system(tile_info_barfing_system)
+        .insert_resource(DebugAssets::default())
+        .add_startup_system(setup_debug_assets.before(setup_player))
+        .add_system(spawn_wall_tile_collider_debugs)
 
         // INSPECTOR STUFF
         .add_plugin(WorldInspectorPlugin::new())
@@ -86,8 +89,7 @@ fn main() {
         .register_inspectable::<Hitbox>()
         .add_plugin(InspectorPlugin::<DebugColliders>::new())
         .add_system(debug_walkboxes_system)
-        .add_startup_system(setup_debug_assets)
-        .add_system(spawn_wall_tile_collider_debugs)
+
 
         // LDTK STUFF
         .add_startup_system(setup_level)
@@ -402,12 +404,12 @@ fn snap_pixel_positions_system(
 fn setup_debug_assets(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<ColorMaterial>>,
-    mut commands: Commands,
+    mut debug_assets: ResMut<DebugAssets>,
 ) {
-    commands.insert_resource(DebugAssets {
-        walkbox_mesh: meshes.add(Mesh::from(shape::Quad::default())).into(),
-        walkbox_material: materials.add(ColorMaterial::from(Color::rgba(0.5, 0.0, 0.5, 0.6))),
-    });
+    let walkbox_mesh = meshes.add(Mesh::from(shape::Quad::default()));
+    let walkbox_material = materials.add(ColorMaterial::from(Color::rgba(0.5, 0.0, 0.5, 0.6)));
+    debug_assets.insert("walkbox_mesh".to_string(), walkbox_mesh.clone_untyped());
+    debug_assets.insert("walkbox_material".to_string(), walkbox_material.clone_untyped());
 }
 
 fn setup_level(
@@ -439,8 +441,7 @@ fn setup_camera(
 fn setup_player(
     mut commands: Commands,
     asset_server: Res<AssetServer>,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<ColorMaterial>>,
+    debug_assets: Res<DebugAssets>,
 ) {
     let run: Handle<CharAnimation> = asset_server.load("sprites/sPlayerRun.aseprite");
     let idle: Handle<CharAnimation> = asset_server.load("sprites/sPlayer.aseprite");
@@ -478,10 +479,18 @@ fn setup_player(
         // PlayerFree::new(),
         PlayerRoll::new(0.785),
     )).with_children(|player| {
+        let (Some(mesh_untyped), Some(material_untyped)) = (debug_assets.get("walkbox_mesh"), debug_assets.get("walkbox_material"))
+        else {
+            warn!("Hey!! I couldn't get ahold of the collider debug assets for some reason!!");
+            return;
+        };
+        let material = material_untyped.clone().typed::<ColorMaterial>();
+        let mesh = Mesh2dHandle(mesh_untyped.clone().typed::<Mesh>());
+
         player.spawn(WalkboxDebugBundle {
             mesh_bundle: MaterialMesh2dBundle {
-                mesh: meshes.add(Mesh::from(shape::Quad::default())).into(),
-                material: materials.add(ColorMaterial::from(Color::rgba(0.5, 0.0, 0.5, 0.6))),
+                mesh,
+                material,
                 visibility: Visibility { is_visible: false },
                 ..default()
             },
@@ -754,11 +763,8 @@ struct DebugColliders {
     show_walkboxes: bool,
 }
 
-#[derive(Resource)]
-struct DebugAssets {
-    walkbox_mesh: Mesh2dHandle,
-    walkbox_material: Handle<ColorMaterial>,
-}
+#[derive(Resource, Deref, DerefMut, Default)]
+struct DebugAssets(HashMap<String, HandleUntyped>);
 
 /// Collidable solid component... but you also need a position Vec3 and a size Vec2 from somewhere.
 #[derive(Component)]
@@ -793,12 +799,20 @@ fn spawn_wall_tile_collider_debugs(
     mut commands: Commands,
     debug_assets: Res<DebugAssets>,
 ) {
+    let (Some(mesh_untyped), Some(material_untyped)) = (debug_assets.get("walkbox_mesh"), debug_assets.get("walkbox_material"))
+    else {
+        warn!("Hey!! I couldn't get ahold of the collider debug assets for some reason!!");
+        return;
+    };
+    let material = material_untyped.clone().typed::<ColorMaterial>();
+    let mesh = Mesh2dHandle(mesh_untyped.clone().typed::<Mesh>());
+
     for wall in new_wall_q.iter() {
         commands.entity(wall).with_children(|parent| {
             parent.spawn(WalkboxDebugBundle {
                 mesh_bundle: MaterialMesh2dBundle {
-                    mesh: debug_assets.walkbox_mesh.clone(),
-                    material: debug_assets.walkbox_material.clone(),
+                    mesh: mesh.clone(),
+                    material: material.clone(),
                     visibility: Visibility { is_visible: false },
                     ..default()
                 },
