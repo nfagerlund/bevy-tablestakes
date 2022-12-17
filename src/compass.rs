@@ -1,5 +1,5 @@
-use std::f32::consts::*;
 use bevy::prelude::Vec2;
+use std::f32::consts::*;
 use std::fmt;
 
 // Mapping # of directional animation variants to discrete direction usage:
@@ -13,8 +13,14 @@ use std::fmt;
 
 #[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
 pub enum Dir {
-    E, N, W, S,
-    NE, NW, SW, SE,
+    E,
+    N,
+    W,
+    S,
+    NE,
+    NW,
+    SW,
+    SE,
     Neutral,
 }
 
@@ -47,7 +53,10 @@ impl TryFrom<&str> for Dir {
 
             "neutral" => Ok(Self::Neutral),
 
-            _ => Err(CantDirError(format!("Couldn't resolve '{}' to a compass::Dir", name))),
+            _ => Err(CantDirError(format!(
+                "Couldn't resolve '{}' to a compass::Dir",
+                name
+            ))),
         }
     }
 }
@@ -105,12 +114,16 @@ impl Dir {
             Self::E
         } else if angle > NE && angle < NW {
             Self::N
-        } else if angle >= NW || angle <= SW { // the negative flip-over
+        } else if angle >= NW || angle <= SW {
+            // the negative flip-over
             Self::W
         } else if angle > SW && angle < SE {
             Self::S
         } else {
-            panic!("IDK what happened, but some angle didn't match a dir: {}", angle)
+            panic!(
+                "IDK what happened, but some angle didn't match a dir: {}",
+                angle
+            )
         }
     }
 
@@ -148,7 +161,8 @@ impl Dir {
             Self::N
         } else if angle > NNW && angle <= WNW {
             Self::NW
-        } else if angle > WNW || angle <= WSW { // the negative flip-over
+        } else if angle > WNW || angle <= WSW {
+            // the negative flip-over
             Self::W
         } else if angle > WSW && angle <= SSW {
             Self::SW
@@ -157,7 +171,10 @@ impl Dir {
         } else if angle > SSE && angle <= ESE {
             Self::SE
         } else {
-            panic!("IDK what happened, but some angle didn't match a dir: {}", angle)
+            panic!(
+                "IDK what happened, but some angle didn't match a dir: {}",
+                angle
+            )
         }
     }
 }
@@ -183,7 +200,10 @@ mod tests {
         assert_eq!(Dir::horizontal(Vec2::ZERO), Dir::Neutral);
         assert_eq!(Dir::horizontal(Vec2::new(f32::NAN, 1.0)), Dir::Neutral);
         assert_eq!(Dir::horizontal(Vec2::new(1.0, f32::INFINITY)), Dir::Neutral);
-        assert_eq!(Dir::horizontal(Vec2::new(f32::NEG_INFINITY, 1.0)), Dir::Neutral);
+        assert_eq!(
+            Dir::horizontal(Vec2::new(f32::NEG_INFINITY, 1.0)),
+            Dir::Neutral
+        );
     }
 
     #[test]
@@ -197,7 +217,10 @@ mod tests {
         assert_eq!(Dir::vertical(Vec2::ZERO), Dir::Neutral);
         assert_eq!(Dir::vertical(Vec2::new(f32::NAN, 1.0)), Dir::Neutral);
         assert_eq!(Dir::vertical(Vec2::new(1.0, f32::INFINITY)), Dir::Neutral);
-        assert_eq!(Dir::vertical(Vec2::new(f32::NEG_INFINITY, 1.0)), Dir::Neutral);
+        assert_eq!(
+            Dir::vertical(Vec2::new(f32::NEG_INFINITY, 1.0)),
+            Dir::Neutral
+        );
     }
 
     #[test]
@@ -239,7 +262,10 @@ mod tests {
         assert_eq!(Dir::cardinal(Vec2::ZERO), Dir::Neutral);
         assert_eq!(Dir::cardinal(Vec2::new(f32::NAN, 1.0)), Dir::Neutral);
         assert_eq!(Dir::cardinal(Vec2::new(1.0, f32::INFINITY)), Dir::Neutral);
-        assert_eq!(Dir::cardinal(Vec2::new(f32::NEG_INFINITY, 1.0)), Dir::Neutral);
+        assert_eq!(
+            Dir::cardinal(Vec2::new(f32::NEG_INFINITY, 1.0)),
+            Dir::Neutral
+        );
     }
 
     #[test]
@@ -254,10 +280,22 @@ mod tests {
         let iic_long: f32 = FRAC_PI_8.cos();
 
         // On _just_ one side or the other of the deciding line:
-        assert_eq!(Dir::ordinal(Vec2::new(iic_long + LIL_BIT, iic_short)), Dir::E);
-        assert_eq!(Dir::ordinal(Vec2::new(iic_long, iic_short + LIL_BIT)), Dir::NE);
-        assert_eq!(Dir::ordinal(Vec2::new(iic_long + LIL_BIT, -iic_short)), Dir::E);
-        assert_eq!(Dir::ordinal(Vec2::new(iic_long, -(iic_short + LIL_BIT))), Dir::SE);
+        assert_eq!(
+            Dir::ordinal(Vec2::new(iic_long + LIL_BIT, iic_short)),
+            Dir::E
+        );
+        assert_eq!(
+            Dir::ordinal(Vec2::new(iic_long, iic_short + LIL_BIT)),
+            Dir::NE
+        );
+        assert_eq!(
+            Dir::ordinal(Vec2::new(iic_long + LIL_BIT, -iic_short)),
+            Dir::E
+        );
+        assert_eq!(
+            Dir::ordinal(Vec2::new(iic_long, -(iic_short + LIL_BIT))),
+            Dir::SE
+        );
 
         // On exactly the deciding line:
         match Dir::ordinal(Vec2::new(iic_long, iic_short)) {
@@ -265,13 +303,16 @@ mod tests {
             Dir::NE => (),
             _ => {
                 panic!("pi/8 angle should be either E or NE (don't care which)");
-            }
+            },
         }
 
         // Blank or bogus input:
         assert_eq!(Dir::ordinal(Vec2::ZERO), Dir::Neutral);
         assert_eq!(Dir::ordinal(Vec2::new(f32::NAN, 1.0)), Dir::Neutral);
         assert_eq!(Dir::ordinal(Vec2::new(1.0, f32::INFINITY)), Dir::Neutral);
-        assert_eq!(Dir::ordinal(Vec2::new(f32::NEG_INFINITY, 1.0)), Dir::Neutral);
+        assert_eq!(
+            Dir::ordinal(Vec2::new(f32::NEG_INFINITY, 1.0)),
+            Dir::Neutral
+        );
     }
 }

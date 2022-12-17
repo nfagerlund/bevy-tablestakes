@@ -1,18 +1,16 @@
-use bevy::asset::{
-    AssetServer, AssetLoader, BoxedFuture, Handle, LoadContext, LoadedAsset,
-};
-use bevy::math::{Affine2, Rect, prelude::*};
+use asefile::AsepriteFile;
+use bevy::asset::{AssetLoader, AssetServer, BoxedFuture, Handle, LoadContext, LoadedAsset};
+use bevy::math::{prelude::*, Affine2, Rect};
 use bevy::prelude::*;
 use bevy::reflect::TypeUuid;
 use bevy::render::{
     render_resource::{Extent3d, TextureDimension, TextureFormat},
-    texture::{Image, TextureFormatPixelInfo}
+    texture::{Image, TextureFormatPixelInfo},
 };
-use bevy::sprite::{TextureAtlas, Anchor};
+use bevy::sprite::{Anchor, TextureAtlas};
 use bevy::utils::Duration;
-use std::collections::HashMap;
-use asefile::AsepriteFile;
 use image::RgbaImage;
+use std::collections::HashMap;
 
 use crate::compass::{self, Dir};
 use crate::Motion;
@@ -63,8 +61,7 @@ pub struct CharAnimationPlugin;
 
 impl Plugin for CharAnimationPlugin {
     fn build(&self, app: &mut App) {
-        app
-            .add_asset::<CharAnimation>()
+        app.add_asset::<CharAnimation>()
             .init_asset_loader::<CharAnimationLoader>()
             // These systems should run after any app code that might mutate
             // CharAnimationState or Motion. And set_directions might have
@@ -72,7 +69,10 @@ impl Plugin for CharAnimationPlugin {
             // the main animate system.
             .add_system_to_stage(CoreStage::PostUpdate, charanm_atlas_reassign_system)
             .add_system_to_stage(CoreStage::PostUpdate, charanm_set_directions_system)
-            .add_system_to_stage(CoreStage::PostUpdate, charanm_animate_system.after(charanm_set_directions_system));
+            .add_system_to_stage(
+                CoreStage::PostUpdate,
+                charanm_animate_system.after(charanm_set_directions_system),
+            );
     }
 }
 
@@ -122,10 +122,8 @@ fn load_aseprite(bytes: &[u8], load_context: &mut LoadContext) -> anyhow::Result
     // relative anchor position.
     let texture_size = Vec2::new(width as f32, height as f32);
     let normalize_scale = Mat2::from_diagonal(texture_size).inverse();
-    let anchor_transform = Affine2::from_mat2_translation(
-        normalize_scale * REFLECT_Y,
-        OFFSET_TO_CENTER,
-    );
+    let anchor_transform =
+        Affine2::from_mat2_translation(normalize_scale * REFLECT_Y, OFFSET_TO_CENTER);
 
     // Build the texture atlas, ensuring that its sub-texture indices match the
     // original Aseprite file's frame indices.
@@ -136,29 +134,23 @@ fn load_aseprite(bytes: &[u8], load_context: &mut LoadContext) -> anyhow::Result
     let atlas_height = height as u32;
     let atlas_width = width as u32 * num_frames + num_frames - 1;
     let mut atlas_texture = Image::new_fill(
-        Extent3d { width: atlas_width, height: atlas_height, depth_or_array_layers: 1 },
+        Extent3d {
+            width: atlas_width,
+            height: atlas_height,
+            depth_or_array_layers: 1,
+        },
         TextureDimension::D2,
-        &[0, 0, 0, 0], // clear
+        &[0, 0, 0, 0],                 // clear
         TextureFormat::Rgba8UnormSrgb, // Could frame_images[0].format(), but hardcode for now.
     );
     // copy time
     let mut cur_x = 0_usize;
     for img in frame_images.iter() {
-        copy_texture_to_atlas(
-            &mut atlas_texture,
-            img,
-            width,
-            height,
-            cur_x,
-            0,
-        );
+        copy_texture_to_atlas(&mut atlas_texture, img, width, height, cur_x, 0);
         cur_x += width + 1;
     }
     // stow texture and get a handle
-    let texture_handle = load_context.set_labeled_asset(
-        "texture",
-        LoadedAsset::new(atlas_texture),
-    );
+    let texture_handle = load_context.set_labeled_asset("texture", LoadedAsset::new(atlas_texture));
     // atlas time!!!
     // N.b.: from_grid_with_padding adds grid cells in left-to-right,
     // top-to-bottom order, and we rely on this to make the frame indices match.
@@ -170,10 +162,7 @@ fn load_aseprite(bytes: &[u8], load_context: &mut LoadContext) -> anyhow::Result
         Some(Vec2::new(1.0, 0.0)),
         None,
     );
-    let atlas_handle = load_context.set_labeled_asset(
-        "texture_atlas",
-        LoadedAsset::new(atlas),
-    );
+    let atlas_handle = load_context.set_labeled_asset("texture_atlas", LoadedAsset::new(atlas));
 
     // Since our final frame indices are reliable, processing tags is easy.
     let mut variants: VariantsMap = HashMap::new();
@@ -181,38 +170,40 @@ fn load_aseprite(bytes: &[u8], load_context: &mut LoadContext) -> anyhow::Result
     for tag in (0..ase.num_tags()).map(|i| ase.tag(i)) {
         let name: VariantName = tag.name().try_into()?; // Just propagate error, don't continue load.
         let frame_range = tag.from_frame()..=tag.to_frame(); // inclusive
-        let frames: Vec<CharAnimationFrame> = frame_range.map(|i| {
-            let frame = ase.frame(i);
-            let index = i as usize;
-            let duration_ms = frame.duration() as u64;
-            let duration = Duration::from_millis(duration_ms);
+        let frames: Vec<CharAnimationFrame> = frame_range
+            .map(|i| {
+                let frame = ase.frame(i);
+                let index = i as usize;
+                let duration_ms = frame.duration() as u64;
+                let duration = Duration::from_millis(duration_ms);
 
-            // Wasteful, bc we could exit early on first non-clear px, but meh.
-            let origin = match rect_from_cel(&ase, "origin", i) {
-                Some(origin_rect) => origin_rect.min,
-                None => Vec2::ZERO, // Origin's non-optional.
-            };
-
-            // Get the walkbox, offset it relative to the origin, THEN flip the Y.
-            let absolute_walkbox = rect_from_cel(&ase, "walkbox", i);
-            let walkbox = absolute_walkbox.map(|wbox| {
-                let relative_walkbox = Rect {
-                    min: wbox.min - origin,
-                    max: wbox.max - origin,
+                // Wasteful, bc we could exit early on first non-clear px, but meh.
+                let origin = match rect_from_cel(&ase, "origin", i) {
+                    Some(origin_rect) => origin_rect.min,
+                    None => Vec2::ZERO, // Origin's non-optional.
                 };
-                flip_rect_y(relative_walkbox)
-            });
 
-            let anchor = anchor_transform.transform_point2(origin);
+                // Get the walkbox, offset it relative to the origin, THEN flip the Y.
+                let absolute_walkbox = rect_from_cel(&ase, "walkbox", i);
+                let walkbox = absolute_walkbox.map(|wbox| {
+                    let relative_walkbox = Rect {
+                        min: wbox.min - origin,
+                        max: wbox.max - origin,
+                    };
+                    flip_rect_y(relative_walkbox)
+                });
 
-            CharAnimationFrame {
-                index,
-                duration,
-                origin,
-                anchor,
-                walkbox,
-            }
-        }).collect();
+                let anchor = anchor_transform.transform_point2(origin);
+
+                CharAnimationFrame {
+                    index,
+                    duration,
+                    origin,
+                    anchor,
+                    walkbox,
+                }
+            })
+            .collect();
 
         let variant = CharAnimationVariant { name, frames };
         variants.insert(name, variant);
@@ -236,7 +227,7 @@ fn remux_image(img: RgbaImage) -> Image {
     let size = Extent3d {
         width: img.width(),
         height: img.height(),
-        depth_or_array_layers: 1
+        depth_or_array_layers: 1,
     };
     Image::new(
         size,
@@ -273,10 +264,12 @@ fn flip_rect_y(r: Rect) -> Rect {
 
 /// Get the bounding Rect for a cel's non-transparent pixels.
 fn rect_from_cel(ase: &AsepriteFile, layer_name: &str, frame_index: u32) -> Option<Rect> {
-    ase.layer_by_name(layer_name).map(|layer| {
-        let cel_img = layer.frame(frame_index).image();
-        get_rect_lmao(&cel_img)
-    }).flatten()
+    ase.layer_by_name(layer_name)
+        .map(|layer| {
+            let cel_img = layer.frame(frame_index).image();
+            get_rect_lmao(&cel_img)
+        })
+        .flatten()
 }
 
 /// Get the bounding Rect for the non-transparent pixels in an RgbaImage.
@@ -289,10 +282,18 @@ fn get_rect_lmao(img: &RgbaImage) -> Option<Rect> {
     for (x, y, val) in img.enumerate_pixels() {
         if non_empty(val) {
             present = true;
-            if x < x_min { x_min = x; }
-            if x > x_max { x_max = x; }
-            if y < y_min { y_min = y; }
-            if y > y_max { y_max = y; }
+            if x < x_min {
+                x_min = x;
+            }
+            if x > x_max {
+                x_max = x;
+            }
+            if y < y_min {
+                y_min = y;
+            }
+            if y > y_max {
+                y_max = y;
+            }
         }
     }
     if present {
@@ -332,8 +333,7 @@ fn copy_texture_to_atlas(
         let end = begin + rect_width * format_size;
         let texture_begin = texture_y * rect_width * format_size;
         let texture_end = texture_begin + rect_width * format_size;
-        atlas_texture.data[begin..end]
-            .copy_from_slice(&texture.data[texture_begin..texture_end]);
+        atlas_texture.data[begin..end].copy_from_slice(&texture.data[texture_begin..texture_end]);
     }
 }
 
@@ -414,9 +414,7 @@ impl CharAnimationState {
     }
 }
 
-fn charanm_set_directions_system(
-    mut query: Query<(&mut CharAnimationState, &Motion)>,
-) {
+fn charanm_set_directions_system(mut query: Query<(&mut CharAnimationState, &Motion)>) {
     for (mut state, motion) in query.iter_mut() {
         // just doing this unconditionally and letting change_variant sort it out.
         let dir = Dir::cardinal_from_angle(motion.direction);
@@ -430,11 +428,7 @@ pub fn charanm_animate_system(
     time: Res<Time>,
     mut commands: Commands,
 ) {
-    for (
-        mut state,
-        mut sprite,
-        entity,
-    ) in query.iter_mut() {
+    for (mut state, mut sprite, entity) in query.iter_mut() {
         let Some(animation) = animations.get(&state.animation) else { break; };
         let Some(variant_name) = &state.variant else { break; };
         // get the stugff
@@ -452,7 +446,10 @@ pub fn charanm_animate_system(
                 let frame_count = variant.frames.len();
                 state.frame = (state.frame + 1) % frame_count;
 
-                state.frame_timer = Some(Timer::new(variant.frames[state.frame].duration, TimerMode::Once));
+                state.frame_timer = Some(Timer::new(
+                    variant.frames[state.frame].duration,
+                    TimerMode::Once,
+                ));
             }
         } else {
             // must be new here. initialize the timer w/ the current
@@ -516,10 +513,7 @@ fn charanm_test_set_motion_system(
     }
 }
 
-fn charanm_test_setup_system(
-    mut commands: Commands,
-    asset_server: Res<AssetServer>,
-) {
+fn charanm_test_setup_system(mut commands: Commands, asset_server: Res<AssetServer>) {
     let anim_handle: Handle<CharAnimation> = asset_server.load("sprites/sPlayerRun.aseprite");
     commands.spawn((
         Goofus,
@@ -531,7 +525,8 @@ fn charanm_test_setup_system(
         Motion::new(Vec2::ZERO),
     ));
 
-    let test_texture_handle: Handle<Image> = asset_server.load("sprites/sPlayerRun.aseprite#texture");
+    let test_texture_handle: Handle<Image> =
+        asset_server.load("sprites/sPlayerRun.aseprite#texture");
     commands.spawn(SpriteBundle {
         texture: test_texture_handle,
         transform: Transform::from_translation(Vec3::new(10.0, 10.0, 3.0)),
@@ -542,13 +537,11 @@ fn charanm_test_setup_system(
 #[derive(Component)]
 struct Goofus;
 
-
 pub struct TestCharAnimationPlugin;
 
 impl Plugin for TestCharAnimationPlugin {
     fn build(&self, app: &mut App) {
-        app
-        .add_startup_system(charanm_test_setup_system)
-        .add_system(charanm_test_set_motion_system);
+        app.add_startup_system(charanm_test_setup_system)
+            .add_system(charanm_test_set_motion_system);
     }
 }

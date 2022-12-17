@@ -1,44 +1,36 @@
 use bevy::{
-    prelude::*,
     ecs::{
         component,
-        system::{Command, Insert, Remove}
+        system::{Command, Insert, Remove},
     },
     input::InputSystem,
     log::{info, LogPlugin},
-    utils::{
-        Duration,
-        tracing,
-    },
-    math::Rect, sprite::{MaterialMesh2dBundle, Mesh2dHandle},
+    math::Rect,
+    prelude::*,
+    sprite::{MaterialMesh2dBundle, Mesh2dHandle},
+    utils::{tracing, Duration},
 };
 use bevy_ecs_ldtk::prelude::*;
 use std::collections::HashMap;
 use std::marker::PhantomData;
 use std::ops::{Deref, DerefMut};
 // use bevy_ecs_tilemap::prelude::*;
-use std::{
-    collections::VecDeque,
-    // f32::consts::PI
-};
-use bevy_inspector_egui::{
-    WorldInspectorPlugin,
-    Inspectable,
-    RegisterInspectable,
-    InspectorPlugin,
-};
-use crate::input::*;
 use crate::char_animation::*;
 use crate::compass::*;
+use crate::input::*;
+use bevy_inspector_egui::{
+    Inspectable, InspectorPlugin, RegisterInspectable, WorldInspectorPlugin,
+};
+use std::collections::VecDeque;
 // use crate::goofy_time::*;
 
-mod hellow;
-mod junk;
-mod input;
 mod char_animation;
 mod compass;
-mod player_states;
 mod goofy_time;
+mod hellow;
+mod input;
+mod junk;
+mod player_states;
 
 const PIXEL_SCALE: f32 = 1.0;
 
@@ -70,7 +62,6 @@ fn main() {
         .add_plugin(CharAnimationPlugin)
         .add_plugin(TestCharAnimationPlugin)
         .add_plugin(LdtkPlugin)
-
         // DEBUG STUFF
         // .add_plugin(FrameTimeDiagnosticsPlugin)
         // .add_startup_system(junk::setup_fps_debug)
@@ -80,7 +71,6 @@ fn main() {
         .insert_resource(DebugAssets::default())
         .add_startup_system(setup_debug_assets.before(setup_player))
         .add_system(spawn_wall_tile_collider_debugs)
-
         // INSPECTOR STUFF
         .add_plugin(WorldInspectorPlugin::new())
         .register_inspectable::<SubTransform>()
@@ -89,21 +79,16 @@ fn main() {
         .register_inspectable::<Hitbox>()
         .add_plugin(InspectorPlugin::<DebugColliders>::new())
         .add_system(debug_walkboxes_system)
-
-
         // LDTK STUFF
         .add_startup_system(setup_level)
         .insert_resource(LevelSelection::Index(1))
         .register_ldtk_int_cell_for_layer::<Wall>("StructureKind", 1)
-
         // CAMERA
         .add_startup_system(setup_camera)
-
         // INPUT STUFF
         .add_system(connect_gamepads_system)
         .insert_resource(CurrentInputs::default())
         .add_system_to_stage(CoreStage::PreUpdate, accept_input_system.after(InputSystem))
-
         // PLAYER STUFF
         .add_startup_system(setup_player)
         .add_system(planned_move_system)
@@ -114,7 +99,6 @@ fn main() {
         // .add_system(charanm_test_animate_system) // in CharAnimationPlugin or somethin'
         .add_system(dumb_move_camera_system.after(planned_move_system))
         .add_system(snap_pixel_positions_system.after(dumb_move_camera_system))
-
         // OK BYE!!!
         .run();
 }
@@ -145,16 +129,12 @@ fn player_free_plan_move(
             &mut CharAnimationState,
             &mut PlayerFree,
         ),
-        With<Player>
+        With<Player>,
     >,
 ) {
-    for (
-        mut motion,
-        mut speed,
-        animations_map,
-        mut animation_state,
-        mut player_free,
-    ) in player_q.iter_mut() {
+    for (mut motion, mut speed, animations_map, mut animation_state, mut player_free) in
+        player_q.iter_mut()
+    {
         if player_free.just_started {
             speed.0 = Speed::RUN; // TODO hey what's the value here
             player_free.just_started = false;
@@ -181,20 +161,20 @@ fn player_free_plan_move(
         // OK, that's movement. Are we doing anything else this frame? For example, an action?
         if inputs.actioning {
             // Right now there is only roll.
-            player_free.transition = PlayerFreeTransition::Roll { direction: motion.direction };
+            player_free.transition = PlayerFreeTransition::Roll {
+                direction: motion.direction,
+            };
         }
     }
 }
 
-fn player_free_out(
-    mut commands: Commands,
-    player_q: Query<(Entity, &PlayerFree)>,
-) {
+fn player_free_out(mut commands: Commands, player_q: Query<(Entity, &PlayerFree)>) {
     for (entity, player_roll) in player_q.iter() {
         match &player_roll.transition {
             PlayerFreeTransition::None => (),
             PlayerFreeTransition::Roll { direction } => {
-                commands.entity(entity)
+                commands
+                    .entity(entity)
                     .remove::<PlayerFree>()
                     .insert(PlayerRoll::new(*direction));
             },
@@ -208,27 +188,25 @@ fn planned_move_system(
     mut mover_q: Query<(&mut SubTransform, &mut Motion, &Walkbox), With<Player>>,
     solids_q: Query<(&GlobalTransform, &Walkbox), With<Solid>>,
 ) {
-    let solids: Vec<AbsBBox> = solids_q.iter().map(|(global_transform, walkbox)| {
-        // TODO: This can't handle solids that move, because GlobalTransform
-        // lags by one frame. I don't have a solution for this yet! Treat them
-        // separately? Manually sync frames of reference for everything?
-        // Aggressively early-update the GlobalTransform of anything mobile
-        // right after it moves? Anyway, for immobile walls we need to do *this*
-        // because as of bevy_ecs_ldtk 0.5 / bevy_ecs_tilemap 0.8+, tile
-        // entities are offset from (0,0) by a half a tile in both axes in order
-        // to make the bottom left corner of the first tile render at (0,0).
-        let origin = global_transform.translation().truncate();
-        AbsBBox::from_rect(walkbox.0, origin)
-    }).collect();
+    let solids: Vec<AbsBBox> = solids_q
+        .iter()
+        .map(|(global_transform, walkbox)| {
+            // TODO: This can't handle solids that move, because GlobalTransform
+            // lags by one frame. I don't have a solution for this yet! Treat them
+            // separately? Manually sync frames of reference for everything?
+            // Aggressively early-update the GlobalTransform of anything mobile
+            // right after it moves? Anyway, for immobile walls we need to do *this*
+            // because as of bevy_ecs_ldtk 0.5 / bevy_ecs_tilemap 0.8+, tile
+            // entities are offset from (0,0) by a half a tile in both axes in order
+            // to make the bottom left corner of the first tile render at (0,0).
+            let origin = global_transform.translation().truncate();
+            AbsBBox::from_rect(walkbox.0, origin)
+        })
+        .collect();
 
-    for (
-        mut transform,
-        mut motion,
-        walkbox,
-    ) in mover_q.iter_mut() {
+    for (mut transform, mut motion, walkbox) in mover_q.iter_mut() {
         let raw_movement_intent = motion.planned;
         motion.planned = Vec2::ZERO; // TODO should probably have this be an Option -> .take()
-
 
         // If we're not moving, stop running and bail. Right now I'm not doing
         // change detection, so I can just do an unconditional hard assign w/ those
@@ -288,13 +266,18 @@ fn planned_move_system(
             });
         }
     }
-
 }
 
 fn player_roll_plan_move(
     mut player_q: Query<
-        (&mut Motion, &mut Speed, &AnimationsMap, &mut CharAnimationState, &mut PlayerRoll),
-        With<Player>
+        (
+            &mut Motion,
+            &mut Speed,
+            &AnimationsMap,
+            &mut CharAnimationState,
+            &mut PlayerRoll,
+        ),
+        With<Player>,
     >,
     time: Res<Time>,
 ) {
@@ -302,7 +285,9 @@ fn player_roll_plan_move(
     // Motion struct, and oh wait, also mess with the animation timings.
     // I guess first things first:
 
-    for (mut motion, mut speed, animations_map, mut animation_state, mut player_roll) in player_q.iter_mut() {
+    for (mut motion, mut speed, animations_map, mut animation_state, mut player_roll) in
+        player_q.iter_mut()
+    {
         if player_roll.just_started {
             player_roll.just_started = false;
             speed.0 = Speed::ROLL;
@@ -333,16 +318,14 @@ fn player_roll_plan_move(
     }
 }
 
-fn player_roll_out(
-    mut commands: Commands,
-    player_q: Query<(Entity, &PlayerRoll), With<Player>>,
-) {
+fn player_roll_out(mut commands: Commands, player_q: Query<(Entity, &PlayerRoll), With<Player>>) {
     for (entity, player_roll) in player_q.iter() {
         match &player_roll.transition {
             PlayerRollTransition::None => (),
             PlayerRollTransition::Bonk => (),
             PlayerRollTransition::Free => {
-                commands.entity(entity)
+                commands
+                    .entity(entity)
                     .remove::<PlayerRoll>()
                     .insert(PlayerFree::new());
             },
@@ -356,7 +339,7 @@ fn move_camera_system(
     // time: Res<SmoothedTime>,
     mut params: ParamSet<(
         Query<&SubTransform, With<Player>>,
-        Query<&mut SubTransform, With<Camera>>
+        Query<&mut SubTransform, With<Camera>>,
     )>,
 ) {
     let delta = time.delta_seconds();
@@ -381,7 +364,7 @@ fn move_camera_system(
 fn dumb_move_camera_system(
     mut params: ParamSet<(
         Query<&SubTransform, With<Player>>,
-        Query<&mut SubTransform, With<Camera>>
+        Query<&mut SubTransform, With<Camera>>,
     )>,
 ) {
     let player_pos = params.p0().single().translation;
@@ -396,9 +379,7 @@ fn dumb_move_camera_system(
 // point being we always manipulate this alternate transform, and then this is
 // the system that syncs it to real transform before the sync to global
 // transform happens.
-fn snap_pixel_positions_system(
-    mut query: Query<(&SubTransform, &mut Transform)>,
-) {
+fn snap_pixel_positions_system(mut query: Query<(&SubTransform, &mut Transform)>) {
     // let global_scale = Vec3::new(PIXEL_SCALE, PIXEL_SCALE, 1.0);
     for (sub_tf, mut pixel_tf) in query.iter_mut() {
         // pixel_tf.translation = (global_scale * sub_tf.translation).floor();
@@ -414,13 +395,13 @@ fn setup_debug_assets(
     let walkbox_mesh = meshes.add(Mesh::from(shape::Quad::default()));
     let walkbox_material = materials.add(ColorMaterial::from(Color::rgba(0.5, 0.0, 0.5, 0.6)));
     debug_assets.insert("walkbox_mesh".to_string(), walkbox_mesh.clone_untyped());
-    debug_assets.insert("walkbox_material".to_string(), walkbox_material.clone_untyped());
+    debug_assets.insert(
+        "walkbox_material".to_string(),
+        walkbox_material.clone_untyped(),
+    );
 }
 
-fn setup_level(
-    mut commands: Commands,
-    asset_server: Res<AssetServer>,
-) {
+fn setup_level(mut commands: Commands, asset_server: Res<AssetServer>) {
     commands.spawn((
         LdtkWorld,
         LdtkWorldBundle {
@@ -431,14 +412,14 @@ fn setup_level(
     ));
 }
 
-fn setup_camera(
-    mut commands: Commands,
-) {
+fn setup_camera(mut commands: Commands) {
     let mut camera_bundle = Camera2dBundle::default();
-    camera_bundle.projection.scale = 1.0/3.0;
+    camera_bundle.projection.scale = 1.0 / 3.0;
     commands.spawn((
         camera_bundle,
-        SubTransform{ translation: Vec3::new(0.0, 0.0, 999.0) },
+        SubTransform {
+            translation: Vec3::new(0.0, 0.0, 999.0),
+        },
         // ^^ hack: I looked up the Z coord on new_2D and fudged it so we won't accidentally round it to 1000.
     ));
 }
@@ -625,7 +606,6 @@ impl PlayerRoll {
 #[component(storage = "SparseSet")]
 pub struct PlayerBonk;
 
-
 /// Marker component for a spawned LdtkWorldBundle
 #[derive(Component)]
 pub struct LdtkWorld;
@@ -699,23 +679,16 @@ pub struct Hitbox(Rect);
 // data structure associated with an animation or something?
 
 pub fn centered_rect(width: f32, height: f32) -> Rect {
-    let min = Vec2::new(-width/2., -height/2.);
-    let max = Vec2::new(width/2., height/2.);
-    Rect {
-        min,
-        max,
-    }
+    let min = Vec2::new(-width / 2., -height / 2.);
+    let max = Vec2::new(width / 2., height / 2.);
+    Rect { min, max }
 }
 
 pub fn bottom_centered_rect(width: f32, height: f32) -> Rect {
-    let min = Vec2::new(-width/2., 0.);
-    let max = Vec2::new(width/2., height);
-    Rect {
-        min,
-        max,
-    }
+    let min = Vec2::new(-width / 2., 0.);
+    let max = Vec2::new(width / 2., height);
+    Rect { min, max }
 }
-
 
 /// An AABB that's located in absolute space, probably produced by combining a
 /// BBox with an origin offset.

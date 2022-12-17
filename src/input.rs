@@ -54,7 +54,11 @@ pub fn connect_gamepads_system(
     // ^^ eventreader params have to be mutable because reading events immutably
     // still updates an internal tracking cursor on the reader instance. cool.
 ) {
-    for GamepadEvent { gamepad, event_type } in gamepad_events.iter() {
+    for GamepadEvent {
+        gamepad,
+        event_type,
+    } in gamepad_events.iter()
+    {
         match event_type {
             GamepadEventType::Connected(_) => {
                 info!("pad in: {:?}", gamepad);

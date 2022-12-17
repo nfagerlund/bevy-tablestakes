@@ -1,26 +1,24 @@
-use std::collections::VecDeque;
 use bevy::prelude::*;
-use bevy::{
-    utils::Duration,
-};
+use bevy::utils::Duration;
+use std::collections::VecDeque;
 
 pub struct SmoothedTimePlugin;
 impl Plugin for SmoothedTimePlugin {
     fn build(&self, app: &mut App) {
-        app
-            .insert_resource(RecentFrameTimes{ buffer: VecDeque::new() })
-            .insert_resource(SmoothedTime {
-                delta: Duration::new(0, 0),
-            })
-            .add_system_to_stage(CoreStage::PreUpdate, time_smoothing_system);
+        app.insert_resource(RecentFrameTimes {
+            buffer: VecDeque::new(),
+        })
+        .insert_resource(SmoothedTime {
+            delta: Duration::new(0, 0),
+        })
+        .add_system_to_stage(CoreStage::PreUpdate, time_smoothing_system);
     }
 }
 
 pub struct StaticTimePlugin;
 impl Plugin for StaticTimePlugin {
     fn build(&self, app: &mut App) {
-        app
-            .insert_resource(StaticTime);
+        app.insert_resource(StaticTime);
     }
 }
 
@@ -47,13 +45,12 @@ pub struct StaticTime;
 
 impl StaticTime {
     pub fn delta_seconds(&self) -> f32 {
-        1./60.
+        1. / 60.
     }
     pub fn delta(&self) -> Duration {
         Duration::new(1, 0) / 60
     }
 }
-
 
 /// Smooth out delta time before doing anything with it. This is unoptimized, but that might not matter.
 fn time_smoothing_system(
@@ -68,7 +65,9 @@ fn time_smoothing_system(
         recent_time.buffer.pop_front();
         let mut sorted: Vec<Duration> = recent_time.buffer.clone().into();
         sorted.sort_unstable();
-        let sum = &sorted[2..(window - 2)].iter().fold(Duration::new(0, 0), |acc, x| acc + *x);
+        let sum = &sorted[2..(window - 2)]
+            .iter()
+            .fold(Duration::new(0, 0), |acc, x| acc + *x);
         smoothed_time.delta = *sum / (window as u32 - 4);
     } else {
         smoothed_time.delta = delta;

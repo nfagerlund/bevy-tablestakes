@@ -13,16 +13,19 @@ pub fn debug_z_system(
 ) {
     let player_transform = player_query.get_single().unwrap();
     let world_transform = world_query.get_single().unwrap();
-    info!("Player at: {}\n World at: {}\n", player_transform.translation, world_transform.translation);
+    info!(
+        "Player at: {}\n World at: {}\n",
+        player_transform.translation, world_transform.translation
+    );
     for (e_id, transform, map) in level_query.iter() {
-        info!("  Level {:?} (map id {:?}) at {}\n", e_id, map.0, transform.translation);
+        info!(
+            "  Level {:?} (map id {:?}) at {}\n",
+            e_id, map.0, transform.translation
+        );
     }
 }
 
-pub fn setup_fps_debug(
-    mut commands: Commands,
-    asset_server: Res<AssetServer>,
-) {
+pub fn setup_fps_debug(mut commands: Commands, asset_server: Res<AssetServer>) {
     let style = TextStyle {
         font: asset_server.load("fonts/m5x7.ttf"),
         font_size: 32.0,
@@ -55,7 +58,7 @@ pub fn setup_fps_debug(
                 ..Default::default() // boy, LOTS of these
             },
             ..Default::default()
-        }
+        },
     ));
 }
 
