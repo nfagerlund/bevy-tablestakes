@@ -391,6 +391,11 @@ fn dumb_move_camera_system(
     camera_tf.translation.y = player_pos.y;
 }
 
+// This no longer does anything, because we're now handling the sub-pixel stuff
+// in the movement function -- though that's all still up in the air. Anyway,
+// point being we always manipulate this alternate transform, and then this is
+// the system that syncs it to real transform before the sync to global
+// transform happens.
 fn snap_pixel_positions_system(
     mut query: Query<(&SubTransform, &mut Transform)>,
 ) {
