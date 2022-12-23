@@ -1,8 +1,4 @@
 use bevy::{
-    ecs::{
-        component,
-        system::{Command, Insert, Remove},
-    },
     input::InputSystem,
     log::{info, LogPlugin},
     math::Rect,
@@ -12,7 +8,6 @@ use bevy::{
 };
 use bevy_ecs_ldtk::prelude::*;
 use std::collections::HashMap;
-use std::marker::PhantomData;
 use std::ops::{Deref, DerefMut};
 // use bevy_ecs_tilemap::prelude::*;
 use crate::char_animation::*;
@@ -21,7 +16,6 @@ use crate::input::*;
 use bevy_inspector_egui::{
     Inspectable, InspectorPlugin, RegisterInspectable, WorldInspectorPlugin,
 };
-use std::collections::VecDeque;
 // use crate::goofy_time::*;
 
 mod char_animation;
