@@ -128,26 +128,29 @@ pub fn setup_debug_assets(
     );
 }
 
-// Can't spawn child entities in bundle_int_cell, alas, so need an after-the-fact setup
-pub fn spawn_wall_tile_collider_debugs(
-    new_wall_q: Query<Entity, Added<Solid>>,
+/// Add debug mesh children to newly added collidable entities, so I can see
+/// where their boundaries are. (Toggle visibility with inspector).
+pub fn spawn_collider_debugs(
+    // vv Added<Player> is a hack, but rn that's the only mobile collider so shrug
+    new_collider_q: Query<Entity, Or<(Added<Solid>, Added<crate::Player>)>>,
     mut commands: Commands,
     debug_assets: Res<DebugAssets>,
 ) {
-    let (Some(mesh_untyped), Some(material_untyped)) = (debug_assets.get("walkbox_mesh"), debug_assets.get("walkbox_material"))
-    else {
-        warn!("Hey!! I couldn't get ahold of the collider debug assets for some reason!!");
-        return;
-    };
-    let material = material_untyped.clone().typed::<ColorMaterial>();
-    let mesh = Mesh2dHandle(mesh_untyped.clone().typed::<Mesh>());
+    for collider in new_collider_q.iter() {
+        let (Some(mesh_untyped), Some(material_untyped)) = (debug_assets.get("walkbox_mesh"), debug_assets.get("walkbox_material"))
+        else {
+            warn!("Hey!! I couldn't get ahold of the collider debug assets for some reason!!");
+            return;
+        };
+        let material = material_untyped.clone().typed::<ColorMaterial>();
+        let mesh = Mesh2dHandle(mesh_untyped.clone().typed::<Mesh>());
 
-    for wall in new_wall_q.iter() {
-        commands.entity(wall).with_children(|parent| {
+        // info!("attaching debug mesh to {:?}", &collider);
+        commands.entity(collider).with_children(|parent| {
             parent.spawn(WalkboxDebugBundle {
                 mesh_bundle: MaterialMesh2dBundle {
-                    mesh: mesh.clone(),
-                    material: material.clone(),
+                    mesh,
+                    material,
                     visibility: Visibility { is_visible: false },
                     ..default()
                 },
@@ -157,6 +160,8 @@ pub fn spawn_wall_tile_collider_debugs(
     }
 }
 
+/// Update size and position of collider debug meshes, since walkboxes can
+/// change frame-by-frame.
 pub fn debug_walkboxes_system(
     collider_q: Query<(Entity, &Walkbox)>,
     mut debug_mesh_q: Query<(&Parent, &mut Transform, &mut Visibility), With<WalkboxDebug>>,
@@ -170,13 +175,14 @@ pub fn debug_walkboxes_system(
         if debug_settings.show_walkboxes {
             visibility.is_visible = true;
             // ok... need to set our scale to the size of the walkbox, and then
-            // offset our translation by the difference between the walkbox's
-            // center and it's actual anchor point.
+            // offset our translation relative to our parent by the difference
+            // between their walkbox's center and their actual anchor point
+            // (because the mesh's anchor is always centered).
             let size = walkbox.0.max - walkbox.0.min;
             let center = walkbox.0.min + size / 2.0;
             // and of course, the anchor point of the rect is (0,0), by definition.
             transform.scale = size.extend(1.0);
-            transform.translation = center.extend(1.0);
+            transform.translation = center.extend(1.0); // draw on top of parent
         } else {
             visibility.is_visible = false;
             // we're done

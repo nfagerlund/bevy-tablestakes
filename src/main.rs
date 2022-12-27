@@ -66,7 +66,7 @@ fn main() {
         .add_system(tile_info_barfing_system)
         .insert_resource(DebugAssets::default())
         .add_startup_system(setup_debug_assets.before(setup_player))
-        .add_system(spawn_wall_tile_collider_debugs)
+        .add_system(spawn_collider_debugs)
         // INSPECTOR STUFF
         .add_plugin(WorldInspectorPlugin::new())
         .register_inspectable::<SubTransform>()
@@ -408,11 +408,7 @@ fn setup_camera(mut commands: Commands) {
     ));
 }
 
-fn setup_player(
-    mut commands: Commands,
-    asset_server: Res<AssetServer>,
-    debug_assets: Res<DebugAssets>,
-) {
+fn setup_player(mut commands: Commands, asset_server: Res<AssetServer>) {
     let run: Handle<CharAnimation> = asset_server.load("sprites/sPlayerRun.aseprite");
     let idle: Handle<CharAnimation> = asset_server.load("sprites/sPlayer.aseprite");
     let hurt: Handle<CharAnimation> = asset_server.load("sprites/sPlayerHurt.aseprite");
@@ -438,7 +434,9 @@ fn setup_player(
                     .with_scale(Vec3::splat(PIXEL_SCALE)),
                 ..Default::default()
             },
-            sub_transform: SubTransform{ translation: Vec3::new(0.0, 0.0, 3.0) },
+            sub_transform: SubTransform {
+                translation: Vec3::new(0.0, 0.0, 3.0),
+            },
             speed: Speed(Speed::RUN),
             // --- New animation system
             char_animation_state: CharAnimationState::new(initial_animation, Dir::E),
@@ -450,26 +448,7 @@ fn setup_player(
         PlayerRoll::new(0.785),
         // Shadow marker
         HasShadow,
-    )).with_children(|player| {
-        let (Some(mesh_untyped), Some(material_untyped)) = (debug_assets.get("walkbox_mesh"), debug_assets.get("walkbox_material"))
-        else {
-            warn!("Hey!! I couldn't get ahold of the collider debug assets for some reason!!");
-            return;
-        };
-        let material = material_untyped.clone().typed::<ColorMaterial>();
-        let mesh = Mesh2dHandle(mesh_untyped.clone().typed::<Mesh>());
-
-        // Spawn walkbox debug mesh for seeing where we're standing.
-        player.spawn(WalkboxDebugBundle {
-            mesh_bundle: MaterialMesh2dBundle {
-                mesh,
-                material,
-                visibility: Visibility { is_visible: false },
-                ..default()
-            },
-            ..default()
-        });
-    });
+    ));
 }
 
 fn shadow_stitcher_system(
