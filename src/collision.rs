@@ -114,6 +114,8 @@ pub struct DebugColliders {
     show_walkboxes: bool,
 }
 
+// TODO: Maybe just convert this to a local resource for the debug spawner and
+// use .entry().or() to do the initialization.
 pub fn setup_debug_assets(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<ColorMaterial>>,
