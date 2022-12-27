@@ -108,6 +108,7 @@ const OFFSET_TO_CENTER: Vec2 = Vec2::new(-0.5, 0.5);
 /// - File only uses AnimationDirection::Forward.
 /// - Tag names are unique in the file. (Aseprite doesn't guarantee this.)
 /// - Named tags cover all of the needed animation frames.
+///   - OR: there are zero tags and thus only one orientation.
 /// - Walkbox layer: "walkbox"
 /// - Origin layer: "origin"
 /// - Layers for drawn-on metadata coordinates should be marked as invisible in
@@ -167,46 +168,60 @@ fn load_aseprite(bytes: &[u8], load_context: &mut LoadContext) -> anyhow::Result
     // Since our final frame indices are reliable, processing tags is easy.
     let mut variants: VariantsMap = HashMap::new();
 
-    for tag in (0..ase.num_tags()).map(|i| ase.tag(i)) {
-        let name: VariantName = tag.name().try_into()?; // Just propagate error, don't continue load.
-        let frame_range = tag.from_frame()..=tag.to_frame(); // inclusive
-        let frames: Vec<CharAnimationFrame> = frame_range
-            .map(|i| {
-                let frame = ase.frame(i);
-                let index = i as usize;
-                let duration_ms = frame.duration() as u64;
-                let duration = Duration::from_millis(duration_ms);
+    // Closure for the heavy lifting (since we can't handle some tags / 0 tags
+    // in the same for-loop):
+    let mut process_frame_range =
+        |name: VariantName, frame_range: core::ops::RangeInclusive<u32>| {
+            let frames: Vec<CharAnimationFrame> = frame_range
+                .map(|i| {
+                    let frame = ase.frame(i);
+                    let index = i as usize;
+                    let duration_ms = frame.duration() as u64;
+                    let duration = Duration::from_millis(duration_ms);
 
-                // Wasteful, bc we could exit early on first non-clear px, but meh.
-                let origin = match rect_from_cel(&ase, "origin", i) {
-                    Some(origin_rect) => origin_rect.min,
-                    None => Vec2::ZERO, // Origin's non-optional.
-                };
-
-                // Get the walkbox, offset it relative to the origin, THEN flip the Y.
-                let absolute_walkbox = rect_from_cel(&ase, "walkbox", i);
-                let walkbox = absolute_walkbox.map(|wbox| {
-                    let relative_walkbox = Rect {
-                        min: wbox.min - origin,
-                        max: wbox.max - origin,
+                    // Wasteful, bc we could exit early on first non-clear px, but meh.
+                    let origin = match rect_from_cel(&ase, "origin", i) {
+                        Some(origin_rect) => origin_rect.min,
+                        None => Vec2::ZERO, // Origin's non-optional.
                     };
-                    flip_rect_y(relative_walkbox)
-                });
 
-                let anchor = anchor_transform.transform_point2(origin);
+                    // Get the walkbox, offset it relative to the origin, THEN flip the Y.
+                    let absolute_walkbox = rect_from_cel(&ase, "walkbox", i);
+                    let walkbox = absolute_walkbox.map(|wbox| {
+                        let relative_walkbox = Rect {
+                            min: wbox.min - origin,
+                            max: wbox.max - origin,
+                        };
+                        flip_rect_y(relative_walkbox)
+                    });
 
-                CharAnimationFrame {
-                    index,
-                    duration,
-                    origin,
-                    anchor,
-                    walkbox,
-                }
-            })
-            .collect();
+                    let anchor = anchor_transform.transform_point2(origin);
 
-        let variant = CharAnimationVariant { name, frames };
-        variants.insert(name, variant);
+                    CharAnimationFrame {
+                        index,
+                        duration,
+                        origin,
+                        anchor,
+                        walkbox,
+                    }
+                })
+                .collect();
+
+            let variant = CharAnimationVariant { name, frames };
+            variants.insert(name, variant);
+        };
+
+    if ase.num_tags() == 0 {
+        // then treat whole file as one variant.
+        let frame_range = 0..=(ase.num_frames() - 1);
+        process_frame_range(VariantName::Neutral, frame_range);
+    } else {
+        // one variant per tag.
+        for tag in (0..ase.num_tags()).map(|i| ase.tag(i)) {
+            let name: VariantName = tag.name().try_into()?; // Just propagate error, don't continue load.
+            let frame_range = tag.from_frame()..=tag.to_frame(); // inclusive
+            process_frame_range(name, frame_range);
+        }
     }
 
     // The whole enchilada:
