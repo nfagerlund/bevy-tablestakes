@@ -63,7 +63,7 @@ fn main() {
         // .add_startup_system(junk::setup_fps_debug)
         // .add_system(junk::update_fps_debug_system)
         // .add_system(junk::debug_z_system)
-        .add_system(tile_info_barfing_system)
+        // .add_system(junk::tile_info_barfing_system)
         .insert_resource(DebugAssets::default())
         .add_startup_system(setup_debug_assets.before(setup_player))
         .add_system(spawn_collider_debugs)
@@ -99,21 +99,6 @@ fn main() {
         .add_system(snap_pixel_positions_system.after(dumb_move_camera_system))
         // OK BYE!!!
         .run();
-}
-
-fn tile_info_barfing_system(
-    keys: Res<Input<KeyCode>>,
-    tile_query: Query<(&IntGridCell, &GridCoords, &Transform)>,
-    level_query: Query<(&Handle<LdtkLevel>, &Transform)>,
-) {
-    if keys.just_pressed(KeyCode::B) {
-        for (gridcell, _coords, transform) in tile_query.iter() {
-            info!("{:?} at {:?}", gridcell, transform);
-        }
-        for (level, transform) in level_query.iter() {
-            info!("level {:?} at {:?}", level, transform);
-        }
-    }
 }
 
 fn player_free_plan_move(

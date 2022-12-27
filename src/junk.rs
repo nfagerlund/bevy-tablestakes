@@ -2,7 +2,7 @@ use bevy::{
     diagnostic::{Diagnostics, FrameTimeDiagnosticsPlugin},
     prelude::*,
 };
-// use bevy_ecs_ldtk::prelude::*;
+use bevy_ecs_ldtk::prelude::*;
 // use bevy_ecs_tilemap::prelude::*;
 
 pub fn debug_z_system(
@@ -22,6 +22,21 @@ pub fn debug_z_system(
             "  Level {:?} (map id {:?}) at {}\n",
             e_id, map.0, transform.translation
         );
+    }
+}
+
+pub fn tile_info_barfing_system(
+    keys: Res<Input<KeyCode>>,
+    tile_query: Query<(&IntGridCell, &GridCoords, &Transform)>,
+    level_query: Query<(&Handle<LdtkLevel>, &Transform)>,
+) {
+    if keys.just_pressed(KeyCode::B) {
+        for (gridcell, _coords, transform) in tile_query.iter() {
+            info!("{:?} at {:?}", gridcell, transform);
+        }
+        for (level, transform) in level_query.iter() {
+            info!("level {:?} at {:?}", level, transform);
+        }
     }
 }
 
