@@ -436,6 +436,7 @@ fn setup_player(mut commands: Commands, asset_server: Res<AssetServer>) {
     ));
 }
 
+/// Attach shadow sprite child entities to anything new that HasShadow.
 fn shadow_stitcher_system(
     mut shadow_handle: Local<Option<Handle<CharAnimation>>>,
     asset_server: Res<AssetServer>,
