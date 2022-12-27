@@ -536,6 +536,7 @@ fn charanm_test_setup_system(mut commands: Commands, asset_server: Res<AssetServ
             transform: Transform::from_translation(Vec3::new(30.0, 60.0, 3.0)),
             ..default()
         },
+        crate::HasShadow,
         CharAnimationState::new(anim_handle, Dir::W),
         Motion::new(Vec2::ZERO),
     ));

@@ -83,6 +83,8 @@ fn main() {
         .add_system(connect_gamepads_system)
         .insert_resource(CurrentInputs::default())
         .add_system_to_stage(CoreStage::PreUpdate, accept_input_system.after(InputSystem))
+        // BODY STUFF
+        .add_system(shadow_stitcher_system)
         // PLAYER STUFF
         .add_startup_system(setup_player)
         .add_system(planned_move_system)
@@ -458,6 +460,8 @@ fn setup_player(
         // Initial gameplay state
         // PlayerFree::new(),
         PlayerRoll::new(0.785),
+        // Shadow marker
+        HasShadow,
     )).with_children(|player| {
         let (Some(mesh_untyped), Some(material_untyped)) = (debug_assets.get("walkbox_mesh"), debug_assets.get("walkbox_material"))
         else {
@@ -467,6 +471,7 @@ fn setup_player(
         let material = material_untyped.clone().typed::<ColorMaterial>();
         let mesh = Mesh2dHandle(mesh_untyped.clone().typed::<Mesh>());
 
+        // Spawn walkbox debug mesh for seeing where we're standing.
         player.spawn(WalkboxDebugBundle {
             mesh_bundle: MaterialMesh2dBundle {
                 mesh,
@@ -477,6 +482,30 @@ fn setup_player(
             ..default()
         });
     });
+}
+
+fn shadow_stitcher_system(
+    mut shadow_handle: Local<Option<Handle<CharAnimation>>>,
+    asset_server: Res<AssetServer>,
+    new_shadow_q: Query<Entity, Added<HasShadow>>,
+    mut commands: Commands,
+) {
+    // Will need to populate shadow handle on first system run:
+    if shadow_handle.is_none() {
+        info!("populating shadow handle in a local");
+        *shadow_handle = Some(asset_server.load("sprites/sShadow.aseprite"));
+    }
+    // but, will still need to perform normal business that first run! At this
+    // point, .unwrap() is fine because we made sure there's something there,
+    // and if that goes wonky I want early warning anyway.
+    for shadow_owner in new_shadow_q.iter() {
+        info!("stitching a shadow to {:?}", &shadow_owner);
+        commands.entity(shadow_owner).with_children(|parent| {
+            parent.spawn(ShadowSpriteBundle::new(
+                shadow_handle.as_ref().unwrap().clone(),
+            ));
+        });
+    }
 }
 
 fn debug_walkboxes_system(
@@ -607,6 +636,35 @@ pub struct LdtkWorld;
 /// Marker component for the player
 #[derive(Component)]
 pub struct Player;
+
+/// Marker struct for things that cast a simple shadow on the ground.
+#[derive(Component)]
+pub struct HasShadow;
+
+/// Marker struct for the shadow itself.
+#[derive(Component)]
+pub struct ShadowSprite;
+
+/// Bundle that actually implements a simple shadow child entity.
+#[derive(Bundle)]
+pub struct ShadowSpriteBundle {
+    identity: ShadowSprite,
+    sprite_sheet: SpriteSheetBundle,
+    char_animation_state: CharAnimationState,
+}
+
+impl ShadowSpriteBundle {
+    fn new(handle: Handle<CharAnimation>) -> Self {
+        Self {
+            identity: ShadowSprite,
+            sprite_sheet: SpriteSheetBundle {
+                transform: Transform::from_translation(Vec3::new(0.0, 0.0, -0.1)),
+                ..default()
+            },
+            char_animation_state: CharAnimationState::new(handle, VariantName::Neutral),
+        }
+    }
+}
 
 /// Speed in pixels... per... second?
 #[derive(Component, Inspectable)]
