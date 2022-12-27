@@ -429,10 +429,10 @@ pub fn charanm_animate_system(
     mut commands: Commands,
 ) {
     for (mut state, mut sprite, entity) in query.iter_mut() {
-        let Some(animation) = animations.get(&state.animation) else { break; };
-        let Some(variant_name) = &state.variant else { break; };
+        let Some(animation) = animations.get(&state.animation) else { continue; };
+        let Some(variant_name) = &state.variant else { continue; };
         // get the stugff
-        let Some(variant) = animation.variants.get(variant_name) else { break; };
+        let Some(variant) = animation.variants.get(variant_name) else { continue; };
 
         let mut updating_frame = false;
 
