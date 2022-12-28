@@ -480,19 +480,26 @@ fn shadow_stitcher_system(
 /// draw-relevant x/y/z-depth coordiantes. Offsets Y by Z, and will eventually
 /// do Y-sorting for drawing things in front of each other.
 fn extract_and_flatten_space_system(
-    has_z_query: Extract<Query<(&GlobalTransform, &Depth)>>,
+    has_z_query: Extract<Query<&Depth>>,
     mut extracted_sprites: ResMut<ExtractedSprites>,
 ) {
     // Well it's deeply unfortunate, but because the extract sprites system
     // crams everything into a Vec stored as a resource, we've got to iterate
     // over that and correlate it with our query.
     for ex_sprite in extracted_sprites.sprites.iter_mut() {
-        if let Ok((_transform, depth)) = has_z_query.get(ex_sprite.entity) {
+        if let Ok(depth) = has_z_query.get(ex_sprite.entity) {
             let transform = ex_sprite.transform.translation_mut();
             transform.y += transform.z;
             transform.z = depth.0;
         }
     }
+
+    // TODO: figure out how to handle attached / unattached child entities! The
+    // shadow gets its Z updated as the character elevates, but its Z is
+    // currently interpreted as depth only, so once it drops below the tile
+    // background (at the moment when the player fully hits the ground) it
+    // vanishes. But conversely, you'd want the character's weapon or hat to
+    // rise up into the air along with them. StaticDepth(f32)?
 }
 
 // Structs and crap!
