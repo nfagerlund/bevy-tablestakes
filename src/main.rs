@@ -493,6 +493,11 @@ fn extract_and_flatten_space_system(
             transform.z = depth.0;
         }
     }
+    // Also!! Counterpoint! It makes somewhat more sense to do this in the
+    // actual extract run for sprites so you don't have to double-handle these
+    // ExtractedSprite structs. And extract_sprites is short, and so is the
+    // Plugin::build() impl for SpritePlugin. I could just make my own custom
+    // SpritePlugin and remove the stock one from DefaultPlugins.
 
     // TODO: figure out how to handle attached / unattached child entities! The
     // shadow gets its Z updated as the character elevates, but its Z is
