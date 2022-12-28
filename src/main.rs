@@ -3,7 +3,8 @@ use bevy::{
     log::{info, LogPlugin},
     math::Rect,
     prelude::*,
-    sprite::{MaterialMesh2dBundle, Mesh2dHandle},
+    render::{Extract, RenderApp, RenderStage},
+    sprite::{ExtractedSprites, MaterialMesh2dBundle, Mesh2dHandle},
     utils::{tracing, Duration},
 };
 use bevy_ecs_ldtk::prelude::*;
@@ -100,6 +101,15 @@ fn main() {
         .add_system(snap_pixel_positions_system.after(dumb_move_camera_system))
         // OK BYE!!!
         ;
+
+    if let Ok(render_app) = app.get_sub_app_mut(RenderApp) {
+        render_app
+            // SPACE STUFF
+            .add_system_to_stage(
+                RenderStage::Extract,
+                extract_and_flatten_space_system.after(bevy::sprite::SpriteSystem::ExtractSprites),
+            );
+    }
 
     app.run();
 }
@@ -436,6 +446,8 @@ fn setup_player(mut commands: Commands, asset_server: Res<AssetServer>) {
         PlayerRoll::new(0.785),
         // Shadow marker
         HasShadow,
+        // Draw-depth manager
+        Depth(3.0),
     ));
 }
 
@@ -464,6 +476,34 @@ fn shadow_stitcher_system(
     }
 }
 
+/// Extract system to translate the in-game x/y/z-height coordinates to the
+/// draw-relevant x/y/z-depth coordiantes. Offsets Y by Z, and will eventually
+/// do Y-sorting for drawing things in front of each other.
+fn extract_and_flatten_space_system(
+    has_z_query: Extract<Query<(&GlobalTransform, &Depth)>>,
+    mut extracted_sprites: ResMut<ExtractedSprites>,
+) {
+    // Well it's deeply unfortunate, but because the extract sprites system
+    // crams everything into a Vec stored as a resource, we've got to iterate
+    // over that and correlate it with our query.
+    for ex_sprite in extracted_sprites.sprites.iter_mut() {
+        if let Ok((_transform, depth)) = has_z_query.get(ex_sprite.entity) {
+            let transform = ex_sprite.transform.translation_mut();
+            transform.y += transform.z;
+            transform.z = depth.0;
+        }
+    }
+}
+
+// Structs and crap!
+
+/// WIP: depth of an entity's sprite in the draw order, relative to... either
+/// its parent or the world? idk yet. also, who all gets these? not tiles,
+/// right? ...ok, so for now, it's the absolute, global Z coordinate for
+/// anything it's placed on, and I'm not doing any Y-sorting yet.
+#[derive(Component)]
+struct Depth(f32);
+
 #[derive(Bundle)]
 struct PlayerBundle {
     identity: Player,
@@ -476,8 +516,6 @@ struct PlayerBundle {
     motion: Motion,
     animations_map: AnimationsMap,
 }
-
-// Structs and crap!
 
 type AnimationsMapInner = HashMap<&'static str, Handle<CharAnimation>>;
 
