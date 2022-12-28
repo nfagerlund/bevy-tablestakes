@@ -53,7 +53,8 @@ fn main() {
             filter: "wgpu=error".to_string(),
         });
 
-    App::new()
+    let mut app = App::new();
+    app
         .add_plugins(configured_default_plugins)
         .add_plugin(CharAnimationPlugin)
         .add_plugin(TestCharAnimationPlugin)
@@ -98,7 +99,9 @@ fn main() {
         .add_system(dumb_move_camera_system.after(planned_move_system))
         .add_system(snap_pixel_positions_system.after(dumb_move_camera_system))
         // OK BYE!!!
-        .run();
+        ;
+
+    app.run();
 }
 
 fn player_free_plan_move(
