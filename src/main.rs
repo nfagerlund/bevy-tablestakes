@@ -447,7 +447,7 @@ fn setup_player(mut commands: Commands, asset_server: Res<AssetServer>) {
         // Shadow marker
         HasShadow,
         // Draw-depth manager
-        Depth(3.0),
+        TopDownMatter::character(),
     ));
 }
 
@@ -480,17 +480,19 @@ fn shadow_stitcher_system(
 /// draw-relevant x/y/z-depth coordiantes. Offsets Y by Z, and will eventually
 /// do Y-sorting for drawing things in front of each other.
 fn extract_and_flatten_space_system(
-    has_z_query: Extract<Query<&Depth>>,
+    has_z_query: Extract<Query<&TopDownMatter>>,
     mut extracted_sprites: ResMut<ExtractedSprites>,
 ) {
     // Well it's deeply unfortunate, but because the extract sprites system
     // crams everything into a Vec stored as a resource, we've got to iterate
     // over that and correlate it with our query.
     for ex_sprite in extracted_sprites.sprites.iter_mut() {
-        if let Ok(depth) = has_z_query.get(ex_sprite.entity) {
+        if let Ok(matter) = has_z_query.get(ex_sprite.entity) {
             let transform = ex_sprite.transform.translation_mut();
-            transform.y += transform.z;
-            transform.z = depth.0;
+            if !matter.ignore_height {
+                transform.y += transform.z;
+            }
+            transform.z = matter.depth;
         }
     }
     // Also!! Counterpoint! It makes somewhat more sense to do this in the
@@ -498,23 +500,47 @@ fn extract_and_flatten_space_system(
     // ExtractedSprite structs. And extract_sprites is short, and so is the
     // Plugin::build() impl for SpritePlugin. I could just make my own custom
     // SpritePlugin and remove the stock one from DefaultPlugins.
-
-    // TODO: figure out how to handle attached / unattached child entities! The
-    // shadow gets its Z updated as the character elevates, but its Z is
-    // currently interpreted as depth only, so once it drops below the tile
-    // background (at the moment when the player fully hits the ground) it
-    // vanishes. But conversely, you'd want the character's weapon or hat to
-    // rise up into the air along with them. StaticDepth(f32)?
 }
 
 // Structs and crap!
 
-/// WIP: depth of an entity's sprite in the draw order, relative to... either
-/// its parent or the world? idk yet. also, who all gets these? not tiles,
-/// right? ...ok, so for now, it's the absolute, global Z coordinate for
-/// anything it's placed on, and I'm not doing any Y-sorting yet.
+/// Some spatial details about an entity.
 #[derive(Component)]
-struct Depth(f32);
+pub struct TopDownMatter {
+    /// For now, depth tracks the absolute, global draw-depth coordinate for
+    /// anything it's placed on. I'm not doing any Y-sorting yet. An extract
+    /// system uses this value to overwrite the entity's Z coordinate in the
+    /// render world.
+    pub depth: f32,
+    /// If false, the entity can rise into the air. If true, it remains fixed on
+    /// the ground (like a shadow), and manipulating its main world Z coordinate
+    /// (including in the transform_propagate_system) does nothing.
+    pub ignore_height: bool,
+}
+
+impl TopDownMatter {
+    fn character() -> Self {
+        Self {
+            depth: DEPTH_DUDES,
+            ignore_height: false,
+        }
+    }
+    fn shadow() -> Self {
+        Self {
+            depth: DEPTH_SHADOWS,
+            ignore_height: true,
+        }
+    }
+}
+
+impl Default for TopDownMatter {
+    fn default() -> Self {
+        Self::character()
+    }
+}
+
+const DEPTH_DUDES: f32 = 4.0;
+const DEPTH_SHADOWS: f32 = DEPTH_DUDES - 0.1;
 
 #[derive(Bundle)]
 struct PlayerBundle {
@@ -630,6 +656,7 @@ pub struct ShadowSpriteBundle {
     identity: ShadowSprite,
     sprite_sheet: SpriteSheetBundle,
     char_animation_state: CharAnimationState,
+    topdown_matter: TopDownMatter,
 }
 
 impl ShadowSpriteBundle {
@@ -641,6 +668,7 @@ impl ShadowSpriteBundle {
                 ..default()
             },
             char_animation_state: CharAnimationState::new(handle, VariantName::Neutral),
+            topdown_matter: TopDownMatter::shadow(),
         }
     }
 }
