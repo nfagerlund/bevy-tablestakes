@@ -152,7 +152,7 @@ fn player_free_plan_move(
         let raw_movement_intent = move_input * speed.0 * delta;
 
         // Publish movement intent
-        motion.update_plan(raw_movement_intent);
+        motion.plan_forward(raw_movement_intent);
 
         // OK, that's movement. Are we doing anything else this frame? For example, an action?
         if inputs.actioning {
@@ -301,7 +301,7 @@ fn player_roll_plan_move(
         let raw_movement_intent = player_roll.roll_input * speed.0 * delta;
         let movement_intent = raw_movement_intent.clamp_length_max(player_roll.distance_remaining);
 
-        motion.update_plan(movement_intent);
+        motion.plan_forward(movement_intent);
         player_roll.distance_remaining -= movement_intent.length();
         // ^^ You know, it occurs to me we could chip away at a long vector
         // instead. Not actually sure which is nicer yet!
@@ -701,15 +701,25 @@ impl Motion {
             remainder: Vec2::ZERO,
             result: None,
         };
-        thing.update_plan(motion);
+        thing.plan_forward(motion);
         thing
     }
 
-    pub fn update_plan(&mut self, motion: Vec2) {
+    pub fn plan_forward(&mut self, motion: Vec2) {
         if motion == Vec2::ZERO {
             self.remainder = Vec2::ZERO;
         } else {
             self.direction = Vec2::X.angle_between(motion);
+        }
+        self.planned = motion;
+    }
+
+    /// Move in a direction while facing the opposite direction
+    pub fn plan_backward(&mut self, motion: Vec2) {
+        if motion == Vec2::ZERO {
+            self.remainder = Vec2::ZERO;
+        } else {
+            self.direction = Vec2::X.angle_between(-motion); // only real difference
         }
         self.planned = motion;
     }
