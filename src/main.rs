@@ -673,6 +673,7 @@ impl PlayerRoll {
 #[derive(Component, Clone)]
 #[component(storage = "SparseSet")]
 pub struct PlayerBonk {
+    pub distance_planned: f32, // Because unlike roll, might bonk various distances.
     pub distance_remaining: f32,
     pub just_started: bool,
     pub bonk_input: Vec2,
@@ -680,10 +681,14 @@ pub struct PlayerBonk {
 }
 
 impl PlayerBonk {
-    const DISTANCE: f32 = 18.0;
-    pub fn new(direction: f32) -> Self {
+    const ROLL_BONK: f32 = 18.0;
+    pub fn roll(direction: f32) -> Self {
+        Self::new(direction, Self::ROLL_BONK)
+    }
+    pub fn new(direction: f32, distance: f32) -> Self {
         PlayerBonk {
-            distance_remaining: Self::DISTANCE,
+            distance_planned: distance,
+            distance_remaining: distance,
             just_started: true,
             bonk_input: Vec2::from_angle(direction),
             transition: PlayerBonkTransition::None,
