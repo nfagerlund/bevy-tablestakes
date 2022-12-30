@@ -94,8 +94,10 @@ fn main() {
         .add_system(planned_move_system)
         .add_system(player_free_plan_move.before(planned_move_system))
         .add_system(player_roll_plan_move.before(planned_move_system))
+        .add_system(player_bonk_plan_move.before(planned_move_system))
         .add_system_to_stage(CoreStage::PostUpdate, player_roll_out)
         .add_system_to_stage(CoreStage::PostUpdate, player_free_out)
+        .add_system_to_stage(CoreStage::PostUpdate, player_bonk_out)
         // .add_system(charanm_test_animate_system) // in CharAnimationPlugin or somethin'
         .add_system(dumb_move_camera_system.after(planned_move_system))
         .add_system(snap_pixel_positions_system.after(dumb_move_camera_system))
@@ -272,6 +274,7 @@ fn player_bonk_plan_move(
             &AnimationsMap,
             &mut CharAnimationState,
             &mut PlayerBonk,
+            &mut SubTransform,
         ),
         With<Player>,
     >,
@@ -279,8 +282,14 @@ fn player_bonk_plan_move(
 ) {
     // Right. Basically same as roll, so much so that I clearly need to do some recombining.
 
-    for (mut motion, mut speed, animations_map, mut animation_state, mut player_bonk) in
-        player_q.iter_mut()
+    for (
+        mut motion,
+        mut speed,
+        animations_map,
+        mut animation_state,
+        mut player_bonk,
+        mut transform,
+    ) in player_q.iter_mut()
     {
         if player_bonk.just_started {
             player_bonk.just_started = false;
@@ -298,7 +307,16 @@ fn player_bonk_plan_move(
         motion.plan_backward(movement_intent);
         player_bonk.distance_remaining -= movement_intent.length();
 
+        let progress = player_bonk.distance_remaining / player_bonk.distance_planned;
+        // ^^ ok to go backwards bc sin is symmetric. btw this should probably
+        // be parabolic but shrug for now
+        let height_frac = (progress * std::f32::consts::PI).sin();
+        // and...  we're just manipulating Z directly instead of going through
+        // the motion planning system. Sorry!! Maybe later.
+        transform.translation.z = height_frac * PlayerBonk::HEIGHT;
+
         if player_bonk.distance_remaining <= 0.0 {
+            transform.translation.z = 0.0;
             player_bonk.transition = PlayerBonkTransition::Free;
         }
     }
@@ -354,15 +372,40 @@ fn player_roll_plan_move(
     }
 }
 
-fn player_roll_out(mut commands: Commands, player_q: Query<(Entity, &PlayerRoll), With<Player>>) {
-    for (entity, player_roll) in player_q.iter() {
+fn player_roll_out(
+    mut commands: Commands,
+    mut player_q: Query<(Entity, &mut PlayerRoll, &Motion), With<Player>>,
+) {
+    for (entity, mut player_roll, motion) in player_q.iter_mut() {
+        if let Some(MotionResult { collided, .. }) = motion.result {
+            if collided == true {
+                player_roll.transition = PlayerRollTransition::Bonk;
+            }
+        }
         match &player_roll.transition {
             PlayerRollTransition::None => (),
-            PlayerRollTransition::Bonk => (),
+            PlayerRollTransition::Bonk => {
+                let bonk = PlayerBonk::roll(-(motion.direction));
+                commands.entity(entity).remove::<PlayerRoll>().insert(bonk);
+            },
             PlayerRollTransition::Free => {
                 commands
                     .entity(entity)
                     .remove::<PlayerRoll>()
+                    .insert(PlayerFree::new());
+            },
+        }
+    }
+}
+
+fn player_bonk_out(mut commands: Commands, player_q: Query<(Entity, &PlayerBonk), With<Player>>) {
+    for (entity, player_bonk) in player_q.iter() {
+        match &player_bonk.transition {
+            PlayerBonkTransition::None => (),
+            PlayerBonkTransition::Free => {
+                commands
+                    .entity(entity)
+                    .remove::<PlayerBonk>()
                     .insert(PlayerFree::new());
             },
         }
@@ -473,7 +516,7 @@ fn setup_player(mut commands: Commands, asset_server: Res<AssetServer>) {
                 ..Default::default()
             },
             sub_transform: SubTransform {
-                translation: Vec3::new(0.0, 0.0, 3.0),
+                translation: Vec3::ZERO,
             },
             speed: Speed(Speed::RUN),
             // --- New animation system
@@ -682,6 +725,7 @@ pub struct PlayerBonk {
 
 impl PlayerBonk {
     const ROLL_BONK: f32 = 18.0;
+    const HEIGHT: f32 = 8.0;
     pub fn roll(direction: f32) -> Self {
         Self::new(direction, Self::ROLL_BONK)
     }
