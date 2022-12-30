@@ -264,6 +264,46 @@ fn planned_move_system(
     }
 }
 
+fn player_bonk_plan_move(
+    mut player_q: Query<
+        (
+            &mut Motion,
+            &mut Speed,
+            &AnimationsMap,
+            &mut CharAnimationState,
+            &mut PlayerBonk,
+        ),
+        With<Player>,
+    >,
+    time: Res<Time>,
+) {
+    // Right. Basically same as roll, so much so that I clearly need to do some recombining.
+
+    for (mut motion, mut speed, animations_map, mut animation_state, mut player_bonk) in
+        player_q.iter_mut()
+    {
+        if player_bonk.just_started {
+            player_bonk.just_started = false;
+            speed.0 = Speed::BONK;
+            let hurt = animations_map.get("hurt").unwrap().clone();
+            animation_state.change_animation(hurt);
+            // single frame on this, so no add'l fussing.
+            motion.remainder = Vec2::ZERO;
+        }
+
+        let delta = time.delta_seconds();
+        let raw_movement_intent = player_bonk.bonk_input * speed.0 * delta;
+        let movement_intent = raw_movement_intent.clamp_length_max(player_bonk.distance_remaining);
+
+        motion.plan_backward(movement_intent);
+        player_bonk.distance_remaining -= movement_intent.length();
+
+        if player_bonk.distance_remaining <= 0.0 {
+            player_bonk.transition = PlayerBonkTransition::Free;
+        }
+    }
+}
+
 fn player_roll_plan_move(
     mut player_q: Query<
         (
@@ -632,7 +672,36 @@ impl PlayerRoll {
 /// Player state: bonkin'
 #[derive(Component, Clone)]
 #[component(storage = "SparseSet")]
-pub struct PlayerBonk;
+pub struct PlayerBonk {
+    pub distance_remaining: f32,
+    pub just_started: bool,
+    pub bonk_input: Vec2,
+    pub transition: PlayerBonkTransition,
+}
+
+impl PlayerBonk {
+    const DISTANCE: f32 = 18.0;
+    pub fn new(direction: f32) -> Self {
+        PlayerBonk {
+            distance_remaining: Self::DISTANCE,
+            just_started: true,
+            bonk_input: Vec2::from_angle(direction),
+            transition: PlayerBonkTransition::None,
+        }
+    }
+}
+
+#[derive(Clone)]
+pub enum PlayerBonkTransition {
+    None,
+    Free,
+}
+
+impl Default for PlayerBonkTransition {
+    fn default() -> Self {
+        Self::None
+    }
+}
 
 /// Marker component for a spawned LdtkWorldBundle
 #[derive(Component)]
