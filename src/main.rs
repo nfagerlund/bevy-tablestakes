@@ -302,12 +302,18 @@ fn player_bonk_plan_move(
 
         let delta = time.delta_seconds();
         let raw_movement_intent = player_bonk.bonk_input * speed.0 * delta;
-        let movement_intent = raw_movement_intent.clamp_length_max(player_bonk.distance_remaining);
+        let movement_intent =
+            if raw_movement_intent.length() > player_bonk.movement_remaining.length() {
+                player_bonk.movement_remaining
+            } else {
+                raw_movement_intent
+            };
 
         motion.plan_backward(movement_intent);
-        player_bonk.distance_remaining -= movement_intent.length();
+        player_bonk.movement_remaining -= movement_intent;
+        info!("movement_remaining: {}", &player_bonk.movement_remaining);
 
-        let progress = player_bonk.distance_remaining / player_bonk.distance_planned;
+        let progress = player_bonk.movement_remaining.length() / player_bonk.distance_planned;
         // ^^ ok to go backwards bc sin is symmetric. btw this should probably
         // be parabolic but shrug for now
         let height_frac = (progress * std::f32::consts::PI).sin();
@@ -315,7 +321,7 @@ fn player_bonk_plan_move(
         // the motion planning system. Sorry!! Maybe later.
         transform.translation.z = height_frac * PlayerBonk::HEIGHT;
 
-        if player_bonk.distance_remaining <= 0.0 {
+        if player_bonk.movement_remaining.length() <= 0.0 {
             transform.translation.z = 0.0;
             player_bonk.transition = PlayerBonkTransition::Free;
         }
@@ -385,7 +391,9 @@ fn player_roll_out(
         match &player_roll.transition {
             PlayerRollTransition::None => (),
             PlayerRollTransition::Bonk => {
-                let bonk = PlayerBonk::roll(-(motion.direction));
+                let opposite_direction =
+                    Vec2::X.angle_between(-1.0 * Vec2::from_angle(motion.direction));
+                let bonk = PlayerBonk::roll(opposite_direction);
                 commands.entity(entity).remove::<PlayerRoll>().insert(bonk);
             },
             PlayerRollTransition::Free => {
@@ -525,8 +533,7 @@ fn setup_player(mut commands: Commands, asset_server: Res<AssetServer>) {
             animations_map: AnimationsMap(animations),
         },
         // Initial gameplay state
-        // PlayerFree::new(),
-        PlayerRoll::new(0.785),
+        PlayerFree::new(),
         // Shadow marker
         HasShadow,
         // Draw-depth manager
@@ -717,7 +724,7 @@ impl PlayerRoll {
 #[component(storage = "SparseSet")]
 pub struct PlayerBonk {
     pub distance_planned: f32, // Because unlike roll, might bonk various distances.
-    pub distance_remaining: f32,
+    pub movement_remaining: Vec2,
     pub just_started: bool,
     pub bonk_input: Vec2,
     pub transition: PlayerBonkTransition,
@@ -730,11 +737,12 @@ impl PlayerBonk {
         Self::new(direction, Self::ROLL_BONK)
     }
     pub fn new(direction: f32, distance: f32) -> Self {
+        let bonk_vector = Vec2::from_angle(direction);
         PlayerBonk {
             distance_planned: distance,
-            distance_remaining: distance,
+            movement_remaining: bonk_vector * distance,
             just_started: true,
-            bonk_input: Vec2::from_angle(direction),
+            bonk_input: bonk_vector,
             transition: PlayerBonkTransition::None,
         }
     }
@@ -824,7 +832,7 @@ impl Motion {
     }
 
     pub fn plan_forward(&mut self, motion: Vec2) {
-        if motion == Vec2::ZERO {
+        if motion.length() == 0.0 {
             self.remainder = Vec2::ZERO;
         } else {
             self.direction = Vec2::X.angle_between(motion);
@@ -834,7 +842,7 @@ impl Motion {
 
     /// Move in a direction while facing the opposite direction
     pub fn plan_backward(&mut self, motion: Vec2) {
-        if motion == Vec2::ZERO {
+        if motion.length() == 0.0 {
             self.remainder = Vec2::ZERO;
         } else {
             self.direction = Vec2::X.angle_between(-motion); // only real difference
