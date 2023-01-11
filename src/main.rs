@@ -509,7 +509,7 @@ fn setup_player(mut commands: Commands, asset_server: Res<AssetServer>) {
 
     // Okay, I'm going to be lazy here: hashmap w/ string literals. SORRY. I'll
     // come back to it later.
-    let mut animations: AnimationsMapInner = HashMap::new();
+    let mut animations = AnimationsMap::default();
     animations.insert("run", run);
     animations.insert("idle", idle);
     animations.insert("hurt", hurt);
@@ -532,7 +532,7 @@ fn setup_player(mut commands: Commands, asset_server: Res<AssetServer>) {
             // --- New animation system
             char_animation_state: CharAnimationState::new(initial_animation, Dir::E),
             motion: Motion::new(Vec2::ZERO),
-            animations_map: AnimationsMap(animations),
+            animations_map: animations,
         },
         // Initial gameplay state
         PlayerFree::new(),
@@ -558,16 +558,8 @@ struct PlayerBundle {
     animations_map: AnimationsMap,
 }
 
-type AnimationsMapInner = HashMap<&'static str, Handle<CharAnimation>>;
-
-#[derive(Component)]
-pub struct AnimationsMap(AnimationsMapInner);
-impl Deref for AnimationsMap {
-    type Target = AnimationsMapInner;
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
+#[derive(Component, Deref, DerefMut, Default)]
+pub struct AnimationsMap(HashMap<&'static str, Handle<CharAnimation>>);
 
 /// Player state: freely able to move (but might be idling, idk)
 #[derive(Component, Clone)]
