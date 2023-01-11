@@ -89,9 +89,6 @@ fn main() {
         .add_system_to_stage(CoreStage::PreUpdate, accept_input_system.after(InputSystem))
         // BODY STUFF
         .add_system(shadow_stitcher_system)
-        // MOVEMENT STUFF
-        .add_event::<SolidCollisionEvent>()
-        .add_event::<MovePlanCompletedEvent>()
         // PLAYER STUFF
         .add_startup_system(setup_player)
         .add_system(planned_move_system)
@@ -812,13 +809,6 @@ impl Mobile {
         }
     }
 }
-
-pub struct SolidCollisionEvent {
-    pub mobile: Entity,
-    pub solid: Entity,
-}
-
-pub struct MovePlanCompletedEvent(Entity);
 
 /// Marker component for a spawned LdtkWorldBundle
 #[derive(Component)]
