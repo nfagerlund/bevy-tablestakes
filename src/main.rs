@@ -120,7 +120,6 @@ fn main() {
 
 fn player_free_plan_move(
     inputs: Res<CurrentInputs>,
-    time: Res<Time>,
     mut player_q: Query<
         (
             &mut Motion,
@@ -140,7 +139,6 @@ fn player_free_plan_move(
             player_free.just_started = false;
         }
 
-        let delta = time.delta_seconds();
         let move_input = inputs.movement;
 
         if move_input.length() > 0.0 {
@@ -153,16 +151,16 @@ fn player_free_plan_move(
             animation_state.change_animation(idle);
         }
 
-        let raw_movement_intent = move_input * speed.0 * delta;
-
         // Publish movement intent
-        motion.plan_forward(raw_movement_intent);
+        let velocity = move_input * speed.0;
+        motion.velocity += velocity;
+        motion.face(move_input);
 
         // OK, that's movement. Are we doing anything else this frame? For example, an action?
         if inputs.actioning {
             // Right now there is only roll.
             player_free.transition = PlayerFreeTransition::Roll {
-                direction: motion.direction,
+                direction: motion.facing,
             };
         }
     }
@@ -187,6 +185,7 @@ fn player_free_out(mut commands: Commands, player_q: Query<(Entity, &PlayerFree)
 fn planned_move_system(
     mut mover_q: Query<(&mut SubTransform, &mut Motion, &Walkbox), With<Player>>,
     solids_q: Query<(&GlobalTransform, &Walkbox), With<Solid>>,
+    time: Res<Time>,
 ) {
     let solids: Vec<AbsBBox> = solids_q
         .iter()
@@ -203,10 +202,11 @@ fn planned_move_system(
             AbsBBox::from_rect(walkbox.0, origin)
         })
         .collect();
+    let delta = time.delta_seconds();
 
     for (mut transform, mut motion, walkbox) in mover_q.iter_mut() {
-        let raw_movement_intent = motion.planned;
-        motion.planned = Vec2::ZERO; // TODO should probably have this be an Option -> .take()
+        let raw_movement_intent = motion.velocity * delta;
+        motion.velocity = Vec2::ZERO; // TODO should probably have this be an Option -> .take()
 
         // If we're not moving, stop running and bail. Right now I'm not doing
         // change detection, so I can just do an unconditional hard assign w/ those
@@ -302,20 +302,20 @@ fn player_bonk_plan_move(
             motion.remainder = Vec2::ZERO;
         }
 
+        // Contribute velocity
+        let velocity = player_bonk.bonk_input * speed.0;
+        motion.velocity += velocity;
+
+        // Chip away at state duration / movement budget. btw: we might move
+        // slightly further than planned, because the full velocity is still
+        // contributed in the final frame. oh well!!
         let delta = time.delta_seconds();
-        let raw_movement_intent = player_bonk.bonk_input * speed.0 * delta;
-        let movement_intent =
-            if raw_movement_intent.length() > player_bonk.movement_remaining.length() {
-                player_bonk.movement_remaining
-            } else {
-                raw_movement_intent
-            };
+        let raw_movement_intent = velocity * delta;
+        let planned_distance = raw_movement_intent.length();
+        player_bonk.distance_remaining -= planned_distance;
+        info!("distance_remaining: {}", &player_bonk.distance_remaining);
 
-        motion.plan_backward(movement_intent);
-        player_bonk.movement_remaining -= movement_intent;
-        info!("movement_remaining: {}", &player_bonk.movement_remaining);
-
-        let progress = player_bonk.movement_remaining.length() / player_bonk.distance_planned;
+        let progress = player_bonk.distance_remaining / player_bonk.distance_planned;
         // ^^ ok to go backwards bc sin is symmetric. btw this should probably
         // be parabolic but shrug for now
         let height_frac = (progress * std::f32::consts::PI).sin();
@@ -323,7 +323,7 @@ fn player_bonk_plan_move(
         // the motion planning system. Sorry!! Maybe later.
         transform.translation.z = height_frac * PlayerBonk::HEIGHT;
 
-        if player_bonk.movement_remaining.length() <= 0.0 {
+        if player_bonk.distance_remaining <= 0.0 {
             transform.translation.z = 0.0;
             player_bonk.transition = PlayerBonkTransition::Free;
         }
@@ -363,14 +363,14 @@ fn player_roll_plan_move(
             motion.remainder = Vec2::ZERO; // HMM, actually not 100% sure about that. Well anyway!!
         }
 
-        let delta = time.delta_seconds();
-        let raw_movement_intent = player_roll.roll_input * speed.0 * delta;
-        let movement_intent = raw_movement_intent.clamp_length_max(player_roll.distance_remaining);
+        // Contribute velocity
+        let velocity = player_roll.roll_input * speed.0;
+        motion.velocity += velocity;
 
-        motion.plan_forward(movement_intent);
-        player_roll.distance_remaining -= movement_intent.length();
-        // ^^ You know, it occurs to me we could chip away at a long vector
-        // instead. Not actually sure which is nicer yet!
+        // Chip away at state duration / movement budget
+        let delta = time.delta_seconds();
+        let raw_movement_intent = velocity * delta;
+        player_roll.distance_remaining -= raw_movement_intent.length();
 
         if player_roll.distance_remaining <= 0.0 {
             // Roll came to natural end and we want to transition to free.
@@ -394,7 +394,7 @@ fn player_roll_out(
             PlayerRollTransition::None => (),
             PlayerRollTransition::Bonk => {
                 let opposite_direction =
-                    Vec2::X.angle_between(-1.0 * Vec2::from_angle(motion.direction));
+                    Vec2::X.angle_between(-1.0 * Vec2::from_angle(motion.facing));
                 let bonk = PlayerBonk::roll(opposite_direction);
                 commands.entity(entity).remove::<PlayerRoll>().insert(bonk);
             },
@@ -629,7 +629,7 @@ impl PlayerRoll {
 #[component(storage = "SparseSet")]
 pub struct PlayerBonk {
     pub distance_planned: f32, // Because unlike roll, might bonk various distances.
-    pub movement_remaining: Vec2,
+    pub distance_remaining: f32,
     pub just_started: bool,
     pub bonk_input: Vec2,
     pub transition: PlayerBonkTransition,
@@ -645,7 +645,7 @@ impl PlayerBonk {
         let bonk_vector = Vec2::from_angle(direction);
         PlayerBonk {
             distance_planned: distance,
-            movement_remaining: bonk_vector * distance,
+            distance_remaining: distance,
             just_started: true,
             bonk_input: bonk_vector,
             transition: PlayerBonkTransition::None,
@@ -735,43 +735,30 @@ impl Speed {
 /// Information about what the entity is doing, spatially speaking.
 #[derive(Component)]
 pub struct Motion {
-    /// The planned motion for the current frame, which a variety of things might be interested in.
-    pub planned: Vec2,
     /// The direction the entity is currently facing, in radians. Tracked
     /// separately because it persists even when no motion is planned.
-    pub direction: f32,
+    pub facing: f32,
+    /// The linear velocity for this frame, as determined by the entity's state and inputs.
+    pub velocity: Vec2,
     pub remainder: Vec2,
     pub result: Option<MotionResult>,
 }
 impl Motion {
     pub fn new(motion: Vec2) -> Self {
         let mut thing = Self {
-            planned: Vec2::ZERO,
-            direction: 0.0, // facing east on the unit circle
+            facing: 0.0, // facing east on the unit circle
+            velocity: Vec2::ZERO,
             remainder: Vec2::ZERO,
             result: None,
         };
-        thing.plan_forward(motion);
+        thing.face(motion);
         thing
     }
 
-    pub fn plan_forward(&mut self, motion: Vec2) {
-        if motion.length() == 0.0 {
-            self.remainder = Vec2::ZERO;
-        } else {
-            self.direction = Vec2::X.angle_between(motion);
+    pub fn face(&mut self, input: Vec2) {
+        if input.length() > 0.0 {
+            self.facing = Vec2::X.angle_between(input);
         }
-        self.planned = motion;
-    }
-
-    /// Move in a direction while facing the opposite direction
-    pub fn plan_backward(&mut self, motion: Vec2) {
-        if motion.length() == 0.0 {
-            self.remainder = Vec2::ZERO;
-        } else {
-            self.direction = Vec2::X.angle_between(-motion); // only real difference
-        }
-        self.planned = motion;
     }
 }
 

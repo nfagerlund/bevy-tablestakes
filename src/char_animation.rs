@@ -432,7 +432,7 @@ impl CharAnimationState {
 fn charanm_set_directions_system(mut query: Query<(&mut CharAnimationState, &Motion)>) {
     for (mut state, motion) in query.iter_mut() {
         // just doing this unconditionally and letting change_variant sort it out.
-        let dir = Dir::cardinal_from_angle(motion.direction);
+        let dir = Dir::cardinal_from_angle(motion.facing);
         state.change_variant(dir);
     }
 }
@@ -524,7 +524,7 @@ fn charanm_test_set_motion_system(
     inputs: Res<crate::input::CurrentInputs>,
 ) {
     for mut motion in query.iter_mut() {
-        motion.plan_forward(inputs.movement * -1.0);
+        motion.face(inputs.movement * -1.0);
     }
 }
 
