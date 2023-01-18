@@ -282,6 +282,7 @@ dependencies = [
  "bevy-inspector-egui",
  "bevy_ecs_ldtk",
  "bevy_ecs_tilemap",
+ "bevy_mod_debugdump",
  "image 0.23.14",
 ]
 
@@ -659,6 +660,18 @@ version = "0.9.1"
 source = "git+https://github.com/nfagerlund/bevy?rev=5a1218e0f#5a1218e0fb547c4684e9b9afbc563e90af60c97b"
 dependencies = [
  "glam",
+]
+
+[[package]]
+name = "bevy_mod_debugdump"
+version = "0.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ab7bd2b3324588ed47c8514081866e5d9a9d5d3aede8062f922502c4d6133ecf"
+dependencies = [
+ "bevy_app",
+ "bevy_ecs",
+ "bevy_render",
+ "pretty-type-name",
 ]
 
 [[package]]
