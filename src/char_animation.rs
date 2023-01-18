@@ -358,7 +358,7 @@ fn copy_texture_to_atlas(
 // - Each step, tick down a TIMER (non-repeating) for the current frame.
 // - When the timer runs out, switch your FRAME INDEX to the next frame (or, WRAP AROUND if you're configured to loop).
 
-pub struct AnimateFinishedEvent(Entity);
+pub struct AnimateFinishedEvent(pub Entity);
 
 #[derive(Component, Debug)]
 pub struct CharAnimationState {
