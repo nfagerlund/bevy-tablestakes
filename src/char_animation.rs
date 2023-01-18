@@ -63,6 +63,7 @@ impl Plugin for CharAnimationPlugin {
     fn build(&self, app: &mut App) {
         app.add_asset::<CharAnimation>()
             .init_asset_loader::<CharAnimationLoader>()
+            .add_event::<AnimateFinishedEvent>()
             // These systems should run after any app code that might mutate
             // CharAnimationState or Motion. And set_directions might have
             // mutated the animation state, so that should take effect before
@@ -357,6 +358,8 @@ fn copy_texture_to_atlas(
 // - Each step, tick down a TIMER (non-repeating) for the current frame.
 // - When the timer runs out, switch your FRAME INDEX to the next frame (or, WRAP AROUND if you're configured to loop).
 
+pub struct AnimateFinishedEvent(Entity);
+
 #[derive(Component, Debug)]
 pub struct CharAnimationState {
     pub animation: Handle<CharAnimation>,
@@ -441,6 +444,7 @@ pub fn charanm_animate_system(
     animations: Res<Assets<CharAnimation>>,
     mut query: Query<(&mut CharAnimationState, &mut TextureAtlasSprite, Entity)>,
     time: Res<Time>,
+    mut finished_events: EventWriter<AnimateFinishedEvent>,
     mut commands: Commands,
 ) {
     for (mut state, mut sprite, entity) in query.iter_mut() {
@@ -457,9 +461,16 @@ pub fn charanm_animate_system(
             if frame_timer.finished() {
                 updating_frame = true;
                 // increment+loop frame, and replace the timer with the new frame's duration
-                // TODO: we're only looping rn.
                 let frame_count = variant.frames.len();
                 state.frame = (state.frame + 1) % frame_count;
+
+                // If we just finished the *last* frame, we're back on 0... fire
+                // an event in case anyone wants to do anything about that. This
+                // is valid for single-frame animations too, although it might
+                // not seem it at first blush.
+                if state.frame == 0 {
+                    finished_events.send(AnimateFinishedEvent(entity));
+                }
 
                 state.frame_timer = Some(Timer::new(
                     variant.frames[state.frame].duration,
