@@ -9,6 +9,7 @@ use bevy::{
 };
 use bevy_ecs_ldtk::prelude::*;
 use std::collections::HashMap;
+use std::io::Write;
 use std::ops::{Deref, DerefMut};
 // use bevy_ecs_tilemap::prelude::*;
 use crate::char_animation::*;
@@ -113,6 +114,13 @@ fn main() {
                 RenderStage::Extract,
                 extract_and_flatten_space_system.after(bevy::sprite::SpriteSystem::ExtractSprites),
             );
+    }
+
+    if std::env::args().find(|arg| arg == "--graph").is_some() {
+        // Write the debug dump to a file and exit. (not sure why it exits, though??? oh well!)
+        let system_schedule = bevy_mod_debugdump::get_schedule(&mut app);
+        let mut sched_file = std::fs::File::create("./schedule.dot").unwrap();
+        sched_file.write_all(system_schedule.as_bytes()).unwrap();
     }
 
     app.run();
