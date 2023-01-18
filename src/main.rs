@@ -366,44 +366,33 @@ fn player_roll_plan_move(
         // Contribute velocity
         let velocity = player_roll.roll_input * speed.0;
         motion.velocity += velocity;
-
-        // Chip away at state duration / movement budget
-        let delta = time.delta_seconds();
-        let raw_movement_intent = velocity * delta;
-        player_roll.distance_remaining -= raw_movement_intent.length();
-
-        if player_roll.distance_remaining <= 0.0 {
-            // Roll came to natural end and we want to transition to free.
-            // Bonk transition has to shake out post-move in another system, but for now:
-            player_roll.transition = PlayerRollTransition::Free;
-        }
     }
 }
 
 fn player_roll_out(
     mut commands: Commands,
     mut player_q: Query<(Entity, &mut PlayerRoll, &Motion), With<Player>>,
+    mut finished_events: EventReader<AnimateFinishedEvent>,
 ) {
+    // If roll animation finished uninterrupted, clock out.
+    for event in finished_events.iter() {
+        if let Ok((entity, roll, motion)) = player_q.get_mut(event.0) {
+            commands
+                .entity(entity)
+                .remove::<PlayerRoll>()
+                .insert(PlayerFree::new());
+        }
+    }
+
+    // If there's a wall, then u can cast a shadow (or just go flying off it)
     for (entity, mut player_roll, motion) in player_q.iter_mut() {
         if let Some(MotionResult { collided, .. }) = motion.result {
             if collided == true {
-                player_roll.transition = PlayerRollTransition::Bonk;
-            }
-        }
-        match &player_roll.transition {
-            PlayerRollTransition::None => (),
-            PlayerRollTransition::Bonk => {
                 let opposite_direction =
                     Vec2::X.angle_between(-1.0 * Vec2::from_angle(motion.facing));
                 let bonk = PlayerBonk::roll(opposite_direction);
                 commands.entity(entity).remove::<PlayerRoll>().insert(bonk);
-            },
-            PlayerRollTransition::Free => {
-                commands
-                    .entity(entity)
-                    .remove::<PlayerRoll>()
-                    .insert(PlayerFree::new());
-            },
+            }
         }
     }
 }
