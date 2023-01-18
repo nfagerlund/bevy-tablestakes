@@ -522,7 +522,6 @@ fn charanm_atlas_reassign_system(
         if let Some(animation) = animations.get(&state.animation) {
             let desired_atlas_handle = &animation.texture_atlas;
             if *desired_atlas_handle != *atlas_handle {
-                println!("Replacing texture handle!");
                 *atlas_handle = desired_atlas_handle.clone();
             }
         }
