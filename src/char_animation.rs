@@ -465,8 +465,10 @@ pub fn charanm_animate_system(
         // update the timer... or initialize it, if it's missing.
         if let Some(frame_timer) = &mut state.frame_timer {
             frame_timer.tick(time.delta());
-            if frame_timer.finished() {
+            while let Some(true) = state.frame_timer.as_ref().map(|t| t.finished()) {
                 updating_frame = true;
+                let excess_time = state.frame_timer.as_ref().unwrap().excess_elapsed();
+
                 // increment+loop frame, and replace the timer with the new frame's duration
                 let frame_count = variant.frames.len();
                 state.frame = (state.frame + 1) % frame_count;
@@ -478,11 +480,16 @@ pub fn charanm_animate_system(
                 if state.frame == 0 {
                     finished_events.send(AnimateFinishedEvent(entity));
                 }
+                // OH. I think I know where that hitching false-start on roll
+                // came from. we sent an event for the end of the run animation,
+                // too, and the roll-out system was getting that (possibly on a
+                // one-tick delay). SIGH.
 
                 state.frame_timer = Some(Timer::new(
                     variant.frames[state.frame].duration,
-                    TimerMode::Once,
+                    TimerMode::CountUp,
                 ));
+                state.frame_timer.as_mut().map(|t| t.tick(excess_time));
             }
         } else {
             // must be new here. initialize the timer w/ the current
@@ -498,7 +505,7 @@ pub fn charanm_animate_system(
                     Duration::from_millis(millis)
                 },
             };
-            state.frame_timer = Some(Timer::new(duration, TimerMode::Once));
+            state.frame_timer = Some(Timer::new(duration, TimerMode::CountUp));
         }
 
         // ok, where was I.
