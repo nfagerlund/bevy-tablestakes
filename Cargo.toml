@@ -30,11 +30,11 @@ bevy_mod_debugdump = "0.6.0" # neat: https://github.com/jakobhellermann/bevy_mod
 [patch.crates-io]
 # bevy = { path = "../bevy" }
 # ^^ local for testing bugfixes
-bevy = { git = "https://github.com/nfagerlund/bevy", rev = "5a1218e0f" }
-bevy_app = { git = "https://github.com/nfagerlund/bevy", rev = "5a1218e0f" }
-bevy_ecs = { git = "https://github.com/nfagerlund/bevy", rev = "5a1218e0f" }
-bevy_render = { git = "https://github.com/nfagerlund/bevy", rev = "5a1218e0f" }
-# ^^ nf/dec22-personal-0.9.1: fix log suppression
+bevy = { git = "https://github.com/nfagerlund/bevy", rev = "92b4a2b06" }
+bevy_app = { git = "https://github.com/nfagerlund/bevy", rev = "92b4a2b06" }
+bevy_ecs = { git = "https://github.com/nfagerlund/bevy", rev = "92b4a2b06" }
+bevy_render = { git = "https://github.com/nfagerlund/bevy", rev = "92b4a2b06" }
+# ^^ nf/dec22-personal-0.9.1: fix log suppression, add TimerMode::CountUp
 
 # Per https://bevy-cheatbook.github.io/pitfalls/performance.html:
 # medium-optimize this crate's own debug builds
