@@ -94,10 +94,15 @@ fn main() {
         .add_system(shadow_stitcher_system)
         // PLAYER STUFF
         .add_startup_system(setup_player)
-        .add_system(planned_move_system)
-        .add_system(player_free_plan_move.before(planned_move_system))
-        .add_system(player_roll_plan_move.before(planned_move_system))
-        .add_system(player_bonk_plan_move.before(planned_move_system))
+        .add_system(planned_move_system.after(CharAnimationSystems).after(MovePlanners))
+        .add_system_set(
+            SystemSet::new()
+                .label(SpriteChangers)
+                .label(MovePlanners)
+                .with_system(player_free_plan_move)
+                .with_system(player_roll_plan_move)
+                .with_system(player_bonk_plan_move)
+        )
         .add_system_to_stage(CoreStage::PostUpdate, player_roll_out)
         .add_system_to_stage(CoreStage::PostUpdate, player_free_out)
         .add_system_to_stage(CoreStage::PostUpdate, player_bonk_out)
@@ -125,6 +130,9 @@ fn main() {
 
     app.run();
 }
+
+#[derive(SystemLabel)]
+pub struct MovePlanners;
 
 fn player_free_plan_move(
     inputs: Res<CurrentInputs>,

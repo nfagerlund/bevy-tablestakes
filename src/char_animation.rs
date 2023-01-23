@@ -57,10 +57,22 @@ pub struct CharAnimationFrame {
     // todo: hitbox, hurtbox,
 }
 
+#[derive(SystemLabel)]
+pub struct CharAnimationSystems;
+#[derive(SystemLabel)]
+pub struct SpriteChangers;
+
 pub struct CharAnimationPlugin;
 
 impl Plugin for CharAnimationPlugin {
     fn build(&self, app: &mut App) {
+        let systems = SystemSet::new()
+            .label(CharAnimationSystems)
+            .after(SpriteChangers)
+            .with_system(charanm_atlas_reassign_system)
+            .with_system(charanm_set_directions_system)
+            .with_system(charanm_animate_system.after(charanm_set_directions_system));
+
         app.add_asset::<CharAnimation>()
             .init_asset_loader::<CharAnimationLoader>()
             .add_event::<AnimateFinishedEvent>()
@@ -68,12 +80,7 @@ impl Plugin for CharAnimationPlugin {
             // CharAnimationState or Motion. And set_directions might have
             // mutated the animation state, so that should take effect before
             // the main animate system.
-            .add_system_to_stage(CoreStage::PostUpdate, charanm_atlas_reassign_system)
-            .add_system_to_stage(CoreStage::PostUpdate, charanm_set_directions_system)
-            .add_system_to_stage(
-                CoreStage::PostUpdate,
-                charanm_animate_system.after(charanm_set_directions_system),
-            );
+            .add_system_set(systems);
     }
 }
 
