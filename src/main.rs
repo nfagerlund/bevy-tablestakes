@@ -105,7 +105,11 @@ fn main() {
                 .with_system(player_bonk_plan_move)
         )
         .add_system_set(
-            SystemSet::new().label(SpriteChangers).before(MovePlanners).with_system(player_roll_enter)
+            SystemSet::new()
+                .label(SpriteChangers)
+                .before(MovePlanners)
+                .with_system(player_roll_enter)
+                .with_system(player_bonk_enter)
         )
         .add_system_to_stage(CoreStage::PostUpdate, player_roll_out)
         .add_system_to_stage(CoreStage::PostUpdate, player_free_out)
@@ -288,40 +292,40 @@ fn planned_move_system(
     }
 }
 
-fn player_bonk_plan_move(
+fn player_bonk_enter(
     mut player_q: Query<
         (
-            &mut Motion,
-            &mut Speed,
-            &AnimationsMap,
-            &mut CharAnimationState,
             &mut PlayerBonk,
-            &mut SubTransform,
+            &mut Speed,
+            &mut CharAnimationState,
+            &mut Motion,
+            &AnimationsMap,
         ),
+        Added<PlayerBonk>,
+    >,
+) {
+    for (mut player_bonk, mut speed, mut animation_state, mut motion, animations_map) in
+        player_q.iter_mut()
+    {
+        player_bonk.just_started = false;
+        speed.0 = Speed::BONK;
+        let hurt = animations_map.get("hurt").unwrap().clone();
+        animation_state.change_animation(hurt);
+        // single frame on this, so no add'l fussing.
+        motion.remainder = Vec2::ZERO;
+    }
+}
+
+fn player_bonk_plan_move(
+    mut player_q: Query<
+        (&mut Motion, &mut Speed, &mut PlayerBonk, &mut SubTransform),
         With<Player>,
     >,
     time: Res<Time>,
 ) {
     // Right. Basically same as roll, so much so that I clearly need to do some recombining.
 
-    for (
-        mut motion,
-        mut speed,
-        animations_map,
-        mut animation_state,
-        mut player_bonk,
-        mut transform,
-    ) in player_q.iter_mut()
-    {
-        if player_bonk.just_started {
-            player_bonk.just_started = false;
-            speed.0 = Speed::BONK;
-            let hurt = animations_map.get("hurt").unwrap().clone();
-            animation_state.change_animation(hurt);
-            // single frame on this, so no add'l fussing.
-            motion.remainder = Vec2::ZERO;
-        }
-
+    for (mut motion, speed, mut player_bonk, mut transform) in player_q.iter_mut() {
         // Contribute velocity
         let velocity = player_bonk.bonk_input * speed.0;
         motion.velocity += velocity;
