@@ -295,7 +295,6 @@ fn planned_move_system(
 fn player_bonk_enter(
     mut player_q: Query<
         (
-            &mut PlayerBonk,
             &mut Speed,
             &mut CharAnimationState,
             &mut Motion,
@@ -304,10 +303,7 @@ fn player_bonk_enter(
         Added<PlayerBonk>,
     >,
 ) {
-    for (mut player_bonk, mut speed, mut animation_state, mut motion, animations_map) in
-        player_q.iter_mut()
-    {
-        player_bonk.just_started = false;
+    for (mut speed, mut animation_state, mut motion, animations_map) in player_q.iter_mut() {
         speed.0 = Speed::BONK;
         let hurt = animations_map.get("hurt").unwrap().clone();
         animation_state.change_animation(hurt);
@@ -330,27 +326,18 @@ fn player_bonk_plan_move(
         let velocity = player_bonk.bonk_input * speed.0;
         motion.velocity += velocity;
 
-        // Chip away at state duration / movement budget. btw: we might move
-        // slightly further than planned, because the full velocity is still
-        // contributed in the final frame. oh well!!
-        let delta = time.delta_seconds();
-        let raw_movement_intent = velocity * delta;
-        let planned_distance = raw_movement_intent.length();
-        player_bonk.distance_remaining -= planned_distance;
-        info!("distance_remaining: {}", &player_bonk.distance_remaining);
-
-        let progress = player_bonk.distance_remaining / player_bonk.distance_planned;
+        // Chip away at state duration
+        player_bonk.timer.tick(time.delta());
+        let progress = player_bonk.timer.percent();
         // ^^ ok to go backwards bc sin is symmetric. btw this should probably
-        // be parabolic but shrug for now
+        // be parabolic but shrug for now. Also BTW, progress will be exactly
+        // 1.0 (and thus height_frac 0.0) if the timer finished, so we shouldn't
+        // need a backstop against height drift here. *NARRATOR VOICE:* it was
+        // actually -0.0, and that never came back to bite them.
         let height_frac = (progress * std::f32::consts::PI).sin();
         // and...  we're just manipulating Z directly instead of going through
         // the motion planning system. Sorry!! Maybe later.
         transform.translation.z = height_frac * PlayerBonk::HEIGHT;
-
-        if player_bonk.distance_remaining <= 0.0 {
-            transform.translation.z = 0.0;
-            player_bonk.transition = PlayerBonkTransition::Free;
-        }
     }
 }
 
@@ -418,16 +405,14 @@ fn player_roll_out(
     }
 }
 
-fn player_bonk_out(mut commands: Commands, player_q: Query<(Entity, &PlayerBonk), With<Player>>) {
+/// Bonk state ends when it ends.
+fn player_bonk_out(mut commands: Commands, player_q: Query<(Entity, &PlayerBonk)>) {
     for (entity, player_bonk) in player_q.iter() {
-        match &player_bonk.transition {
-            PlayerBonkTransition::None => (),
-            PlayerBonkTransition::Free => {
-                commands
-                    .entity(entity)
-                    .remove::<PlayerBonk>()
-                    .insert(PlayerFree::new());
-            },
+        if player_bonk.timer.finished() {
+            commands
+                .entity(entity)
+                .remove::<PlayerBonk>()
+                .insert(PlayerFree::new());
         }
     }
 }
@@ -640,11 +625,8 @@ impl PlayerRoll {
 #[derive(Component, Clone)]
 #[component(storage = "SparseSet")]
 pub struct PlayerBonk {
-    pub distance_planned: f32, // Because unlike roll, might bonk various distances.
-    pub distance_remaining: f32,
-    pub just_started: bool,
     pub bonk_input: Vec2,
-    pub transition: PlayerBonkTransition,
+    pub timer: Timer,
 }
 
 impl PlayerBonk {
@@ -655,25 +637,11 @@ impl PlayerBonk {
     }
     pub fn new(direction: f32, distance: f32) -> Self {
         let bonk_vector = Vec2::from_angle(direction);
+        let duration_secs = distance / Speed::BONK;
         PlayerBonk {
-            distance_planned: distance,
-            distance_remaining: distance,
-            just_started: true,
             bonk_input: bonk_vector,
-            transition: PlayerBonkTransition::None,
+            timer: Timer::from_seconds(duration_secs, TimerMode::Once),
         }
-    }
-}
-
-#[derive(Clone)]
-pub enum PlayerBonkTransition {
-    None,
-    Free,
-}
-
-impl Default for PlayerBonkTransition {
-    fn default() -> Self {
-        Self::None
     }
 }
 
