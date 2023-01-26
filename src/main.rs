@@ -78,6 +78,7 @@ fn main() {
         .register_inspectable::<Speed>()
         .register_inspectable::<Walkbox>()
         .register_inspectable::<Hitbox>()
+        .register_inspectable::<TopDownMatter>()
         .add_plugin(InspectorPlugin::<DebugColliders>::new())
         .add_system(debug_walkboxes_system)
         // LDTK STUFF

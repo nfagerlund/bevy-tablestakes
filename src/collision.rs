@@ -184,7 +184,8 @@ pub fn debug_walkboxes_system(
             let center = walkbox.0.min + size / 2.0;
             // and of course, the anchor point of the rect is (0,0), by definition.
             transform.scale = size.extend(1.0);
-            transform.translation = center.extend(1.0); // draw on top of parent
+            // draw on top of parent by A LOT. (cheating out of interactions with the TopDownMatter system.)
+            transform.translation = center.extend(40.0);
         } else {
             visibility.is_visible = false;
             // we're done
