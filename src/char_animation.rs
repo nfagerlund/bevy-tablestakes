@@ -485,11 +485,10 @@ pub fn charanm_animate_system(
                 // too, and the roll-out system was getting that (possibly on a
                 // one-tick delay). SIGH.
 
-                state.frame_timer = Some(Timer::new(
-                    variant.frames[state.frame].duration,
-                    TimerMode::CountUp,
-                ));
-                state.frame_timer.as_mut().map(|t| t.tick(excess_time));
+                let mut new_timer =
+                    Timer::new(variant.frames[state.frame].duration, TimerMode::CountUp);
+                new_timer.tick(excess_time);
+                state.frame_timer = Some(new_timer);
             }
         } else {
             // must be new here. initialize the timer w/ the current
