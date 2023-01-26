@@ -104,6 +104,9 @@ fn main() {
                 .with_system(player_roll_plan_move)
                 .with_system(player_bonk_plan_move)
         )
+        .add_system_set(
+            SystemSet::new().label(SpriteChangers).before(MovePlanners).with_system(player_roll_enter)
+        )
         .add_system_to_stage(CoreStage::PostUpdate, player_roll_out)
         .add_system_to_stage(CoreStage::PostUpdate, player_free_out)
         .add_system_to_stage(CoreStage::PostUpdate, player_bonk_out)
@@ -347,39 +350,36 @@ fn player_bonk_plan_move(
     }
 }
 
-fn player_roll_plan_move(
+fn player_roll_enter(
     mut player_q: Query<
         (
-            &mut Motion,
             &mut Speed,
             &AnimationsMap,
             &mut CharAnimationState,
             &mut PlayerRoll,
+            &mut Motion,
         ),
-        With<Player>,
+        Added<PlayerRoll>,
     >,
-    time: Res<Time>,
 ) {
-    // OK great, so... we just need to plan our motion and encode it in the
-    // Motion struct, and oh wait, also mess with the animation timings.
-    // I guess first things first:
-
-    for (mut motion, mut speed, animations_map, mut animation_state, mut player_roll) in
+    for (mut speed, animations_map, mut animation_state, mut player_roll, mut motion) in
         player_q.iter_mut()
     {
-        if player_roll.just_started {
-            player_roll.just_started = false;
-            speed.0 = Speed::ROLL;
-            let roll = animations_map.get("roll").unwrap().clone();
-            animation_state.change_animation(roll);
-            // Scale the animation to match the configured roll distance/speed:
-            let roll_duration_millis = (player_roll.distance_remaining / speed.0 * 1000.0) as u64;
-            animation_state.set_total_run_time_to(roll_duration_millis);
+        player_roll.just_started = false;
+        speed.0 = Speed::ROLL;
+        let roll = animations_map.get("roll").unwrap().clone();
+        animation_state.change_animation(roll);
+        // Scale the animation to match the configured roll distance/speed:
+        let roll_duration_millis = (player_roll.distance_remaining / speed.0 * 1000.0) as u64;
+        animation_state.set_total_run_time_to(roll_duration_millis);
 
-            // Re-set the motion remainder because we're doing a different kind of motion now:
-            motion.remainder = Vec2::ZERO; // HMM, actually not 100% sure about that. Well anyway!!
-        }
+        // Re-set the motion remainder because we're doing a different kind of motion now:
+        motion.remainder = Vec2::ZERO; // HMM, actually not 100% sure about that. Well anyway!!
+    }
+}
 
+fn player_roll_plan_move(mut player_q: Query<(&mut Motion, &Speed, &PlayerRoll)>) {
+    for (mut motion, speed, player_roll) in player_q.iter_mut() {
         // Contribute velocity
         let velocity = player_roll.roll_input * speed.0;
         motion.velocity += velocity;
