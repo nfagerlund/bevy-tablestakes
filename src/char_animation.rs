@@ -71,7 +71,8 @@ impl Plugin for CharAnimationPlugin {
             .after(SpriteChangers)
             .with_system(charanm_atlas_reassign_system)
             .with_system(charanm_set_directions_system)
-            .with_system(charanm_animate_system.after(charanm_set_directions_system));
+            .with_system(charanm_animate_system.after(charanm_set_directions_system))
+            .with_system(charanm_update_walkbox_system.after(charanm_animate_system));
 
         app.add_asset::<CharAnimation>()
             .init_asset_loader::<CharAnimationLoader>()
@@ -515,13 +516,31 @@ pub fn charanm_animate_system(
             sprite.index = frame.index;
             // Also, set the origin:
             sprite.anchor = Anchor::Custom(frame.anchor);
-            // Also, set the walkbox:
-            if let Some(walkbox) = frame.walkbox {
-                commands.entity(entity).insert(Walkbox(walkbox));
-            } else {
-                commands.entity(entity).remove::<Walkbox>();
-            }
+            // But leave colliders to their own systems.
         }
+    }
+}
+
+/// The main animate system updates the origin because everything's gotta have
+/// one, but maybe not everything needs a collider, even if its sprite has one.
+/// So, we only update walkboxes for entities who have opted in by having one
+/// added to them at some point, and we never remove walkboxes. BTW: We're
+/// filtering on Changed<TextureAtlasSprite> because the animation state
+/// contains a Timer and thus changes constantly... but we only update the atlas
+/// index when it's time to flip frames.
+fn charanm_update_walkbox_system(
+    animations: Res<Assets<CharAnimation>>,
+    mut query: Query<(&CharAnimationState, &mut Walkbox), Changed<TextureAtlasSprite>>,
+) {
+    for (state, mut walkbox) in query.iter_mut() {
+        let Some(animation) = animations.get(&state.animation) else { continue; };
+        let Some(variant_name) = &state.variant else { continue; };
+        let Some(variant) = animation.variants.get(variant_name) else { continue; };
+        let frame = &variant.frames[state.frame];
+
+        // If there's no walkbox in the frame, you get a 0-sized rectangle at your origin.
+        let sprite_walkbox = frame.walkbox.unwrap_or_default();
+        walkbox.0 = sprite_walkbox;
     }
 }
 

@@ -8,11 +8,11 @@ use bevy_ecs_ldtk::prelude::*;
 use bevy_inspector_egui::Inspectable;
 
 /// BBox defining the space an entity takes up on the ground.
-#[derive(Component, Inspectable)]
+#[derive(Component, Inspectable, Default)]
 pub struct Walkbox(pub Rect);
 
 /// BBox defining the space where an entity can be hit by attacks.
-#[derive(Component, Inspectable)]
+#[derive(Component, Inspectable, Default)]
 pub struct Hitbox(pub Rect);
 // ...and then eventually I'll want Hurtbox for attacks, but, tbh I have no
 // idea how to best handle that yet. Is that even a component? Or is it a larger

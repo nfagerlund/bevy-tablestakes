@@ -534,6 +534,7 @@ fn setup_player(mut commands: Commands, asset_server: Res<AssetServer>) {
                 translation: Vec3::ZERO,
             },
             speed: Speed(Speed::RUN),
+            walkbox: Walkbox(Rect::default()),
             // --- New animation system
             char_animation_state: CharAnimationState::new(initial_animation, Dir::E),
             motion: Motion::new(Vec2::ZERO),
@@ -557,6 +558,7 @@ struct PlayerBundle {
 
     sub_transform: SubTransform,
     speed: Speed,
+    walkbox: Walkbox,
 
     char_animation_state: CharAnimationState,
     motion: Motion,
