@@ -347,21 +347,20 @@ fn player_roll_enter(
             &mut Speed,
             &AnimationsMap,
             &mut CharAnimationState,
-            &mut PlayerRoll,
+            &PlayerRoll,
             &mut Motion,
         ),
         Added<PlayerRoll>,
     >,
 ) {
-    for (mut speed, animations_map, mut animation_state, mut player_roll, mut motion) in
+    for (mut speed, animations_map, mut animation_state, player_roll, mut motion) in
         player_q.iter_mut()
     {
-        player_roll.just_started = false;
         speed.0 = Speed::ROLL;
         let roll = animations_map.get("roll").unwrap().clone();
         animation_state.change_animation(roll);
         // Scale the animation to match the configured roll distance/speed:
-        let roll_duration_millis = (player_roll.distance_remaining / speed.0 * 1000.0) as u64;
+        let roll_duration_millis = player_roll.timer.duration().as_millis() as u64;
         animation_state.set_total_run_time_to(roll_duration_millis);
 
         // Re-set the motion remainder because we're doing a different kind of motion now:
@@ -369,38 +368,32 @@ fn player_roll_enter(
     }
 }
 
-fn player_roll_plan_move(mut player_q: Query<(&mut Motion, &Speed, &PlayerRoll)>) {
-    for (mut motion, speed, player_roll) in player_q.iter_mut() {
+fn player_roll_plan_move(
+    mut player_q: Query<(&mut Motion, &Speed, &mut PlayerRoll)>,
+    time: Res<Time>,
+) {
+    for (mut motion, speed, mut player_roll) in player_q.iter_mut() {
         // Contribute velocity
         let velocity = player_roll.roll_input * speed.0;
         motion.velocity += velocity;
+        // Spend state duration
+        player_roll.timer.tick(time.delta());
     }
 }
 
-fn player_roll_out(
-    mut commands: Commands,
-    mut player_q: Query<(Entity, &mut PlayerRoll, &Motion), With<Player>>,
-    mut finished_events: EventReader<AnimateFinishedEvent>,
-) {
-    // If roll animation finished uninterrupted, clock out.
-    for event in finished_events.iter() {
-        if let Ok((entity, roll, motion)) = player_q.get_mut(event.0) {
+fn player_roll_out(mut commands: Commands, mut player_q: Query<(Entity, &PlayerRoll, &Motion)>) {
+    for (entity, player_roll, motion) in player_q.iter_mut() {
+        // If roll animation finished uninterrupted, switch back to free.
+        if player_roll.timer.finished() {
             commands
                 .entity(entity)
                 .remove::<PlayerRoll>()
                 .insert(PlayerFree::new());
-        }
-    }
-
-    // If there's a wall, then u can cast a shadow (or just go flying off it)
-    for (entity, mut player_roll, motion) in player_q.iter_mut() {
-        if let Some(MotionResult { collided, .. }) = motion.result {
-            if collided == true {
-                let opposite_direction =
-                    Vec2::X.angle_between(-1.0 * Vec2::from_angle(motion.facing));
-                let bonk = PlayerBonk::roll(opposite_direction);
-                commands.entity(entity).remove::<PlayerRoll>().insert(bonk);
-            }
+        } else if let Some(MotionResult { collided: true, .. }) = motion.result {
+            // If we hit a wall, switch to bonk
+            let opposite_direction = Vec2::X.angle_between(-1.0 * Vec2::from_angle(motion.facing));
+            let bonk = PlayerBonk::roll(opposite_direction);
+            commands.entity(entity).remove::<PlayerRoll>().insert(bonk);
         }
     }
 }
@@ -591,33 +584,19 @@ impl Default for PlayerFreeTransition {
 #[derive(Component, Clone)]
 #[component(storage = "SparseSet")]
 pub struct PlayerRoll {
-    pub distance_remaining: f32,
-    pub just_started: bool,
     /// The "player input" equivalent to use when planning motion; a length-1.0
     /// vector locked to the direction we were facing when starting our roll.
     pub roll_input: Vec2,
-    pub transition: PlayerRollTransition,
-}
-#[derive(Clone)]
-pub enum PlayerRollTransition {
-    None,
-    Bonk,
-    Free,
-}
-impl Default for PlayerRollTransition {
-    fn default() -> Self {
-        Self::None
-    }
+    pub timer: Timer,
 }
 impl PlayerRoll {
     const DISTANCE: f32 = 52.0;
 
     pub fn new(direction: f32) -> Self {
+        let duration_secs = Self::DISTANCE / Speed::ROLL;
         PlayerRoll {
-            distance_remaining: Self::DISTANCE,
-            just_started: true,
             roll_input: Vec2::from_angle(direction),
-            transition: PlayerRollTransition::None,
+            timer: Timer::from_seconds(duration_secs, TimerMode::Once),
         }
     }
 }
