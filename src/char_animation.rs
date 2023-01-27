@@ -29,6 +29,27 @@ pub struct CharAnimationVariant {
     pub frames: Vec<CharAnimationFrame>,
 }
 
+impl CharAnimationVariant {
+    /// Returns the final frame time to use for the requested frame, after
+    /// applying the specified FrameTimeOverride behavior.
+    pub fn resolved_frame_time(
+        &self,
+        frame_index: usize,
+        override_type: FrameTimeOverride,
+    ) -> Duration {
+        let asset_duration = self.frames[frame_index].duration;
+        match override_type {
+            FrameTimeOverride::None => asset_duration,
+            FrameTimeOverride::Ms(millis) => Duration::from_millis(millis),
+            FrameTimeOverride::Scale(scale) => asset_duration.mul_f32(scale),
+            FrameTimeOverride::TotalMs(total_millis) => {
+                let millis = total_millis / (self.frames.len() as u64); // nearest ms is fine
+                Duration::from_millis(millis)
+            },
+        }
+    }
+}
+
 // I've changed my mind about tags: I'm gonna start out with a rigid enum,
 // enforce tag names at load time, and expand behavior as needed later. Duping
 // the Dir type for easier refactors later??
@@ -384,7 +405,7 @@ pub struct CharAnimationState {
 /// Allow programmatically overriding the frame times from the animation source
 /// data, for things like stretching out a motion to fit it to a particular
 /// total duration.
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub enum FrameTimeOverride {
     None,
     Ms(u64),
@@ -453,7 +474,6 @@ pub fn charanm_animate_system(
     mut query: Query<(&mut CharAnimationState, &mut TextureAtlasSprite, Entity)>,
     time: Res<Time>,
     mut finished_events: EventWriter<AnimateFinishedEvent>,
-    mut commands: Commands,
 ) {
     for (mut state, mut sprite, entity) in query.iter_mut() {
         let Some(animation) = animations.get(&state.animation) else { continue; };
@@ -486,8 +506,8 @@ pub fn charanm_animate_system(
                 // too, and the roll-out system was getting that (possibly on a
                 // one-tick delay). SIGH.
 
-                let mut new_timer =
-                    Timer::new(variant.frames[state.frame].duration, TimerMode::CountUp);
+                let duration = variant.resolved_frame_time(state.frame, state.frame_time_override);
+                let mut new_timer = Timer::new(duration, TimerMode::CountUp);
                 new_timer.tick(excess_time);
                 state.frame_timer = Some(new_timer);
             }
@@ -495,16 +515,7 @@ pub fn charanm_animate_system(
             // must be new here. initialize the timer w/ the current
             // frame's duration, can start ticking on the next loop.
             updating_frame = true;
-            let frame = &variant.frames[state.frame];
-            let duration = match state.frame_time_override {
-                FrameTimeOverride::None => frame.duration,
-                FrameTimeOverride::Ms(millis) => Duration::from_millis(millis),
-                FrameTimeOverride::Scale(scale) => frame.duration.mul_f32(scale),
-                FrameTimeOverride::TotalMs(total_millis) => {
-                    let millis = total_millis / (variant.frames.len() as u64); // nearest ms is fine
-                    Duration::from_millis(millis)
-                },
-            };
+            let duration = variant.resolved_frame_time(state.frame, state.frame_time_override);
             state.frame_timer = Some(Timer::new(duration, TimerMode::CountUp));
         }
 
