@@ -32,10 +32,10 @@ pub struct SmoothedTime {
 }
 
 impl SmoothedTime {
-    pub fn delta_seconds(&self) -> f32 {
+    pub fn _delta_seconds(&self) -> f32 {
         self.delta.as_secs_f32()
     }
-    pub fn delta(&self) -> Duration {
+    pub fn _delta(&self) -> Duration {
         self.delta
     }
 }
@@ -44,10 +44,10 @@ impl SmoothedTime {
 pub struct StaticTime;
 
 impl StaticTime {
-    pub fn delta_seconds(&self) -> f32 {
+    pub fn _delta_seconds(&self) -> f32 {
         1. / 60.
     }
-    pub fn delta(&self) -> Duration {
+    pub fn _delta(&self) -> Duration {
         Duration::new(1, 0) / 60
     }
 }

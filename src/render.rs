@@ -1,7 +1,7 @@
 use crate::char_animation::*;
 use bevy::prelude::*;
 use bevy::render::Extract;
-use bevy::sprite::{ExtractedSprites, MaterialMesh2dBundle, Mesh2dHandle};
+use bevy::sprite::ExtractedSprites;
 use bevy_inspector_egui::Inspectable;
 
 const DEPTH_DUDES: f32 = 4.0;

@@ -459,11 +459,11 @@ impl CharAnimationState {
         }
     }
 
-    pub fn set_frame_times_to(&mut self, millis: u64) {
+    pub fn _set_frame_times_to(&mut self, millis: u64) {
         self.frame_time_override = FrameTimeOverride::Ms(millis);
     }
 
-    pub fn scale_frame_times_by(&mut self, scale: f32) {
+    pub fn _scale_frame_times_by(&mut self, scale: f32) {
         self.frame_time_override = FrameTimeOverride::Scale(scale);
     }
 

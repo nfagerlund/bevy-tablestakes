@@ -1,26 +1,22 @@
-use bevy::{
-    input::InputSystem,
-    log::{info, LogPlugin},
-    math::Rect,
-    prelude::*,
-    render::{Extract, RenderApp, RenderStage},
-    sprite::{ExtractedSprites, MaterialMesh2dBundle, Mesh2dHandle},
-    utils::{tracing, Duration},
-};
-use bevy_ecs_ldtk::prelude::*;
-use std::collections::HashMap;
-use std::io::Write;
-use std::ops::{Deref, DerefMut};
-// use bevy_ecs_tilemap::prelude::*;
 use crate::char_animation::*;
 use crate::collision::*;
 use crate::compass::*;
 use crate::input::*;
 use crate::render::*;
+use bevy::{
+    input::InputSystem,
+    log::LogPlugin,
+    math::Rect,
+    prelude::*,
+    render::{RenderApp, RenderStage},
+    utils::{tracing, Duration},
+};
+use bevy_ecs_ldtk::prelude::*;
 use bevy_inspector_egui::{
     Inspectable, InspectorPlugin, RegisterInspectable, WorldInspectorPlugin,
 };
-// use crate::goofy_time::*;
+use std::collections::HashMap;
+use std::io::Write;
 
 mod char_animation;
 mod collision;
@@ -410,7 +406,7 @@ fn player_bonk_out(mut commands: Commands, player_q: Query<(Entity, &PlayerBonk)
     }
 }
 
-fn move_camera_system(
+fn _move_camera_system(
     time: Res<Time>,
     // time: Res<StaticTime>,
     // time: Res<SmoothedTime>,
@@ -648,7 +644,7 @@ pub enum Mobile {
 impl Mobile {
     const ROLL_DISTANCE: f32 = 52.0;
     const BONK_ROLL: f32 = 18.0;
-    const BONK_HURT: f32 = 9.0;
+    const _BONK_HURT: f32 = 9.0;
     const BONK_HEIGHT: f32 = 8.0;
 
     pub fn roll(direction: f32) -> Self {

@@ -24,7 +24,7 @@ pub fn centered_rect(width: f32, height: f32) -> Rect {
     Rect { min, max }
 }
 
-pub fn bottom_centered_rect(width: f32, height: f32) -> Rect {
+pub fn _bottom_centered_rect(width: f32, height: f32) -> Rect {
     let min = Vec2::new(-width / 2., 0.);
     let max = Vec2::new(width / 2., height);
     Rect { min, max }

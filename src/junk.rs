@@ -5,7 +5,7 @@ use bevy::{
 use bevy_ecs_ldtk::prelude::*;
 // use bevy_ecs_tilemap::prelude::*;
 
-pub fn debug_z_system(
+pub fn _debug_z_system(
     // mut local_timer: Local<Timer>,
     player_query: Query<&Transform, With<crate::Player>>,
     world_query: Query<&Transform, With<crate::LdtkWorld>>,
@@ -25,7 +25,7 @@ pub fn debug_z_system(
     }
 }
 
-pub fn tile_info_barfing_system(
+pub fn _tile_info_barfing_system(
     keys: Res<Input<KeyCode>>,
     tile_query: Query<(&IntGridCell, &GridCoords, &Transform)>,
     level_query: Query<(&Handle<LdtkLevel>, &Transform)>,
@@ -40,7 +40,7 @@ pub fn tile_info_barfing_system(
     }
 }
 
-pub fn setup_fps_debug(mut commands: Commands, asset_server: Res<AssetServer>) {
+pub fn _setup_fps_debug(mut commands: Commands, asset_server: Res<AssetServer>) {
     let style = TextStyle {
         font: asset_server.load("fonts/m5x7.ttf"),
         font_size: 32.0,
@@ -78,7 +78,7 @@ pub fn setup_fps_debug(mut commands: Commands, asset_server: Res<AssetServer>) {
 }
 
 // again borrowed from bevymark example
-pub fn update_fps_debug_system(
+pub fn _update_fps_debug_system(
     diagnostics: Res<Diagnostics>,
     mut query: Query<&mut Text, With<FPSCounter>>,
 ) {
