@@ -393,6 +393,7 @@ pub struct AnimateFinishedEvent(pub Entity);
 pub struct CharAnimationState {
     pub animation: Handle<CharAnimation>,
     pub variant: Option<VariantName>,
+    pub playback: Playback,
     pub frame: usize,
     // To start with, we'll just always loop.
     pub frame_timer: Option<Timer>,
@@ -400,6 +401,12 @@ pub struct CharAnimationState {
     /// to the provided length in milliseconds. If you need frames to be
     /// different lengths, that belongs in the animation data, not the
     pub frame_time_override: FrameTimeOverride,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum Playback {
+    Loop,
+    Once,
 }
 
 /// Allow programmatically overriding the frame times from the animation source
@@ -414,10 +421,11 @@ pub enum FrameTimeOverride {
 }
 
 impl CharAnimationState {
-    pub fn new(animation: Handle<CharAnimation>, variant: VariantName) -> Self {
+    pub fn new(animation: Handle<CharAnimation>, variant: VariantName, playback: Playback) -> Self {
         CharAnimationState {
             animation,
             variant: Some(variant),
+            playback,
             // in the future I might end up wanting to blend between animations
             // at a particular frame. Doesn't matter yet tho.
             frame: 0,
@@ -426,25 +434,27 @@ impl CharAnimationState {
         }
     }
 
+    pub fn reset(&mut self) {
+        self.frame = 0;
+        self.frame_timer = None;
+        self.frame_time_override = FrameTimeOverride::None;
+    }
+
     /// Change direction of animation, unless already facing the requested direction.
     pub fn change_variant(&mut self, variant: VariantName) {
         if self.variant != Some(variant) {
             self.variant = Some(variant);
-            self.frame = 0;
-            self.frame_timer = None;
-            self.frame_time_override = FrameTimeOverride::None;
+            self.reset();
         }
     }
 
-    pub fn change_animation(&mut self, animation: Handle<CharAnimation>) {
+    pub fn change_animation(&mut self, animation: Handle<CharAnimation>, playback: Playback) {
         if self.animation != animation {
             self.animation = animation;
             // TODO: I'm leaving the variant the same, but actually I don't know if
             // that's the right move -- question is whether I'd ever switch to an
             // animation with fewer variants.
-            self.frame_timer = None;
-            self.frame = 0;
-            self.frame_time_override = FrameTimeOverride::None;
+            self.reset();
         }
     }
 
@@ -458,6 +468,14 @@ impl CharAnimationState {
 
     pub fn set_total_run_time_to(&mut self, millis: u64) {
         self.frame_time_override = FrameTimeOverride::TotalMs(millis);
+    }
+
+    pub fn timer_just_finished(&self) -> bool {
+        if let Some(true) = self.frame_timer.as_ref().map(|t| t.just_finished()) {
+            true
+        } else {
+            false
+        }
     }
 }
 
@@ -486,26 +504,36 @@ pub fn charanm_animate_system(
         // update the timer... or initialize it, if it's missing.
         if let Some(frame_timer) = &mut state.frame_timer {
             frame_timer.tick(time.delta());
-            while let Some(true) = state.frame_timer.as_ref().map(|t| t.finished()) {
+            'timers: while state.timer_just_finished() {
+                // Determine the next frame
+                let frame_count = variant.frames.len();
+                let next_frame = (state.frame + 1) % frame_count;
+
+                // If next is 0, we just finished the *last* frame... fire an
+                // event in case anyone wants to do something about that. This
+                // is valid for single-frame animations too, although it might
+                // not seem it at first blush.
+                if next_frame == 0 {
+                    finished_events.send(AnimateFinishedEvent(entity));
+                    // If this is a non-looping animation, we bail now and leave
+                    // it perma-stuck on the final frame. Its timer will keep
+                    // accumulating, and this loop won't run again until the
+                    // animation is changed.
+                    match state.playback {
+                        Playback::Once => {
+                            break 'timers;
+                        },
+                        // nothing interesting yet for looping animations, but I
+                        // want the exhaustiveness check from `match` just in case.
+                        Playback::Loop => (),
+                    }
+                }
+
                 updating_frame = true;
                 let excess_time = state.frame_timer.as_ref().unwrap().excess_elapsed();
 
                 // increment+loop frame, and replace the timer with the new frame's duration
-                let frame_count = variant.frames.len();
-                state.frame = (state.frame + 1) % frame_count;
-
-                // If we just finished the *last* frame, we're back on 0... fire
-                // an event in case anyone wants to do anything about that. This
-                // is valid for single-frame animations too, although it might
-                // not seem it at first blush.
-                if state.frame == 0 {
-                    finished_events.send(AnimateFinishedEvent(entity));
-                }
-                // OH. I think I know where that hitching false-start on roll
-                // came from. we sent an event for the end of the run animation,
-                // too, and the roll-out system was getting that (possibly on a
-                // one-tick delay). SIGH.
-
+                state.frame = next_frame;
                 let duration = variant.resolved_frame_time(state.frame, state.frame_time_override);
                 let mut new_timer = Timer::new(duration, TimerMode::CountUp);
                 new_timer.tick(excess_time);
@@ -590,7 +618,7 @@ fn charanm_test_setup_system(mut commands: Commands, asset_server: Res<AssetServ
             ..default()
         },
         crate::render::HasShadow,
-        CharAnimationState::new(anim_handle, Dir::W),
+        CharAnimationState::new(anim_handle, Dir::W, Playback::Loop),
         Motion::new(Vec2::ZERO),
     ));
 

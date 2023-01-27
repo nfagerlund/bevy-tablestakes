@@ -168,11 +168,11 @@ fn player_free_plan_move(
         if move_input.length() > 0.0 {
             // OK, we're running
             let run = animations_map.get("run").unwrap().clone();
-            animation_state.change_animation(run);
+            animation_state.change_animation(run, Playback::Loop);
         } else {
             // Chill
             let idle = animations_map.get("idle").unwrap().clone();
-            animation_state.change_animation(idle);
+            animation_state.change_animation(idle, Playback::Loop);
         }
 
         // Publish movement intent
@@ -306,7 +306,7 @@ fn player_bonk_enter(
     for (mut speed, mut animation_state, mut motion, animations_map) in player_q.iter_mut() {
         speed.0 = Speed::BONK;
         let hurt = animations_map.get("hurt").unwrap().clone();
-        animation_state.change_animation(hurt);
+        animation_state.change_animation(hurt, Playback::Once);
         // single frame on this, so no add'l fussing.
         motion.remainder = Vec2::ZERO;
     }
@@ -358,7 +358,7 @@ fn player_roll_enter(
     {
         speed.0 = Speed::ROLL;
         let roll = animations_map.get("roll").unwrap().clone();
-        animation_state.change_animation(roll);
+        animation_state.change_animation(roll, Playback::Once);
         // Scale the animation to match the configured roll distance/speed:
         let roll_duration_millis = player_roll.timer.duration().as_millis() as u64;
         animation_state.set_total_run_time_to(roll_duration_millis);
@@ -519,7 +519,11 @@ fn setup_player(mut commands: Commands, asset_server: Res<AssetServer>) {
             speed: Speed(Speed::RUN),
             walkbox: Walkbox(Rect::default()),
             // --- New animation system
-            char_animation_state: CharAnimationState::new(initial_animation, Dir::E),
+            char_animation_state: CharAnimationState::new(
+                initial_animation,
+                Dir::E,
+                Playback::Loop,
+            ),
             motion: Motion::new(Vec2::ZERO),
             animations_map: animations,
         },

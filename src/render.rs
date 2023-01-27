@@ -67,7 +67,11 @@ impl ShadowSpriteBundle {
                 transform: Transform::from_translation(Vec3::new(0.0, 0.0, -0.1)),
                 ..default()
             },
-            char_animation_state: CharAnimationState::new(handle, VariantName::Neutral),
+            char_animation_state: CharAnimationState::new(
+                handle,
+                VariantName::Neutral,
+                Playback::Loop,
+            ),
             topdown_matter: TopDownMatter::shadow(),
         }
     }
