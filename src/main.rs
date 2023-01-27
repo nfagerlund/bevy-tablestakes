@@ -94,9 +94,8 @@ fn main() {
         .add_system(planned_move_system.after(CharAnimationSystems).after(MovePlanners))
         .add_system_set(
             SystemSet::new()
-                .label(SpriteChangers)
                 .label(MovePlanners)
-                .with_system(player_free_plan_move)
+                .with_system(player_free_plan_move.label(SpriteChangers))
                 .with_system(player_roll_plan_move)
                 .with_system(player_bonk_plan_move)
         )
