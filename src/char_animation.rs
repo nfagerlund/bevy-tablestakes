@@ -454,6 +454,7 @@ impl CharAnimationState {
             // TODO: I'm leaving the variant the same, but actually I don't know if
             // that's the right move -- question is whether I'd ever switch to an
             // animation with fewer variants.
+            self.playback = playback;
             self.reset();
         }
     }
