@@ -91,7 +91,18 @@ fn main() {
         .add_system(shadow_stitcher_system)
         // PLAYER STUFF
         .add_startup_system(setup_player)
-        .add_system(planned_move_system.after(CharAnimationSystems).after(MovePlanners))
+        // .add_system(
+        //     planned_move_system
+        //         .label(Movers)
+        //         .after(CharAnimationSystems)
+        //         .after(MovePlanners)
+        // )
+        .add_system(
+            dumb_planned_move_system
+                .label(Movers)
+                .after(CharAnimationSystems)
+                .after(MovePlanners)
+        )
         .add_system_set(
             SystemSet::new()
                 .label(MovePlanners)
@@ -110,7 +121,7 @@ fn main() {
         .add_system_to_stage(CoreStage::PostUpdate, player_free_out)
         .add_system_to_stage(CoreStage::PostUpdate, player_bonk_out)
         // .add_system(charanm_test_animate_system) // in CharAnimationPlugin or somethin'
-        .add_system(dumb_move_camera_system.after(planned_move_system))
+        .add_system(dumb_move_camera_system.after(Movers))
         .add_system(snap_pixel_positions_system.after(dumb_move_camera_system))
         // OK BYE!!!
         ;
@@ -136,6 +147,9 @@ fn main() {
 
 #[derive(SystemLabel)]
 pub struct MovePlanners;
+
+#[derive(SystemLabel)]
+pub struct Movers;
 
 fn player_free_plan_move(
     inputs: Res<CurrentInputs>,
@@ -196,6 +210,20 @@ fn player_free_out(mut commands: Commands, player_q: Query<(Entity, &PlayerFree)
                     .insert(PlayerRoll::new(*direction));
             },
         }
+    }
+}
+
+fn dumb_planned_move_system(mut mover_q: Query<(&mut SubTransform, &mut Motion)>, time: Res<Time>) {
+    let delta = time.delta_seconds();
+    for (mut transform, mut motion) in mover_q.iter_mut() {
+        let raw_movement_intent = motion.velocity * delta;
+        // then....... just do it!!
+        transform.translation += raw_movement_intent.extend(0.0);
+        motion.velocity = Vec2::ZERO;
+        motion.result = Some(MotionResult {
+            collided: false,
+            new_location: transform.translation.truncate(),
+        });
     }
 }
 
