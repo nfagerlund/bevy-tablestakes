@@ -68,6 +68,7 @@ fn main() {
         .insert_resource(DebugAssets::default())
         .add_startup_system(setup_debug_assets.before(setup_player))
         .add_system(spawn_collider_debugs)
+        .insert_resource(MotionKind::WholePixel)
         // INSPECTOR STUFF
         .add_plugin(WorldInspectorPlugin::new())
         .register_inspectable::<SubTransform>()
@@ -76,6 +77,7 @@ fn main() {
         .register_inspectable::<Hitbox>()
         .register_inspectable::<TopDownMatter>()
         .add_plugin(InspectorPlugin::<DebugColliders>::new())
+        .add_plugin(InspectorPlugin::<MotionKind>::new())
         .add_system(debug_walkboxes_system)
         // LDTK STUFF
         .add_startup_system(setup_level)
@@ -91,12 +93,12 @@ fn main() {
         .add_system(shadow_stitcher_system)
         // PLAYER STUFF
         .add_startup_system(setup_player)
-        // .add_system(
-        //     planned_move_system
-        //         .label(Movers)
-        //         .after(CharAnimationSystems)
-        //         .after(MovePlanners)
-        // )
+        .add_system(
+            planned_move_system
+                .label(Movers)
+                .after(CharAnimationSystems)
+                .after(MovePlanners)
+        )
         .add_system(
             dumb_planned_move_system
                 .label(Movers)
@@ -213,7 +215,22 @@ fn player_free_out(mut commands: Commands, player_q: Query<(Entity, &PlayerFree)
     }
 }
 
-fn dumb_planned_move_system(mut mover_q: Query<(&mut SubTransform, &mut Motion)>, time: Res<Time>) {
+#[derive(Resource, Reflect, Inspectable, Default, PartialEq, Eq)]
+enum MotionKind {
+    #[default]
+    PlainVelocity,
+    WholePixel,
+}
+
+fn dumb_planned_move_system(
+    mut mover_q: Query<(&mut SubTransform, &mut Motion)>,
+    time: Res<Time>,
+    motion_kind: Res<MotionKind>,
+) {
+    if *motion_kind != MotionKind::PlainVelocity {
+        return;
+    }
+
     let delta = time.delta_seconds();
     for (mut transform, mut motion) in mover_q.iter_mut() {
         let raw_movement_intent = motion.velocity * delta;
@@ -233,7 +250,12 @@ fn planned_move_system(
     mut mover_q: Query<(&mut SubTransform, &mut Motion, &Walkbox), With<Player>>,
     solids_q: Query<(&GlobalTransform, &Walkbox), With<Solid>>,
     time: Res<Time>,
+    motion_kind: Res<MotionKind>,
 ) {
+    if *motion_kind != MotionKind::WholePixel {
+        return;
+    }
+
     let solids: Vec<AbsBBox> = solids_q
         .iter()
         .map(|(global_transform, walkbox)| {
