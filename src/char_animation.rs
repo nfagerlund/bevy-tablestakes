@@ -565,7 +565,7 @@ pub fn charanm_animate_system(
 /// one, but maybe not everything needs a collider, even if its sprite has one.
 /// So, we only update walkboxes for entities who have opted in by having one
 /// added to them at some point, and we never remove walkboxes. BTW: We're
-/// filtering on Changed<TextureAtlasSprite> because the animation state
+/// filtering on `Changed<TextureAtlasSprite>` because the animation state
 /// contains a Timer and thus changes constantly... but we only update the atlas
 /// index when it's time to flip frames.
 fn charanm_update_walkbox_system(
