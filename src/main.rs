@@ -273,8 +273,14 @@ fn continuous_move_system(
 
     for (mut transform, mut motion, walkbox) in mover_q.iter_mut() {
         let mut planned_move = motion.velocity * delta;
+        motion.velocity = Vec2::ZERO;
         let mut collided = false;
         let abs_walkbox = AbsBBox::from_rect(walkbox.0, transform.translation.truncate());
+
+        if planned_move.length() == 0.0 {
+            motion.result = None; // idk about keeping this semantics tho. awkward.
+            continue;
+        }
 
         // check for collisions and clamp the movement plan if we hit something
         for solid in solids.iter() {
@@ -287,6 +293,10 @@ fn continuous_move_system(
 
         // commit it
         transform.translation += planned_move.extend(0.0);
+        motion.result = Some(MotionResult {
+            collided,
+            new_location: transform.translation.truncate(),
+        });
     }
 }
 
