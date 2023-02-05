@@ -66,6 +66,60 @@ impl AbsBBox {
             true
         }
     }
+
+    /// Return the new AbsBBox that would result from moving self by `movement`.
+    pub fn translate(&self, movement: Vec2) -> Self {
+        Self {
+            min: self.min + movement,
+            max: self.max + movement,
+        }
+    }
+
+    /// Clamp another AbsBBox's proposed movement vector to prevent it from
+    /// overlapping with this box. Vulnerable to tunnelling, but I could rewrite
+    /// it to not be if I need to later. Don't feed this any NaNs.
+    pub fn faceplant(&self, other: Self, mvt: Vec2) -> Vec2 {
+        if !self.collide(other.translate(mvt)) {
+            // easy peasy
+            return mvt;
+        }
+
+        let mut res = mvt;
+
+        // x first
+        if mvt.x.signum() == 1.0 {
+            // going right
+            let x_move_limit = self.min.x - other.max.x;
+            // min = lower magnitude, bc positive
+            res.x = x_move_limit.min(mvt.x);
+        } else {
+            // going left or standing still
+            let x_move_limit = self.max.x - other.min.x;
+            // max = lower magnitude, bc negative
+            res.x = x_move_limit.max(mvt.x);
+        };
+
+        // check whether that did it:
+        if !self.collide(other.translate(res)) {
+            // easy peasy
+            return res;
+        }
+
+        // if not, do y
+        if mvt.y.signum() == 1.0 {
+            // going up
+            let y_move_limit = self.min.y - other.max.y;
+            // min = lower magnitude bc positive
+            res.y = y_move_limit.min(mvt.y);
+        } else {
+            // going down
+            let y_move_limit = self.max.y - other.min.y;
+            // max = lower magnitude bc negative
+            res.y = y_move_limit.max(mvt.y);
+        }
+
+        res
+    }
 }
 
 /// Collidable solid marker component... but you also need a position Vec3 and a

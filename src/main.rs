@@ -105,6 +105,12 @@ fn main() {
                 .after(CharAnimationSystems)
                 .after(MovePlanners)
         )
+        .add_system(
+            continuous_move_system
+                .label(Movers)
+                .after(CharAnimationSystems)
+                .after(MovePlanners)
+        )
         .add_system_set(
             SystemSet::new()
                 .label(MovePlanners)
@@ -218,7 +224,8 @@ fn player_free_out(mut commands: Commands, player_q: Query<(Entity, &PlayerFree)
 #[derive(Resource, Reflect, Inspectable, Default, PartialEq, Eq)]
 enum MotionKind {
     #[default]
-    PlainVelocity,
+    NoCollision,
+    Continuous,
     WholePixel,
 }
 
@@ -227,7 +234,7 @@ fn dumb_planned_move_system(
     time: Res<Time>,
     motion_kind: Res<MotionKind>,
 ) {
-    if *motion_kind != MotionKind::PlainVelocity {
+    if *motion_kind != MotionKind::NoCollision {
         return;
     }
 
@@ -241,6 +248,45 @@ fn dumb_planned_move_system(
             collided: false,
             new_location: transform.translation.truncate(),
         });
+    }
+}
+
+/// This version is willing to move by fractional pixels, and ignores movement.remainder.
+fn continuous_move_system(
+    mut mover_q: Query<(&mut SubTransform, &mut Motion, &Walkbox)>,
+    solids_q: Query<(&GlobalTransform, &Walkbox), With<Solid>>,
+    time: Res<Time>,
+    motion_kind: Res<MotionKind>,
+) {
+    if *motion_kind != MotionKind::Continuous {
+        return;
+    }
+
+    let solids: Vec<AbsBBox> = solids_q
+        .iter()
+        .map(|(global_transform, walkbox)| {
+            let origin = global_transform.translation().truncate();
+            AbsBBox::from_rect(walkbox.0, origin)
+        })
+        .collect();
+    let delta = time.delta_seconds();
+
+    for (mut transform, mut motion, walkbox) in mover_q.iter_mut() {
+        let mut planned_move = motion.velocity * delta;
+        let mut collided = false;
+        let abs_walkbox = AbsBBox::from_rect(walkbox.0, transform.translation.truncate());
+
+        // check for collisions and clamp the movement plan if we hit something
+        for solid in solids.iter() {
+            let clamped = solid.faceplant(abs_walkbox, planned_move);
+            if clamped != planned_move {
+                collided = true;
+                planned_move = clamped;
+            }
+        }
+
+        // commit it
+        transform.translation += planned_move.extend(0.0);
     }
 }
 
@@ -277,9 +323,7 @@ fn planned_move_system(
         let raw_movement_intent = motion.velocity * delta;
         motion.velocity = Vec2::ZERO; // TODO should probably have this be an Option -> .take()
 
-        // If we're not moving, stop running and bail. Right now I'm not doing
-        // change detection, so I can just do an unconditional hard assign w/ those
-        // handles...
+        // If we're not moving, stop running and bail.
         if raw_movement_intent.length() == 0.0 {
             // Don't hold onto sub-pixel remainders from previous move sequences once we stop
             motion.remainder = Vec2::ZERO;
