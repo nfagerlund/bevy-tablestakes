@@ -68,7 +68,7 @@ fn main() {
         .insert_resource(DebugAssets::default())
         .add_startup_system(setup_debug_assets.before(setup_player))
         .add_system(spawn_collider_debugs)
-        .insert_resource(MotionKind::WholePixel)
+        .insert_resource(MotionKind::default())
         // INSPECTOR STUFF
         .add_plugin(WorldInspectorPlugin::new())
         .register_inspectable::<SubTransform>()
@@ -223,8 +223,8 @@ fn player_free_out(mut commands: Commands, player_q: Query<(Entity, &PlayerFree)
 
 #[derive(Resource, Reflect, Inspectable, Default, PartialEq, Eq)]
 enum MotionKind {
-    #[default]
     NoCollision,
+    #[default]
     Continuous,
     WholePixel,
 }
