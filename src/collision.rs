@@ -79,46 +79,64 @@ impl AbsBBox {
     /// overlapping with this box. Vulnerable to tunnelling, but I could rewrite
     /// it to not be if I need to later. Don't feed this any NaNs.
     pub fn faceplant(&self, other: Self, mvt: Vec2) -> Vec2 {
-        if !self.collide(other.translate(mvt)) {
+        if !self.collide(other.translate(mvt)) || mvt.length() == 0.0 {
             // easy peasy
             return mvt;
         }
 
         let mut res = mvt;
 
-        // x first
-        if mvt.x.signum() == 1.0 {
-            // going right
-            let x_move_limit = self.min.x - other.max.x;
-            // min = lower magnitude, bc positive
-            res.x = x_move_limit.min(mvt.x);
-        } else {
-            // going left or standing still
-            let x_move_limit = self.max.x - other.min.x;
-            // max = lower magnitude, bc negative
-            res.x = x_move_limit.max(mvt.x);
+        let x_dir = Toward::from_f32(mvt.x);
+        let max_x_move_without_colliding = match x_dir {
+            // leftbound: negative, so + shrinks magnitude and max is smallest magnitude.
+            Toward::Min => (self.max.x - other.min.x + 1.0).max(mvt.x),
+            // rightbound: positive, so - shrinks magnitude and min is smallest magnitude.
+            Toward::Max => (self.min.x - other.max.x - 1.0).min(mvt.x),
+            Toward::Static => 0.0f32,
         };
+        let allowed_fraction_of_x_plan = max_x_move_without_colliding / mvt.x;
+        let y_dir = Toward::from_f32(mvt.y);
+        let max_y_move_without_colliding = match y_dir {
+            // downbound: negative, so + shrinks magnitude and max is smallest magnitude.
+            Toward::Min => (self.max.y - other.min.y + 1.0).max(mvt.y),
+            // upbound: positive, so - shrinks magnitude and min is smallest magnitude.
+            Toward::Max => (self.min.y - other.max.y - 1.0).min(mvt.y),
+            Toward::Static => 0.0f32,
+        };
+        let allowed_fraction_of_y_plan = max_y_move_without_colliding / mvt.y;
 
-        // check whether that did it:
-        if !self.collide(other.translate(res)) {
-            // easy peasy
-            return res;
-        }
-
-        // if not, do y
-        if mvt.y.signum() == 1.0 {
-            // going up
-            let y_move_limit = self.min.y - other.max.y;
-            // min = lower magnitude bc positive
-            res.y = y_move_limit.min(mvt.y);
+        if allowed_fraction_of_x_plan < allowed_fraction_of_y_plan {
+            res.x = max_x_move_without_colliding;
+            res.y *= allowed_fraction_of_x_plan;
+            info!("faceplanting; x hit first")
         } else {
-            // going down
-            let y_move_limit = self.max.y - other.min.y;
-            // max = lower magnitude bc negative
-            res.y = y_move_limit.max(mvt.y);
+            res.y = max_y_move_without_colliding;
+            res.x *= allowed_fraction_of_y_plan;
+            info!("faceplanting; y hit first")
         }
+        info!("resolved move: {res}");
 
         res
+    }
+}
+
+/// Private helper enum for making some faceplant code more legible
+enum Toward {
+    Min,
+    Max,
+    Static,
+}
+
+impl Toward {
+    fn from_f32(v: f32) -> Self {
+        let sign = v.signum();
+        if sign == 1.0 {
+            Self::Max
+        } else if sign == -1.0 {
+            Self::Min
+        } else {
+            Self::Static
+        }
     }
 }
 
