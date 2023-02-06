@@ -94,7 +94,11 @@ impl AbsBBox {
             Toward::Max => (self.min.x - other.max.x - 1.0).min(mvt.x),
             Toward::Static => 0.0f32,
         };
-        let allowed_fraction_of_x_plan = max_x_move_without_colliding / mvt.x;
+        let allowed_fraction_of_x_plan = if mvt.x == 0.0 {
+            1.0
+        } else {
+            max_x_move_without_colliding / mvt.x
+        };
         let y_dir = Toward::from_f32(mvt.y);
         let max_y_move_without_colliding = match y_dir {
             // downbound: negative, so + shrinks magnitude and max is smallest magnitude.
@@ -103,7 +107,11 @@ impl AbsBBox {
             Toward::Max => (self.min.y - other.max.y - 1.0).min(mvt.y),
             Toward::Static => 0.0f32,
         };
-        let allowed_fraction_of_y_plan = max_y_move_without_colliding / mvt.y;
+        let allowed_fraction_of_y_plan = if mvt.y == 0.0 {
+            1.0
+        } else {
+            max_y_move_without_colliding / mvt.y
+        };
 
         if allowed_fraction_of_x_plan < allowed_fraction_of_y_plan {
             res.x = max_x_move_without_colliding;
