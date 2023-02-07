@@ -49,20 +49,31 @@ impl AbsBBox {
 
     /// Check whether an absolutely positioned bbox overlaps with another one.
     pub fn collide(&self, other: Self) -> bool {
+        self.overlaps_x(other) && self.overlaps_y(other)
+    }
+
+    /// Check whether two boxes overlap on the X axis.
+    pub fn overlaps_x(&self, other: Self) -> bool {
         if self.min.x > other.max.x {
             // we're right of other
             false
         } else if self.max.x < other.min.x {
             // we're left of other
             false
-        } else if self.max.y < other.min.y {
+        } else {
+            true
+        }
+    }
+
+    /// Check whether two boxes overlap on the Y axis.
+    pub fn overlaps_y(&self, other: Self) -> bool {
+        if self.max.y < other.min.y {
             // we're below other
             false
         } else if self.min.y > other.max.y {
             // we're above other
             false
         } else {
-            // guess we're colliding! ¯\_(ツ)_/¯
             true
         }
     }
@@ -79,50 +90,51 @@ impl AbsBBox {
     /// overlapping with this box. Vulnerable to tunnelling, but I could rewrite
     /// it to not be if I need to later. Don't feed this any NaNs.
     pub fn faceplant(&self, other: Self, mvt: Vec2) -> Vec2 {
+        // If we have nothing to do with each other, done.
         if !self.collide(other.translate(mvt)) || mvt.length() == 0.0 {
             // easy peasy
             return mvt;
         }
 
+        // If we're *already* entangled, gently suggest pushing out in the
+        // opposite direction. ...but I'm not sure yet how I want to implement
+        // that, so for now just bitch about it.
+        if self.collide(other) {
+            info!(
+                "UH, FOR SOME REASON YOU ({other:?}) ARE STUCK IN THING ({self:?}). Consider leaving??"
+            );
+            return mvt;
+        }
+
+        // What's left? We're not already entangled, but the proposed move would
+        // overlap us and we'd rather it not. Determine the minimal clamping to
+        // the proposal that would keep us excluded.
+
         let mut res = mvt;
 
-        let x_dir = Toward::from_f32(mvt.x);
-        let max_x_move_without_colliding = match x_dir {
-            // leftbound: negative, so + shrinks magnitude and max is smallest magnitude.
-            Toward::Min => (self.max.x - other.min.x + 1.0).max(mvt.x),
-            // rightbound: positive, so - shrinks magnitude and min is smallest magnitude.
-            Toward::Max => (self.min.x - other.max.x - 1.0).min(mvt.x),
-            Toward::Static => 0.0f32,
-        };
-        let allowed_fraction_of_x_plan = if mvt.x == 0.0 {
-            1.0
-        } else {
-            max_x_move_without_colliding / mvt.x
-        };
-        let y_dir = Toward::from_f32(mvt.y);
-        let max_y_move_without_colliding = match y_dir {
-            // downbound: negative, so + shrinks magnitude and max is smallest magnitude.
-            Toward::Min => (self.max.y - other.min.y + 1.0).max(mvt.y),
-            // upbound: positive, so - shrinks magnitude and min is smallest magnitude.
-            Toward::Max => (self.min.y - other.max.y - 1.0).min(mvt.y),
-            Toward::Static => 0.0f32,
-        };
-        let allowed_fraction_of_y_plan = if mvt.y == 0.0 {
-            1.0
-        } else {
-            max_y_move_without_colliding / mvt.y
-        };
-
-        if allowed_fraction_of_x_plan < allowed_fraction_of_y_plan {
-            res.x = max_x_move_without_colliding;
-            res.y *= allowed_fraction_of_x_plan;
-            info!("faceplanting; x hit first")
-        } else {
-            res.y = max_y_move_without_colliding;
-            res.x *= allowed_fraction_of_y_plan;
-            info!("faceplanting; y hit first")
+        // Check what happens if only moving X component
+        if self.collide(other.translate(Vec2::new(res.x, 0.0))) {
+            let x_dir = Toward::from_f32(mvt.x);
+            res.x = match x_dir {
+                // leftbound: negative, so + shrinks magnitude and max is smallest magnitude.
+                Toward::Min => (self.max.x - other.min.x + 1.0).max(mvt.x),
+                // rightbound: positive, so - shrinks magnitude and min is smallest magnitude.
+                Toward::Max => (self.min.x - other.max.x - 1.0).min(mvt.x),
+                Toward::Static => 0.0f32,
+            };
         }
-        info!("resolved move: {res}");
+
+        // Then check what the Y move does after the X is a done deal
+        if self.collide(other.translate(Vec2::new(res.x, res.y))) {
+            let y_dir = Toward::from_f32(mvt.y);
+            res.y = match y_dir {
+                // downbound: negative, so + shrinks magnitude and max is smallest magnitude.
+                Toward::Min => (self.max.y - other.min.y + 1.0).max(mvt.y),
+                // upbound: positive, so - shrinks magnitude and min is smallest magnitude.
+                Toward::Max => (self.min.y - other.max.y - 1.0).min(mvt.y),
+                Toward::Static => 0.0f32,
+            };
+        }
 
         res
     }
