@@ -22,7 +22,7 @@ bevy = { version = "0.9.1", features = [
 bevy-inspector-egui = "0.14.0"
 bevy_ecs_tilemap = "0.9.0"
 bevy_ecs_ldtk = "0.5.0"
-# bevy_spatial = { version = "0.4.0", features = ["rstar"]}
+bevy_spatial = { version = "0.4.0", features = ["rstar"]}
 
 # bevy_ecs_tilemap = { git = "https://github.com/StarArawn/bevy_ecs_tilemap", rev = "02b044b99" }
 # bevy_ecs_ldtk = { git = "https://github.com/nfagerlund/bevy_ecs_ldtk.git", rev = "1bfe05f" }
