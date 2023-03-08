@@ -17,6 +17,7 @@ use bevy_ecs_ldtk::prelude::*;
 use bevy_inspector_egui::{
     Inspectable, InspectorPlugin, RegisterInspectable, WorldInspectorPlugin,
 };
+use bevy_spatial::{RTreeAccess2D, RTreePlugin2D, SpatialAccess};
 use std::collections::HashMap;
 use std::io::Write;
 
@@ -85,6 +86,8 @@ fn main() {
         .add_startup_system(setup_level)
         .insert_resource(LevelSelection::Index(1))
         .register_ldtk_int_cell_for_layer::<Wall>("StructureKind", 1)
+        // SPATIAL PARTITIONING STUFF
+        .add_plugin(RTreePlugin2D::<Solid> { ..default() })
         // CAMERA
         .add_startup_system(setup_camera)
         // INPUT STUFF
@@ -154,6 +157,9 @@ fn main() {
 
     app.run();
 }
+
+type SolidsTree = RTreeAccess2D<Solid>;
+const SOLID_SCANNING_DISTANCE: f32 = 64.0;
 
 #[derive(SystemLabel)]
 pub struct MovePlanners;
@@ -257,6 +263,7 @@ fn dumb_planned_move_system(
 fn continuous_move_system(
     mut mover_q: Query<(&mut SubTransform, &mut Motion, &Walkbox)>,
     solids_q: Query<(&GlobalTransform, &Walkbox), With<Solid>>,
+    solids_tree: Res<SolidsTree>,
     time: Res<Time>,
     motion_kind: Res<MotionKind>,
 ) {
@@ -264,13 +271,32 @@ fn continuous_move_system(
         return;
     }
 
-    let solids: Vec<AbsBBox> = solids_q
-        .iter()
-        .map(|(global_transform, walkbox)| {
-            let origin = global_transform.translation().truncate();
-            AbsBBox::from_rect(walkbox.0, origin)
-        })
-        .collect();
+    // Make some assumptions: solid colliders are generally tiles, and tiles are
+    // 16x16. Player walkbox is even smaller. We aren't moving more than, say,
+    // two tile-widths per physics tick (and even that's outrageous). A radius
+    // of 64 should be MORE than enough to sweep up everything. Reconsider if
+    // assumptions change. We'll need to do the collection of candidate solids
+    // *per-player-entity,* instead of outside the loop.
+
+    let collect_sorted_solids =
+        |player_loc: Vec2, mut candidate_locs: Vec<(Vec3, Entity)>| -> Vec<AbsBBox> {
+            // Claiming ownership of that input vec bc I'm sorting.
+            candidate_locs.sort_by(|a, b| {
+                let a_dist = player_loc.distance_squared(a.0.truncate());
+                let b_dist = player_loc.distance_squared(b.0.truncate());
+                a_dist.total_cmp(&b_dist)
+            });
+            candidate_locs
+                .iter()
+                .map(|ent_loc| {
+                    // unwrap is ok as long as tree doesn't have stale entities.
+                    let (global_transform, walkbox) = solids_q.get(ent_loc.1).unwrap();
+                    let origin = global_transform.translation().truncate();
+                    AbsBBox::from_rect(walkbox.0, origin)
+                })
+                .collect()
+        };
+
     let delta = time.delta_seconds();
 
     for (mut transform, mut motion, walkbox) in mover_q.iter_mut() {
@@ -283,6 +309,11 @@ fn continuous_move_system(
             motion.result = None; // idk about keeping this semantics tho. awkward.
             continue;
         }
+
+        // search for nearby solids
+        let candidate_solid_locs =
+            solids_tree.within_distance(transform.translation, SOLID_SCANNING_DISTANCE);
+        let solids = collect_sorted_solids(transform.translation.truncate(), candidate_solid_locs);
 
         // check for collisions and clamp the movement plan if we hit something
         for solid in solids.iter() {
