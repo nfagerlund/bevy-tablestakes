@@ -61,7 +61,7 @@ fn time_smoothing_system(
     let window: usize = 11;
     let delta = time.delta();
     recent_time.buffer.push_back(delta);
-    if recent_time.buffer.len() >= window + 1 {
+    if recent_time.buffer.len() > window {
         recent_time.buffer.pop_front();
         let mut sorted: Vec<Duration> = recent_time.buffer.clone().into();
         sorted.sort_unstable();

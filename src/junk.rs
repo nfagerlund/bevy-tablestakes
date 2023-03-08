@@ -58,7 +58,7 @@ pub fn _setup_fps_debug(mut commands: Commands, asset_server: Res<AssetServer>) 
                     },
                     TextSection {
                         value: "".to_string(),
-                        style: style.clone(),
+                        style,
                     },
                 ],
                 ..Default::default() // alignment

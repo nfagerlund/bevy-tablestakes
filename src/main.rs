@@ -1,3 +1,5 @@
+#![allow(clippy::type_complexity)] // it's just impossible
+
 use crate::char_animation::*;
 use crate::collision::*;
 use crate::compass::*;
@@ -143,7 +145,7 @@ fn main() {
             );
     }
 
-    if std::env::args().find(|arg| arg == "--graph").is_some() {
+    if std::env::args().any(|arg| &arg == "--graph") {
         // Write the debug dump to a file and exit. (not sure why it exits, though??? oh well!)
         let system_schedule = bevy_mod_debugdump::get_schedule(&mut app);
         let mut sched_file = std::fs::File::create("./schedule.dot").unwrap();
@@ -355,13 +357,13 @@ fn planned_move_system(
             while move_x != 0. {
                 let next_location = location + Vec2::new(sign_x, 0.0);
                 let next_box = AbsBBox::from_rect(walkbox.0, next_location);
-                if let None = solids.iter().find(|s| s.collide(next_box)) {
-                    location.x += sign_x;
-                    move_x -= sign_x;
-                } else {
+                if solids.iter().any(|s| s.collide(next_box)) {
                     // Hit a wall
                     collided = true;
                     break;
+                } else {
+                    location.x += sign_x;
+                    move_x -= sign_x;
                 }
             }
             let mut move_y = move_pixels.y;
@@ -369,13 +371,13 @@ fn planned_move_system(
             while move_y != 0. {
                 let next_origin = location + Vec2::new(0.0, sign_y);
                 let next_box = AbsBBox::from_rect(walkbox.0, next_origin);
-                if let None = solids.iter().find(|s| s.collide(next_box)) {
-                    location.y += sign_y;
-                    move_y -= sign_y;
-                } else {
+                if solids.iter().any(|s| s.collide(next_box)) {
                     // Hit a wall
                     collided = true;
                     break;
+                } else {
+                    location.y += sign_y;
+                    move_y -= sign_y;
                 }
             }
 

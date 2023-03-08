@@ -104,6 +104,7 @@ impl Dir {
 
     /// Given an angle, return one of the four cardinal directions or neutral.
     /// Bias towards horizontal when given an exact diagonal.
+    #[allow(clippy::manual_range_contains)] // Hush, your suggestion's less legible.
     pub fn cardinal_from_angle(angle: f32) -> Self {
         const NE: f32 = FRAC_PI_4 + f32::EPSILON;
         const NW: f32 = 3.0 * FRAC_PI_4 - f32::EPSILON;

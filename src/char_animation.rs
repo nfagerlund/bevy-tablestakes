@@ -309,12 +309,10 @@ fn flip_rect_y(r: Rect) -> Rect {
 
 /// Get the bounding Rect for a cel's non-transparent pixels.
 fn rect_from_cel(ase: &AsepriteFile, layer_name: &str, frame_index: u32) -> Option<Rect> {
-    ase.layer_by_name(layer_name)
-        .map(|layer| {
-            let cel_img = layer.frame(frame_index).image();
-            get_rect_lmao(&cel_img)
-        })
-        .flatten()
+    ase.layer_by_name(layer_name).and_then(|layer| {
+        let cel_img = layer.frame(frame_index).image();
+        get_rect_lmao(&cel_img)
+    })
 }
 
 /// Get the bounding Rect for the non-transparent pixels in an RgbaImage.
@@ -472,11 +470,10 @@ impl CharAnimationState {
     }
 
     pub fn timer_just_finished(&self) -> bool {
-        if let Some(true) = self.frame_timer.as_ref().map(|t| t.just_finished()) {
-            true
-        } else {
-            false
-        }
+        matches!(
+            self.frame_timer.as_ref().map(|t| t.just_finished()),
+            Some(true)
+        )
     }
 }
 

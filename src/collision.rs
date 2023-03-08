@@ -54,28 +54,26 @@ impl AbsBBox {
 
     /// Check whether two boxes overlap on the X axis.
     pub fn overlaps_x(&self, other: Self) -> bool {
-        if self.min.x > other.max.x {
-            // we're right of other
-            false
-        } else if self.max.x < other.min.x {
-            // we're left of other
-            false
-        } else {
-            true
-        }
+        ! // neither
+        (
+            // right of other,
+            self.min.x > other.max.x
+            || // nor
+            // left of other
+            self.max.x < other.min.x
+        )
     }
 
     /// Check whether two boxes overlap on the Y axis.
     pub fn overlaps_y(&self, other: Self) -> bool {
-        if self.max.y < other.min.y {
-            // we're below other
-            false
-        } else if self.min.y > other.max.y {
-            // we're above other
-            false
-        } else {
-            true
-        }
+        ! // neither
+        (
+            // below other,
+            self.max.y < other.min.y
+            || // nor
+            // above other
+            self.min.y > other.max.y
+        )
     }
 
     /// Return the new AbsBBox that would result from moving self by `movement`.
@@ -282,5 +280,46 @@ pub fn debug_walkboxes_system(
             visibility.is_visible = false;
             // we're done
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use bevy::math::Rect;
+    use bevy::prelude::Vec2;
+
+    fn onesie_at_xy(x: f32, y: f32) -> AbsBBox {
+        let rect = Rect {
+            min: Vec2::new(0.0, 0.0),
+            max: Vec2::new(1.0, 1.0),
+        };
+        let origin = Vec2::new(x, y);
+        AbsBBox::from_rect(rect, origin)
+    }
+
+    #[test]
+    fn absbbox_overlaps() {
+        let reference_square = onesie_at_xy(0., 0.);
+
+        assert!(!reference_square.collide(onesie_at_xy(1.5, 0.)));
+        assert!(!reference_square.collide(onesie_at_xy(1.00001, 0.)));
+        assert!(reference_square.collide(onesie_at_xy(0.8, 0.)));
+        assert!(reference_square.collide(onesie_at_xy(1.0, 0.)));
+
+        assert!(!reference_square.collide(onesie_at_xy(-1.5, 0.)));
+        assert!(!reference_square.collide(onesie_at_xy(-1.00001, 0.)));
+        assert!(reference_square.collide(onesie_at_xy(-0.8, 0.)));
+        assert!(reference_square.collide(onesie_at_xy(-1.0, 0.)));
+
+        assert!(!reference_square.collide(onesie_at_xy(0., 1.5)));
+        assert!(!reference_square.collide(onesie_at_xy(0., 1.00001)));
+        assert!(reference_square.collide(onesie_at_xy(0., 0.8)));
+        assert!(reference_square.collide(onesie_at_xy(0., 1.0)));
+
+        assert!(!reference_square.collide(onesie_at_xy(0., -1.5)));
+        assert!(!reference_square.collide(onesie_at_xy(0., -1.00001)));
+        assert!(reference_square.collide(onesie_at_xy(0., -0.8)));
+        assert!(reference_square.collide(onesie_at_xy(0., -1.0)));
     }
 }
