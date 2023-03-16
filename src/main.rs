@@ -263,7 +263,7 @@ fn dumb_planned_move_system(
 /// This version is willing to move by fractional pixels, and ignores movement.remainder.
 fn continuous_move_system(
     mut mover_q: Query<(&mut SubTransform, &mut Motion, &Walkbox)>,
-    solids_q: Query<(&GlobalTransform, &Walkbox), With<Solid>>,
+    solids_q: Query<(&Walkbox, &Transform, &PhysicsSpaceOffset), With<Solid>>,
     solids_tree: Res<SolidsTree>,
     time: Res<Time>,
     motion_kind: Res<MotionKind>,
@@ -291,8 +291,8 @@ fn continuous_move_system(
                 .iter()
                 .map(|ent_loc| {
                     // unwrap is ok as long as tree doesn't have stale entities.
-                    let (global_transform, walkbox) = solids_q.get(ent_loc.1).unwrap();
-                    let origin = global_transform.translation().truncate();
+                    let (walkbox, transform, offset) = solids_q.get(ent_loc.1).unwrap();
+                    let origin = transform.translation.truncate() + offset.0;
                     AbsBBox::from_rect(walkbox.0, origin)
                 })
                 .collect()
