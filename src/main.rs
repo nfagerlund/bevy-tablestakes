@@ -79,6 +79,7 @@ fn main() {
         .register_inspectable::<Walkbox>()
         .register_inspectable::<Hitbox>()
         .register_inspectable::<TopDownMatter>()
+        .register_inspectable::<PhysicsSpaceOffset>()
         .add_plugin(InspectorPlugin::<DebugColliders>::new())
         .add_plugin(InspectorPlugin::<MotionKind>::new())
         .add_system(debug_walkboxes_system)
