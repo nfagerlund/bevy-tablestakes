@@ -30,6 +30,57 @@ pub fn _bottom_centered_rect(width: f32, height: f32) -> Rect {
     Rect { min, max }
 }
 
+pub struct Collision {
+    pub location: Vec2,
+    pub normal: Vec2,
+    pub relative_time: f32,
+}
+
+/// Detects collision between a ray and a rect. Algorithm via https://www.youtube.com/watch?v=8JJ-4JgR7Dg
+pub fn ray_vs_rect(
+    ray_pos: Vec2,
+    ray_move: Vec2,
+    rect_min: Vec2,
+    rect_max: Vec2,
+) -> Option<Collision> {
+    // First, find the four points where the ray contacts the rect's axes,
+    // expressed in terms of fractions of the proposed movement. Note that these
+    // might be infinite or might be large multiples of the movement, but we'll
+    // ultimately only be interested in the ones that are between (0.0, 1.0].
+    let a = (rect_min - ray_pos) / ray_move;
+    let b = (rect_max - ray_pos) / ray_move;
+    let near_x_time = f32::min(a.x, b.x);
+    let near_y_time = f32::min(a.y, b.y);
+    let far_x_time = f32::max(a.x, b.x);
+    let far_y_time = f32::max(a.y, b.y);
+    // ^^ This is specifically pretty unoptimized while I decide wtf I'm doing
+    // here. I think this automatically handles infinite (divide by 0.0) values
+    // on one axis, which is what happens if you're moving horizontally or
+    // vertically.
+
+    // The ray's line only actually intersects the rectangle if near_x is <=
+    // far_y, and near_y is <= far_x.
+    if near_x_time > far_y_time || near_y_time > far_x_time {
+        return None;
+    }
+
+    // A ray enters the rectangle when both near axes have been crossed, and
+    // leaves it when at least one far axis has been crossed.
+    let near_hit_time = near_x_time.max(near_y_time);
+    let far_hit_time = far_x_time.min(far_y_time);
+
+    // The RAY only actually intersects the rectangle if it's not pointed away
+    // from it.
+    if far_hit_time < 0.0 {
+        return None;
+    }
+
+    None
+    // OK, so the ray actually intersects it! First, where at?
+
+    // Then, which side did we enter from?
+}
+
 /// An AABB that's located in absolute space, probably produced by combining a
 /// BBox with an origin offset.
 #[derive(Copy, Clone, Debug)]
@@ -44,6 +95,41 @@ impl AbsBBox {
         Self {
             min: rect.min + origin,
             max: rect.max + origin,
+        }
+    }
+
+    pub fn ray_collide(&self, ray_start: Vec2, ray_motion: Vec2) -> Option<Collision> {
+        // First, we find the "relative times" where the line defined by the ray
+        // intersects the four lines defined by the sides of the rectangle. This
+        // might not actually result in the "ray" intersecting the "rectangle"
+        // at all, and in cases where there's no motion on an axis it'll be an
+        // infinity of some kind.
+        let inverse_motion = 1.0 / ray_motion;
+        let Vec2 {
+            x: left_at,
+            y: bottom_at,
+        } = (self.min - ray_start) * inverse_motion;
+        let Vec2 {
+            x: right_at,
+            y: top_at,
+        } = (self.max - ray_start) * inverse_motion;
+        // And this is the point where I diverge from guy: I want to throw away
+        // as little precision as I can, so, preserve the intermediate knowledge
+        // here instead of reconstructing it later.
+        let (near_x_at, far_x_at) = if left_at < right_at {
+            (left_at, right_at)
+        } else {
+            (right_at, left_at)
+        };
+        let (near_y_at, far_y_at) = if bottom_at < top_at {
+            (bottom_at, top_at)
+        } else {
+            (top_at, bottom_at)
+        };
+
+        // Early return: line never intersects the rectangle.
+        if near_x_at > far_y_at || near_y_at > far_x_at {
+            return None;
         }
     }
 

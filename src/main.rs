@@ -100,19 +100,19 @@ fn main() {
         // PLAYER STUFF
         .add_startup_system(setup_player)
         .add_system(
-            planned_move_system
+            move_by_pixels
                 .label(Movers)
                 .after(CharAnimationSystems)
                 .after(MovePlanners)
         )
         .add_system(
-            dumb_planned_move_system
+            move_continuous_no_collision
                 .label(Movers)
                 .after(CharAnimationSystems)
                 .after(MovePlanners)
         )
         .add_system(
-            continuous_move_system
+            move_continuous_clamp_velocity
                 .label(Movers)
                 .after(CharAnimationSystems)
                 .after(MovePlanners)
@@ -234,11 +234,12 @@ fn player_free_out(mut commands: Commands, player_q: Query<(Entity, &PlayerFree)
 enum MotionKind {
     NoCollision,
     #[default]
-    Continuous,
+    ClampVelocity,
+    ClampPosition,
     WholePixel,
 }
 
-fn dumb_planned_move_system(
+fn move_continuous_no_collision(
     mut mover_q: Query<(&mut SubTransform, &mut Motion)>,
     time: Res<Time>,
     motion_kind: Res<MotionKind>,
@@ -260,15 +261,92 @@ fn dumb_planned_move_system(
     }
 }
 
-/// This version is willing to move by fractional pixels, and ignores movement.remainder.
-fn continuous_move_system(
+fn move_continuous_clamp_positions(
     mut mover_q: Query<(&mut SubTransform, &mut Motion, &Walkbox)>,
     solids_q: Query<(&Walkbox, &Transform, &PhysicsSpaceOffset), With<Solid>>,
     solids_tree: Res<SolidsTree>,
     time: Res<Time>,
     motion_kind: Res<MotionKind>,
 ) {
-    if *motion_kind != MotionKind::Continuous {
+    if *motion_kind != MotionKind::ClampPosition {
+        return;
+    }
+
+    // Using a closure bc the set of candidates depends on each player's position.
+    let collect_unsorted_solids =
+        |player_loc: Vec2, mut candidate_locs: &Vec<(Vec3, Entity)>| -> Vec<AbsBBox> {
+        };
+
+    let delta = time.delta_seconds();
+    for (mut transform, mut motion, walkbox) in mover_q.iter_mut() {
+        let planned_move = motion.velocity * delta;
+        motion.velocity = Vec2::ZERO;
+        let mut collided = false;
+        // DON't bother creating an AbsBBox for player at this time. we'll use
+        // their position and walkbox separately.
+        if planned_move.length() == 0.0 {
+            motion.result = None;
+            continue;
+            // yeah still don't like these motion struct semantics. later!
+        }
+
+        // search for nearby solids
+        let mut candidate_solid_locs =
+            solids_tree.within_distance(transform.translation, SOLID_SCANNING_DISTANCE);
+        // Sort by proximity to player... by the way, I think this only works if
+        // the origin points are roughly centered in the colliders; if they're
+        // at a corner, you'd need to run the whole collision algorithm twice
+        // and sort by relative collision time along the ray between runs.
+        // Alternately, you could do an "adjusted origin" -- use the walkbox to
+        // derive the point the origin WOULD be if it were perfectly centered,
+        // and then sort by comparing those. That might be cheaper!
+        let player_loc = transform.truncate();
+        candidate_locs.sort_by(|a, b| {
+            let a_dist = player_loc.distance_squared(a.0.truncate());
+            let b_dist = player_loc.distance_squared(b.0.truncate());
+            a_dist.total_cmp(&b_dist)
+        });
+        let solid_collisions = candidate_solid_locs
+            .iter()
+            .map(|ent_loc| {
+                // unwrap is ok as long as tree doesn't have stale entities.
+                let (s_walkbox, s_transform, s_offset) = solids_q.get(ent_loc.1).unwrap();
+                let origin = s_transform.translation.truncate() + s_offset.0;
+                let solid = AbsBBox::from_rect(s_walkbox.0, origin);
+                // Extend the solid's bounds by the opposite spans of the
+                // player's walkbox, so a simple ray test will detect projected
+                // collisions.
+                let expanded_solid = AbsBBox {
+                    min: solid.min - walkbox.0.max, // subtract bc... needs diagram.
+                    max: solid.max - walkbox.0.min,
+                };
+                // Then, ray-cast test for collision or not, and if collided, we want:
+                // collision point, collision normal, collision time relative to the span of planned move.
+            })
+            // Oh, and filter out the None's here.
+            .collect();
+
+        // tentatively add the planned_move to player position
+
+        /// Resolve the collisions in order:
+        /// - Match on the collision normal.
+        /// - If +x, player.x = min(player.x, c_point.x)
+        /// - If -x, player.x = max(player.x, c_point.x)
+        /// - if +y, player.y = min(player.y, c_point.y)
+        /// - if -y, player.y = max(player.y, c_point.y)
+        /// - if dead-on diagonal...??
+    }
+}
+
+/// This version is willing to move by fractional pixels, and ignores movement.remainder.
+fn move_continuous_clamp_velocity(
+    mut mover_q: Query<(&mut SubTransform, &mut Motion, &Walkbox)>,
+    solids_q: Query<(&Walkbox, &Transform, &PhysicsSpaceOffset), With<Solid>>,
+    solids_tree: Res<SolidsTree>,
+    time: Res<Time>,
+    motion_kind: Res<MotionKind>,
+) {
+    if *motion_kind != MotionKind::ClampVelocity {
         return;
     }
 
@@ -336,7 +414,7 @@ fn continuous_move_system(
 
 /// Shared system for Moving Crap Around. Consumes a planned movement from
 /// Motion component, updates direction on same as needed, writes result to...
-fn planned_move_system(
+fn move_by_pixels(
     mut mover_q: Query<(&mut SubTransform, &mut Motion, &Walkbox), With<Player>>,
     solids_q: Query<(&GlobalTransform, &Walkbox), With<Solid>>,
     time: Res<Time>,
