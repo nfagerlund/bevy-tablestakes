@@ -272,12 +272,8 @@ fn move_continuous_clamp_positions(
         return;
     }
 
-    // Using a closure bc the set of candidates depends on each player's position.
-    let collect_unsorted_solids =
-        |player_loc: Vec2, mut candidate_locs: &Vec<(Vec3, Entity)>| -> Vec<AbsBBox> {
-        };
-
     let delta = time.delta_seconds();
+
     for (mut transform, mut motion, walkbox) in mover_q.iter_mut() {
         let planned_move = motion.velocity * delta;
         motion.velocity = Vec2::ZERO;
@@ -290,29 +286,18 @@ fn move_continuous_clamp_positions(
             // yeah still don't like these motion struct semantics. later!
         }
 
+        let player_loc = transform.translation.truncate();
+
         // search for nearby solids
         let mut candidate_solid_locs =
             solids_tree.within_distance(transform.translation, SOLID_SCANNING_DISTANCE);
-        // Sort by proximity to player... by the way, I think this only works if
-        // the origin points are roughly centered in the colliders; if they're
-        // at a corner, you'd need to run the whole collision algorithm twice
-        // and sort by relative collision time along the ray between runs.
-        // Alternately, you could do an "adjusted origin" -- use the walkbox to
-        // derive the point the origin WOULD be if it were perfectly centered,
-        // and then sort by comparing those. That might be cheaper!
-        let player_loc = transform.truncate();
-        candidate_locs.sort_by(|a, b| {
-            let a_dist = player_loc.distance_squared(a.0.truncate());
-            let b_dist = player_loc.distance_squared(b.0.truncate());
-            a_dist.total_cmp(&b_dist)
-        });
-        let solid_collisions = candidate_solid_locs
+        let mut collided_solids: Vec<(AbsBBox, f32)> = candidate_solid_locs
             .iter()
-            .map(|ent_loc| {
-                // unwrap is ok as long as tree doesn't have stale entities.
-                let (s_walkbox, s_transform, s_offset) = solids_q.get(ent_loc.1).unwrap();
-                let origin = s_transform.translation.truncate() + s_offset.0;
-                let solid = AbsBBox::from_rect(s_walkbox.0, origin);
+            .filter_map(|&(_loc, ent)| {
+                // UNWRAP: is ok as long as tree doesn't have stale entities.
+                let (s_walkbox, s_transform, s_offset) = solids_q.get(ent).unwrap();
+                let s_origin = s_transform.translation.truncate() + s_offset.0;
+                let solid = AbsBBox::from_rect(s_walkbox.0, s_origin);
                 // Extend the solid's bounds by the opposite spans of the
                 // player's walkbox, so a simple ray test will detect projected
                 // collisions.
@@ -320,21 +305,48 @@ fn move_continuous_clamp_positions(
                     min: solid.min - walkbox.0.max, // subtract bc... needs diagram.
                     max: solid.max - walkbox.0.min,
                 };
-                // Then, ray-cast test for collision or not, and if collided, we want:
-                // collision point, collision normal, collision time relative to the span of planned move.
+                // Then, ray-cast test for collision, discard any we miss, and
+                // keep the normalized time and the expanded box for re-use --
+                // have to do each test twice, because you might collide a
+                // further rectangle at a different position after correcting
+                // for a nearer one.
+                expanded_solid
+                    .ray_collide(player_loc, planned_move)
+                    .map(|c| (expanded_solid, c.normalized_time))
             })
-            // Oh, and filter out the None's here.
             .collect();
 
-        // tentatively add the planned_move to player position
+        // ALAS, the intermediate .collect() is mandatory because sort takes slice, not iterator.
+        collided_solids.sort_by(|a, b| a.1.total_cmp(&b.1));
 
-        /// Resolve the collisions in order:
-        /// - Match on the collision normal.
-        /// - If +x, player.x = min(player.x, c_point.x)
-        /// - If -x, player.x = max(player.x, c_point.x)
-        /// - if +y, player.y = min(player.y, c_point.y)
-        /// - if -y, player.y = max(player.y, c_point.y)
-        /// - if dead-on diagonal...??
+        // ok, NOW we can actually resolve collisions. Second pass!
+        // .......hey. wait. I'm still not correcting positions, and am correcting velocity instead! Uh,
+        // OK whatever, hold on, let's at least get it sorta working and see how bad that is.
+        let corrected_movement =
+            collided_solids
+                .iter()
+                .fold(planned_move, |current_move, (expanded_solid, _)| {
+                    // Always gotta return something outta this fold, so we'll mutate if still colliding.
+                    let mut next_move = current_move;
+                    if let Some(collision) = expanded_solid.ray_collide(player_loc, current_move) {
+                        // HEY, here's where we mark collision for the result:
+                        collided = true;
+
+                        // Ok moving on
+                        let vel_penalty = (1.0 - collision.normalized_time)
+                            * collision.normal
+                            * current_move.abs();
+                        next_move = current_move + vel_penalty;
+                    }
+                    next_move
+                });
+
+        // All right, finally! Now just do it:
+        transform.translation += corrected_movement.extend(0.0);
+        motion.result = Some(MotionResult {
+            collided,
+            new_location: transform.translation.truncate(),
+        });
     }
 }
 

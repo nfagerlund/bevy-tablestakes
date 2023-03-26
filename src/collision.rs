@@ -31,54 +31,16 @@ pub fn _bottom_centered_rect(width: f32, height: f32) -> Rect {
 }
 
 pub struct Collision {
-    pub location: Vec2,
+    pub contact_point: Vec2,
     pub normal: Vec2,
-    pub relative_time: f32,
+    pub normalized_time: f32,
 }
 
-/// Detects collision between a ray and a rect. Algorithm via https://www.youtube.com/watch?v=8JJ-4JgR7Dg
-pub fn ray_vs_rect(
-    ray_pos: Vec2,
-    ray_move: Vec2,
-    rect_min: Vec2,
-    rect_max: Vec2,
-) -> Option<Collision> {
-    // First, find the four points where the ray contacts the rect's axes,
-    // expressed in terms of fractions of the proposed movement. Note that these
-    // might be infinite or might be large multiples of the movement, but we'll
-    // ultimately only be interested in the ones that are between (0.0, 1.0].
-    let a = (rect_min - ray_pos) / ray_move;
-    let b = (rect_max - ray_pos) / ray_move;
-    let near_x_time = f32::min(a.x, b.x);
-    let near_y_time = f32::min(a.y, b.y);
-    let far_x_time = f32::max(a.x, b.x);
-    let far_y_time = f32::max(a.y, b.y);
-    // ^^ This is specifically pretty unoptimized while I decide wtf I'm doing
-    // here. I think this automatically handles infinite (divide by 0.0) values
-    // on one axis, which is what happens if you're moving horizontally or
-    // vertically.
-
-    // The ray's line only actually intersects the rectangle if near_x is <=
-    // far_y, and near_y is <= far_x.
-    if near_x_time > far_y_time || near_y_time > far_x_time {
-        return None;
-    }
-
-    // A ray enters the rectangle when both near axes have been crossed, and
-    // leaves it when at least one far axis has been crossed.
-    let near_hit_time = near_x_time.max(near_y_time);
-    let far_hit_time = far_x_time.min(far_y_time);
-
-    // The RAY only actually intersects the rectangle if it's not pointed away
-    // from it.
-    if far_hit_time < 0.0 {
-        return None;
-    }
-
-    None
-    // OK, so the ray actually intersects it! First, where at?
-
-    // Then, which side did we enter from?
+enum Side {
+    Top,
+    Bottom,
+    Left,
+    Right,
 }
 
 /// An AABB that's located in absolute space, probably produced by combining a
@@ -98,39 +60,86 @@ impl AbsBBox {
         }
     }
 
-    pub fn ray_collide(&self, ray_start: Vec2, ray_motion: Vec2) -> Option<Collision> {
-        // First, we find the "relative times" where the line defined by the ray
-        // intersects the four lines defined by the sides of the rectangle. This
-        // might not actually result in the "ray" intersecting the "rectangle"
-        // at all, and in cases where there's no motion on an axis it'll be an
-        // infinity of some kind.
-        let inverse_motion = 1.0 / ray_motion;
+    /// Learned this algorithm from https://www.youtube.com/watch?v=8JJ-4JgR7Dg
+    pub fn ray_collide(&self, ray_start: Vec2, ray_displacement: Vec2) -> Option<Collision> {
+        // First, we find the "normalized times" where the LINE defined by the
+        // ray intersects the four LINES defined by the sides of the rectangle.
+        // There's always an answer for these intersections, but they might not
+        // actually result in the ray intersecting the rectangle at all, and in
+        // cases where there's no motion on an axis (e.g. straightly horizontal)
+        // it'll be an infinity of some kind.
+        let divide_by_ray_displacement = 1.0 / ray_displacement;
         let Vec2 {
             x: left_at,
             y: bottom_at,
-        } = (self.min - ray_start) * inverse_motion;
+        } = (self.min - ray_start) * divide_by_ray_displacement;
         let Vec2 {
             x: right_at,
             y: top_at,
-        } = (self.max - ray_start) * inverse_motion;
-        // And this is the point where I diverge from guy: I want to throw away
-        // as little precision as I can, so, preserve the intermediate knowledge
-        // here instead of reconstructing it later.
-        let (near_x_at, far_x_at) = if left_at < right_at {
-            (left_at, right_at)
+        } = (self.max - ray_start) * divide_by_ray_displacement;
+
+        // Early return: no NaNs allowed. (Can't remember what causes NaNs here
+        // tho. That's 0.0/0.0. Think thru it later maybe.)
+        if left_at.is_nan() || right_at.is_nan() || bottom_at.is_nan() || top_at.is_nan() {
+            return None;
+        }
+
+        // Next, we sort those line intersections to account for the direction
+        // of the ray.
+        let (near_x_at, far_x_at, near_x_side) = if left_at < right_at {
+            (left_at, right_at, Side::Left)
         } else {
-            (right_at, left_at)
+            (right_at, left_at, Side::Right)
         };
-        let (near_y_at, far_y_at) = if bottom_at < top_at {
-            (bottom_at, top_at)
+        let (near_y_at, far_y_at, near_y_side) = if bottom_at < top_at {
+            (bottom_at, top_at, Side::Bottom)
         } else {
-            (top_at, bottom_at)
+            (top_at, bottom_at, Side::Top)
         };
 
         // Early return: line never intersects the rectangle.
         if near_x_at > far_y_at || near_y_at > far_x_at {
             return None;
         }
+
+        // So: the line intersects the RECTANGLE BODY, not just the lines it
+        // defines. Find the normalized times where it enters and exits. You're
+        // only inside a rectangle while you're on the in-side of every bounding
+        // line; therefore, you enter when you cross the LAST near line, and you
+        // exit when you cross the FIRST far line.
+        let (near_at, near_side) = if near_x_at > near_y_at {
+            (near_x_at, near_x_side)
+        } else {
+            (near_y_at, near_y_side)
+        };
+        // let near_at = near_x_at.max(near_y_at);
+        let far_at = far_x_at.min(far_y_at);
+
+        // Early return: line intersects rectangle, but it's BEHIND the ray origin.
+        if far_at < 0.0 {
+            return None;
+        }
+
+        // So: the RAY intersects the rectangle, not just the line defined by
+        // the ray. Now we determine the contact point and normal!
+        let contact_point = ray_displacement * near_at + ray_start;
+        // TODO: Check whether using the actual contact side absolute location
+        // makes a difference, vs. using normalized time here.
+        let normal = match near_side {
+            Side::Top => Vec2::Y,
+            Side::Bottom => Vec2::NEG_Y,
+            Side::Left => Vec2::NEG_X,
+            Side::Right => Vec2::X,
+        };
+        // There's something in here about how to handle diagonal strikes, but
+        // it doesn't make sense to me from dude's code; I might be missing
+        // something. For now, leave it; Y wins a tie, according to the
+        // "farthest near" test several expressions north of here.
+        Some(Collision {
+            contact_point,
+            normal,
+            normalized_time: near_at,
+        })
     }
 
     /// Check whether an absolutely positioned bbox overlaps with another one.
