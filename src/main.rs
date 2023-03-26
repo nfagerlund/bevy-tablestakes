@@ -117,6 +117,12 @@ fn main() {
                 .after(CharAnimationSystems)
                 .after(MovePlanners)
         )
+        .add_system(
+            move_continuous_clamp_positions
+                .label(Movers)
+                .after(CharAnimationSystems)
+                .after(MovePlanners)
+        )
         .add_system_set(
             SystemSet::new()
                 .label(MovePlanners)
