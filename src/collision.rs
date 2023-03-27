@@ -30,6 +30,7 @@ pub fn _bottom_centered_rect(width: f32, height: f32) -> Rect {
     Rect { min, max }
 }
 
+#[derive(Debug)]
 pub struct Collision {
     pub contact_point: Vec2,
     pub normal: Vec2,
@@ -121,7 +122,9 @@ impl AbsBBox {
         }
 
         // So: the RAY intersects the rectangle, not just the line defined by
-        // the ray. Now we determine the contact point and normal!
+        // the ray. Now we determine the contact point and normal! NOTA BENE:
+        // this doesn't necessarily mean the LINE SEGMENT that defined the ray
+        // strikes the rectangle. Caller is responsible for sorting that out!
         let contact_point = ray_displacement * near_at + ray_start;
         // TODO: Check whether using the actual contact side absolute location
         // makes a difference, vs. using normalized time here.

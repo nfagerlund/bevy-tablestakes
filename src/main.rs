@@ -295,7 +295,7 @@ fn move_continuous_clamp_positions(
         let player_loc = transform.translation.truncate();
 
         // search for nearby solids
-        let mut candidate_solid_locs =
+        let candidate_solid_locs =
             solids_tree.within_distance(transform.translation, SOLID_SCANNING_DISTANCE);
         let mut collided_solids: Vec<(AbsBBox, f32)> = candidate_solid_locs
             .iter()
@@ -335,14 +335,17 @@ fn move_continuous_clamp_positions(
                     // Always gotta return something outta this fold, so we'll mutate if still colliding.
                     let mut next_move = current_move;
                     if let Some(collision) = expanded_solid.ray_collide(player_loc, current_move) {
-                        // HEY, here's where we mark collision for the result:
-                        collided = true;
+                        // Test for collision on the LINE SEGMENT, not just the ray:
+                        if collision.normalized_time < 1.0 {
+                            // HEY, here's where we mark collision for the result:
+                            collided = true;
 
-                        // Ok moving on
-                        let vel_penalty = (1.0 - collision.normalized_time)
-                            * collision.normal
-                            * current_move.abs();
-                        next_move = current_move + vel_penalty;
+                            // Ok moving on
+                            let vel_penalty = (1.0 - collision.normalized_time)
+                                * collision.normal
+                                * current_move.abs();
+                            next_move = current_move + vel_penalty;
+                        }
                     }
                     next_move
                 });
