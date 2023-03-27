@@ -117,7 +117,7 @@ impl AbsBBox {
         let far_at = far_x_at.min(far_y_at);
 
         // Early return: line intersects rectangle, but it's BEHIND the ray origin.
-        if far_at < 0.0 {
+        if far_at <= 0.0 {
             return None;
         }
 

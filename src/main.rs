@@ -239,8 +239,8 @@ fn player_free_out(mut commands: Commands, player_q: Query<(Entity, &PlayerFree)
 #[derive(Resource, Reflect, Inspectable, Default, PartialEq, Eq)]
 enum MotionKind {
     NoCollision,
-    #[default]
     ClampVelocity,
+    #[default]
     ClampPosition,
     WholePixel,
 }
