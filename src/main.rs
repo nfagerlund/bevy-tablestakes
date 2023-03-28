@@ -100,7 +100,7 @@ fn main() {
         // PLAYER STUFF
         .add_startup_system(setup_player)
         .add_system(
-            move_by_pixels
+            move_whole_pixel
                 .label(Movers)
                 .after(CharAnimationSystems)
                 .after(MovePlanners)
@@ -112,13 +112,13 @@ fn main() {
                 .after(MovePlanners)
         )
         .add_system(
-            move_continuous_clamp_velocity
+            move_continuous_faceplant
                 .label(Movers)
                 .after(CharAnimationSystems)
                 .after(MovePlanners)
         )
         .add_system(
-            move_continuous_clamp_positions
+            move_continuous_ray_test
                 .label(Movers)
                 .after(CharAnimationSystems)
                 .after(MovePlanners)
@@ -239,9 +239,9 @@ fn player_free_out(mut commands: Commands, player_q: Query<(Entity, &PlayerFree)
 #[derive(Resource, Reflect, Inspectable, Default, PartialEq, Eq)]
 enum MotionKind {
     NoCollision,
-    ClampVelocity,
+    Faceplant,
     #[default]
-    ClampPosition,
+    RayTest,
     WholePixel,
 }
 
@@ -267,14 +267,14 @@ fn move_continuous_no_collision(
     }
 }
 
-fn move_continuous_clamp_positions(
+fn move_continuous_ray_test(
     mut mover_q: Query<(&mut SubTransform, &mut Motion, &Walkbox)>,
     solids_q: Query<(&Walkbox, &Transform, &PhysicsSpaceOffset), With<Solid>>,
     solids_tree: Res<SolidsTree>,
     time: Res<Time>,
     motion_kind: Res<MotionKind>,
 ) {
-    if *motion_kind != MotionKind::ClampPosition {
+    if *motion_kind != MotionKind::RayTest {
         return;
     }
 
@@ -360,14 +360,14 @@ fn move_continuous_clamp_positions(
 }
 
 /// This version is willing to move by fractional pixels, and ignores movement.remainder.
-fn move_continuous_clamp_velocity(
+fn move_continuous_faceplant(
     mut mover_q: Query<(&mut SubTransform, &mut Motion, &Walkbox)>,
     solids_q: Query<(&Walkbox, &Transform, &PhysicsSpaceOffset), With<Solid>>,
     solids_tree: Res<SolidsTree>,
     time: Res<Time>,
     motion_kind: Res<MotionKind>,
 ) {
-    if *motion_kind != MotionKind::ClampVelocity {
+    if *motion_kind != MotionKind::Faceplant {
         return;
     }
 
@@ -435,7 +435,7 @@ fn move_continuous_clamp_velocity(
 
 /// Shared system for Moving Crap Around. Consumes a planned movement from
 /// Motion component, updates direction on same as needed, writes result to...
-fn move_by_pixels(
+fn move_whole_pixel(
     mut mover_q: Query<(&mut SubTransform, &mut Motion, &Walkbox), With<Player>>,
     solids_q: Query<(&GlobalTransform, &Walkbox), With<Solid>>,
     time: Res<Time>,
