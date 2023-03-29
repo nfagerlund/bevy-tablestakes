@@ -142,8 +142,14 @@ fn main() {
         .add_system_to_stage(CoreStage::PostUpdate, player_free_out)
         .add_system_to_stage(CoreStage::PostUpdate, player_bonk_out)
         // .add_system(charanm_test_animate_system) // in CharAnimationPlugin or somethin'
-        .add_system(dumb_move_camera_system.after(Movers))
-        .add_system(snap_pixel_positions_system.after(dumb_move_camera_system))
+        .add_system_set(
+            SystemSet::new()
+                .label(CameraMovers)
+                .after(Movers)
+                .with_system(camera_locked_system)
+                .with_system(camera_lerp_system)
+        )
+        .add_system(snap_pixel_positions_system.after(CameraMovers))
         // OK BYE!!!
         ;
 
@@ -170,6 +176,7 @@ fn main() {
 pub struct DebugSettings {
     debug_walkboxes: bool,
     motion_kind: MotionKind,
+    camera_kind: CameraKind,
 }
 
 #[derive(Resource, Reflect, Inspectable, Default, PartialEq, Eq)]
@@ -181,11 +188,21 @@ enum MotionKind {
     WholePixel,
 }
 
+#[derive(Resource, Reflect, Inspectable, Default, PartialEq, Eq)]
+enum CameraKind {
+    #[default]
+    Locked,
+    Lerp,
+}
+
 #[derive(SystemLabel)]
 pub struct MovePlanners;
 
 #[derive(SystemLabel)]
 pub struct Movers;
+
+#[derive(SystemLabel)]
+struct CameraMovers;
 
 fn player_free_plan_move(
     inputs: Res<CurrentInputs>,
@@ -367,7 +384,7 @@ fn player_bonk_out(mut commands: Commands, player_q: Query<(Entity, &PlayerBonk)
     }
 }
 
-fn _move_camera_system(
+fn camera_lerp_system(
     time: Res<Time>,
     // time: Res<StaticTime>,
     // time: Res<SmoothedTime>,
@@ -375,7 +392,12 @@ fn _move_camera_system(
         Query<&SubTransform, With<Player>>,
         Query<&mut SubTransform, With<Camera>>,
     )>,
+    debug_settings: Res<DebugSettings>,
 ) {
+    if debug_settings.camera_kind != CameraKind::Lerp {
+        return;
+    }
+
     let delta = time.delta_seconds();
     let player_pos = params.p0().single().translation.truncate();
     // let player_pos = player_tf.translation.truncate();
@@ -395,12 +417,17 @@ fn _move_camera_system(
     }
 }
 
-fn dumb_move_camera_system(
+fn camera_locked_system(
     mut params: ParamSet<(
         Query<&SubTransform, With<Player>>,
         Query<&mut SubTransform, With<Camera>>,
     )>,
+    debug_settings: Res<DebugSettings>,
 ) {
+    if debug_settings.camera_kind != CameraKind::Locked {
+        return;
+    }
+
     let player_pos = params.p0().single().translation;
     let mut camera_q = params.p1();
     let mut camera_tf = camera_q.single_mut();
