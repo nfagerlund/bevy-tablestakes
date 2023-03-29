@@ -312,10 +312,7 @@ fn move_continuous_ray_test(
                 // Extend the solid's bounds by the opposite spans of the
                 // player's walkbox, so a simple ray test will detect projected
                 // collisions.
-                let expanded_solid = AbsBBox {
-                    min: solid.min - walkbox.0.max, // subtract bc... needs diagram.
-                    max: solid.max - walkbox.0.min,
-                };
+                let expanded_solid = solid.expand_for_ray_test(&walkbox.0);
                 // Then, ray-cast test for collision, discard any we miss, and
                 // keep the normalized time and the expanded box for re-use --
                 // have to do each test twice, because you might collide a
@@ -331,26 +328,23 @@ fn move_continuous_ray_test(
         collided_solids.sort_by(|a, b| a.1.total_cmp(&b.1));
 
         // ok, NOW we can actually resolve collisions. Second pass!
-        // .......hey. wait. I'm still not correcting positions, and am correcting velocity instead! Uh,
-        // OK whatever, hold on, let's at least get it sorta working and see how bad that is.
         let corrected_movement =
             collided_solids
                 .iter()
                 .fold(planned_move, |current_move, (expanded_solid, _)| {
                     // Always gotta return something outta this fold, so we'll mutate if still colliding.
                     let mut next_move = current_move;
-                    if let Some(collision) = expanded_solid.ray_collide(player_loc, current_move) {
-                        // Test for collision on the LINE SEGMENT, not just the ray:
-                        if collision.normalized_time < 1.0 {
-                            // HEY, here's where we mark collision for the result:
-                            collided = true;
+                    if let Some(collision) =
+                        expanded_solid.segment_collide(player_loc, current_move)
+                    {
+                        // HEY, here's where we mark collision for the result:
+                        collided = true;
 
-                            // Ok moving on
-                            let vel_penalty = (1.0 - collision.normalized_time)
-                                * collision.normal
-                                * current_move.abs();
-                            next_move = current_move + vel_penalty;
-                        }
+                        // Ok moving on
+                        let vel_penalty = (1.0 - collision.normalized_time)
+                            * collision.normal
+                            * current_move.abs();
+                        next_move = current_move + vel_penalty;
                     }
                     next_move
                 });

@@ -146,6 +146,29 @@ impl AbsBBox {
         })
     }
 
+    /// Exactly like ray_collide, but only counts as a collision if it collides
+    /// before the end of the proposed displacement -- far-future collisions if
+    /// you continue along the ray aren't of interest.
+    pub fn segment_collide(&self, ray_start: Vec2, ray_displacement: Vec2) -> Option<Collision> {
+        let ray_collision = self.ray_collide(ray_start, ray_displacement);
+        if let Some(c) = &ray_collision {
+            if c.normalized_time >= 1.0 {
+                return None;
+            }
+        }
+        ray_collision
+    }
+
+    /// Return a new AbsBBox with each side expanded by the _opposite_ side of a
+    /// relatively-defined Rect, to enable ray-intersection collision tests
+    /// from the origin point that the provided Rect was defined against.
+    pub fn expand_for_ray_test(&self, other: &Rect) -> Self {
+        AbsBBox {
+            min: self.min - other.max, // subtract bc... draw a diagram & you'll see.
+            max: self.max - other.min,
+        }
+    }
+
     /// Check whether an absolutely positioned bbox overlaps with another one.
     pub fn collide(&self, other: Self) -> bool {
         self.overlaps_x(other) && self.overlaps_y(other)
