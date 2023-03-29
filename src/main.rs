@@ -71,7 +71,7 @@ fn main() {
         .insert_resource(DebugAssets::default())
         .add_startup_system(setup_debug_assets.before(setup_player))
         .add_system(spawn_collider_debugs)
-        .insert_resource(MotionKind::default())
+        .insert_resource(DebugSettings::default())
         // INSPECTOR STUFF
         .add_plugin(WorldInspectorPlugin::new())
         .register_inspectable::<SubTransform>()
@@ -80,8 +80,7 @@ fn main() {
         .register_inspectable::<Hitbox>()
         .register_inspectable::<TopDownMatter>()
         .register_inspectable::<PhysicsSpaceOffset>()
-        .add_plugin(InspectorPlugin::<DebugColliders>::new())
-        .add_plugin(InspectorPlugin::<MotionKind>::new())
+        .add_plugin(InspectorPlugin::<DebugSettings>::new())
         .add_system(debug_walkboxes_system)
         // LDTK STUFF
         .add_startup_system(setup_level)
@@ -165,6 +164,21 @@ fn main() {
     app.run();
 }
 
+#[derive(Resource, Default, Reflect, Inspectable, PartialEq, Eq)]
+pub struct DebugSettings {
+    debug_walkboxes: bool,
+    motion_kind: MotionKind,
+}
+
+#[derive(Resource, Reflect, Inspectable, Default, PartialEq, Eq)]
+enum MotionKind {
+    NoCollision,
+    Faceplant,
+    #[default]
+    RayTest,
+    WholePixel,
+}
+
 type SolidsTree = RTreeAccess2D<Solid>;
 const SOLID_SCANNING_DISTANCE: f32 = 64.0;
 
@@ -236,21 +250,12 @@ fn player_free_out(mut commands: Commands, player_q: Query<(Entity, &PlayerFree)
     }
 }
 
-#[derive(Resource, Reflect, Inspectable, Default, PartialEq, Eq)]
-enum MotionKind {
-    NoCollision,
-    Faceplant,
-    #[default]
-    RayTest,
-    WholePixel,
-}
-
 fn move_continuous_no_collision(
     mut mover_q: Query<(&mut SubTransform, &mut Motion)>,
     time: Res<Time>,
-    motion_kind: Res<MotionKind>,
+    debug_settings: Res<DebugSettings>,
 ) {
-    if *motion_kind != MotionKind::NoCollision {
+    if debug_settings.motion_kind != MotionKind::NoCollision {
         return;
     }
 
@@ -272,9 +277,9 @@ fn move_continuous_ray_test(
     solids_q: Query<(&Walkbox, &Transform, &PhysicsSpaceOffset), With<Solid>>,
     solids_tree: Res<SolidsTree>,
     time: Res<Time>,
-    motion_kind: Res<MotionKind>,
+    debug_settings: Res<DebugSettings>,
 ) {
-    if *motion_kind != MotionKind::RayTest {
+    if debug_settings.motion_kind != MotionKind::RayTest {
         return;
     }
 
@@ -365,9 +370,9 @@ fn move_continuous_faceplant(
     solids_q: Query<(&Walkbox, &Transform, &PhysicsSpaceOffset), With<Solid>>,
     solids_tree: Res<SolidsTree>,
     time: Res<Time>,
-    motion_kind: Res<MotionKind>,
+    debug_settings: Res<DebugSettings>,
 ) {
-    if *motion_kind != MotionKind::Faceplant {
+    if debug_settings.motion_kind != MotionKind::Faceplant {
         return;
     }
 
@@ -439,9 +444,9 @@ fn move_whole_pixel(
     mut mover_q: Query<(&mut SubTransform, &mut Motion, &Walkbox), With<Player>>,
     solids_q: Query<(&GlobalTransform, &Walkbox), With<Solid>>,
     time: Res<Time>,
-    motion_kind: Res<MotionKind>,
+    debug_settings: Res<DebugSettings>,
 ) {
-    if *motion_kind != MotionKind::WholePixel {
+    if debug_settings.motion_kind != MotionKind::WholePixel {
         return;
     }
 

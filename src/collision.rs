@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 
+use crate::DebugSettings;
 use bevy::{
     prelude::*,
     sprite::{MaterialMesh2dBundle, Mesh2dHandle},
@@ -325,10 +326,6 @@ pub struct WalkboxDebugBundle {
 /// Marker component for walkbox debug mesh
 #[derive(Component, Default)]
 pub struct WalkboxDebug;
-#[derive(Resource, Inspectable, Default)]
-pub struct DebugColliders {
-    show_walkboxes: bool,
-}
 
 // TODO: Maybe just convert this to a local resource for the debug spawner and
 // use .entry().or() to do the initialization.
@@ -383,14 +380,14 @@ pub fn spawn_collider_debugs(
 pub fn debug_walkboxes_system(
     collider_q: Query<(Entity, &Walkbox)>,
     mut debug_mesh_q: Query<(&Parent, &mut Transform, &mut Visibility), With<WalkboxDebug>>,
-    debug_settings: Res<DebugColliders>,
+    debug_settings: Res<DebugSettings>,
 ) {
     for (parent, mut transform, mut visibility) in debug_mesh_q.iter_mut() {
         let Ok((_, walkbox)) = collider_q.get(parent.get()) else {
             info!("?!?! tried to debug walkbox of some poor orphaned debug entity.");
             continue;
         };
-        if debug_settings.show_walkboxes {
+        if debug_settings.debug_walkboxes {
             visibility.is_visible = true;
             // ok... need to set our scale to the size of the walkbox, and then
             // offset our translation relative to our parent by the difference
