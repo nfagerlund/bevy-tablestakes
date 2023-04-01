@@ -253,8 +253,8 @@ fn player_free_plan_move(
 }
 
 fn player_free_out(mut commands: Commands, player_q: Query<(Entity, &PlayerFree)>) {
-    for (entity, player_roll) in player_q.iter() {
-        match &player_roll.transition {
+    for (entity, player_free) in player_q.iter() {
+        match &player_free.transition {
             PlayerFreeTransition::None => (),
             PlayerFreeTransition::Roll { direction } => {
                 commands
