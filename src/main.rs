@@ -612,56 +612,6 @@ impl PlayerBonk {
     }
 }
 
-pub enum Zplan {
-    Flat,
-    Arc { height: f32 },
-}
-
-#[derive(Component)]
-pub enum Mobile {
-    Free,
-    Committed {
-        timer: Timer,
-        input: Vec2,
-        zplan: Zplan,
-        backward: bool,
-    },
-    Locked,
-}
-
-impl Mobile {
-    const ROLL_DISTANCE: f32 = 52.0;
-    const BONK_ROLL: f32 = 18.0;
-    const _BONK_HURT: f32 = 9.0;
-    const BONK_HEIGHT: f32 = 8.0;
-
-    pub fn roll(direction: f32) -> Self {
-        let duration_ms = (Self::ROLL_DISTANCE / Speed::ROLL * 1000.0) as u64;
-        let timer = Timer::new(Duration::from_millis(duration_ms), TimerMode::Once);
-        let input = Vec2::from_angle(direction);
-        Self::Committed {
-            timer,
-            input,
-            zplan: Zplan::Flat,
-            backward: false,
-        }
-    }
-
-    pub fn bonk_roll(direction: f32) -> Self {
-        let duration_ms = (Self::BONK_ROLL / Speed::BONK * 1000.0) as u64;
-        let timer = Timer::new(Duration::from_millis(duration_ms), TimerMode::Once);
-        let input = Vec2::from_angle(direction);
-        Self::Committed {
-            timer,
-            input,
-            zplan: Zplan::Arc {
-                height: Self::BONK_HEIGHT,
-            },
-            backward: true,
-        }
-    }
-}
-
 /// Marker component for a spawned LdtkWorldBundle
 #[derive(Component)]
 pub struct LdtkWorld;
