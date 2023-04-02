@@ -539,6 +539,50 @@ struct PlayerBundle {
 #[derive(Component, Deref, DerefMut, Default)]
 pub struct AnimationsMap(HashMap<&'static str, Handle<CharAnimation>>);
 
+#[derive(Component)]
+pub struct PlayerStateMachine {
+    // fields are private
+    current: PlayerState,
+    next: Option<PlayerState>,
+    just_changed: bool,
+}
+
+#[derive(Clone)]
+pub enum PlayerState {
+    Idle,
+    Run,
+    Roll { roll_input: Vec2, timer: Timer },
+    Bonk { bonk_input: Vec2, timer: Timer },
+}
+
+impl PlayerState {
+    const ROLL_DISTANCE: f32 = 52.0;
+    const BONK_FROM_ROLL_DISTANCE: f32 = 18.0;
+    const BONK_HEIGHT: f32 = 8.0;
+    const ROLL_SPEED: f32 = Speed::ROLL;
+    const BONK_SPEED: f32 = Speed::BONK;
+
+    fn roll(direction: f32) -> Self {
+        let duration_secs = Self::ROLL_DISTANCE / Self::ROLL_SPEED;
+        Self::Roll {
+            roll_input: Vec2::from_angle(direction),
+            timer: Timer::from_seconds(duration_secs, TimerMode::Once),
+        }
+    }
+
+    fn bonk(direction: f32, distance: f32) -> Self {
+        let duration_secs = distance / Self::BONK_SPEED;
+        Self::Bonk {
+            bonk_input: Vec2::from_angle(direction),
+            timer: Timer::from_seconds(duration_secs, TimerMode::Once),
+        }
+    }
+
+    fn bonk_from_roll(direction: f32) -> Self {
+        Self::bonk(direction, Self::BONK_FROM_ROLL_DISTANCE)
+    }
+}
+
 /// Player state: freely able to move (but might be idling, idk)
 #[derive(Component, Clone)]
 #[component(storage = "SparseSet")]
