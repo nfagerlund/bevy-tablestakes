@@ -252,20 +252,6 @@ fn player_free_plan_move(
     }
 }
 
-fn player_free_out(mut commands: Commands, player_q: Query<(Entity, &PlayerFree)>) {
-    for (entity, player_free) in player_q.iter() {
-        match &player_free.transition {
-            PlayerFreeTransition::None => (),
-            PlayerFreeTransition::Roll { direction } => {
-                commands
-                    .entity(entity)
-                    .remove::<PlayerFree>()
-                    .insert(PlayerRoll::new(*direction));
-            },
-        }
-    }
-}
-
 fn player_bonk_enter(
     mut player_q: Query<
         (
@@ -283,6 +269,33 @@ fn player_bonk_enter(
         animation_state.change_animation(hurt, Playback::Once);
         // single frame on this, so no add'l fussing.
         motion.remainder = Vec2::ZERO;
+    }
+}
+
+fn player_roll_enter(
+    mut player_q: Query<
+        (
+            &mut Speed,
+            &AnimationsMap,
+            &mut CharAnimationState,
+            &PlayerRoll,
+            &mut Motion,
+        ),
+        Added<PlayerRoll>,
+    >,
+) {
+    for (mut speed, animations_map, mut animation_state, player_roll, mut motion) in
+        player_q.iter_mut()
+    {
+        speed.0 = Speed::ROLL;
+        let roll = animations_map.get("roll").unwrap().clone();
+        animation_state.change_animation(roll, Playback::Once);
+        // Scale the animation to match the configured roll distance/speed:
+        let roll_duration_millis = player_roll.timer.duration().as_millis() as u64;
+        animation_state.set_total_run_time_to(roll_duration_millis);
+
+        // Re-set the motion remainder because we're doing a different kind of motion now:
+        motion.remainder = Vec2::ZERO; // HMM, actually not 100% sure about that. Well anyway!!
     }
 }
 
@@ -315,33 +328,6 @@ fn player_bonk_plan_move(
     }
 }
 
-fn player_roll_enter(
-    mut player_q: Query<
-        (
-            &mut Speed,
-            &AnimationsMap,
-            &mut CharAnimationState,
-            &PlayerRoll,
-            &mut Motion,
-        ),
-        Added<PlayerRoll>,
-    >,
-) {
-    for (mut speed, animations_map, mut animation_state, player_roll, mut motion) in
-        player_q.iter_mut()
-    {
-        speed.0 = Speed::ROLL;
-        let roll = animations_map.get("roll").unwrap().clone();
-        animation_state.change_animation(roll, Playback::Once);
-        // Scale the animation to match the configured roll distance/speed:
-        let roll_duration_millis = player_roll.timer.duration().as_millis() as u64;
-        animation_state.set_total_run_time_to(roll_duration_millis);
-
-        // Re-set the motion remainder because we're doing a different kind of motion now:
-        motion.remainder = Vec2::ZERO; // HMM, actually not 100% sure about that. Well anyway!!
-    }
-}
-
 fn player_roll_plan_move(
     mut player_q: Query<(&mut Motion, &Speed, &mut PlayerRoll)>,
     time: Res<Time>,
@@ -352,6 +338,124 @@ fn player_roll_plan_move(
         motion.velocity += velocity;
         // Spend state duration
         player_roll.timer.tick(time.delta());
+    }
+}
+
+/// Hey, how much CAN I get away with processing at this point? I know I want to handle
+/// walk/idle transitions here, but..... action button?
+fn propagate_inputs_to_player_state(
+    inputs: Res<CurrentInputs>,
+    mut player_q: Query<(&mut PlayerStateMachine, &Motion)>,
+) {
+    for (mut machine, motion) in player_q.iter_mut() {
+        if inputs.movement.length() > 0.0 {
+            if let PlayerState::Idle = machine.current() {
+                machine.push_transition(PlayerState::Run);
+            }
+        } else if let PlayerState::Run = machine.current() {
+            machine.push_transition(PlayerState::Idle);
+        }
+
+        if inputs.actioning {
+            // Right now there is only roll.
+            machine.push_transition(PlayerState::roll(motion.facing));
+        }
+    }
+}
+
+/// Case 1: interrupted states (something got requested as "next"). Case 2:
+/// states coming to their natural conclusions (timers ran out). Either way,
+/// two jobs: switch to the new state, and handle any state entry setup.
+fn handle_player_state_exits(mut player_q: Query<&mut PlayerStateMachine>) {
+    for mut machine in player_q.iter_mut() {
+        // First, natural endings -- only queue these up if not pre-empted.
+        if machine.next.is_none() {
+            match machine.current() {
+                PlayerState::Idle => (), // not timed
+                PlayerState::Run => (),  // not timed
+                PlayerState::Roll {
+                    roll_input: _,
+                    timer,
+                } => {
+                    if timer.finished() {
+                        machine.push_transition(PlayerState::Idle);
+                    }
+                },
+                PlayerState::Bonk {
+                    bonk_input: _,
+                    timer,
+                } => {
+                    if timer.finished() {
+                        machine.push_transition(PlayerState::Idle);
+                    }
+                },
+            }
+        }
+
+        // Then, move to next state, if any.
+        machine.finish_transition();
+    }
+}
+
+fn handle_player_state_entry(
+    mut player_q: Query<(
+        &mut PlayerStateMachine,
+        &mut Speed,
+        &mut CharAnimationState,
+        &AnimationsMap,
+        &mut Motion,
+    )>,
+) {
+    for (mut machine, mut speed, mut animation_state, animations_map, mut motion) in
+        player_q.iter_mut()
+    {
+        // only:
+        if machine.just_changed {
+            // Update sprite
+            let mut set_anim = |name: &str, play: Playback| {
+                let ani = animations_map.get(name).unwrap().clone();
+                animation_state.change_animation(ani, play);
+            };
+            match machine.current() {
+                PlayerState::Idle => set_anim("idle", Playback::Loop),
+                PlayerState::Run => set_anim("run", Playback::Loop),
+                PlayerState::Roll { timer, .. } => {
+                    // little extra on this one, sets animation parameters based on gameplay effect
+                    set_anim("roll", Playback::Once);
+                    let roll_millis = timer.duration().as_millis() as u64;
+                    animation_state.set_total_run_time_to(roll_millis);
+                },
+                PlayerState::Bonk { .. } => set_anim("hurt", Playback::Once),
+            };
+
+            // Update speed
+            speed.0 = match machine.current() {
+                PlayerState::Idle => 0.0,
+                PlayerState::Run => Speed::RUN,
+                PlayerState::Roll { .. } => Speed::ROLL,
+                PlayerState::Bonk { .. } => Speed::BONK,
+            };
+
+            // Re-set motion remainder (not actually sure about this; also only applies to by-pixels move)
+            motion.remainder = Vec2::ZERO;
+
+            // Mark state entry as completed
+            machine.state_entered();
+        }
+    }
+}
+
+fn player_free_out(mut commands: Commands, player_q: Query<(Entity, &PlayerFree)>) {
+    for (entity, player_free) in player_q.iter() {
+        match &player_free.transition {
+            PlayerFreeTransition::None => (),
+            PlayerFreeTransition::Roll { direction } => {
+                commands
+                    .entity(entity)
+                    .remove::<PlayerFree>()
+                    .insert(PlayerRoll::new(*direction));
+            },
+        }
     }
 }
 
@@ -545,6 +649,34 @@ pub struct PlayerStateMachine {
     current: PlayerState,
     next: Option<PlayerState>,
     just_changed: bool,
+}
+
+impl PlayerStateMachine {
+    fn push_transition(&mut self, next: PlayerState) {
+        self.next = Some(next);
+    }
+    fn has_transition(&self) -> bool {
+        self.next.is_some()
+    }
+    fn peek_next(&self) -> Option<&PlayerState> {
+        self.next.as_ref()
+    }
+    fn current(&self) -> &PlayerState {
+        &self.current
+    }
+    fn current_mut(&mut self) -> &mut PlayerState {
+        &mut self.current
+    }
+    fn state_entered(&mut self) {
+        self.just_changed = false;
+    }
+    fn finish_transition(&mut self) {
+        if self.next.is_some() {
+            let next = self.next.take().unwrap();
+            self.current = next;
+            self.just_changed = true;
+        }
+    }
 }
 
 #[derive(Clone)]
