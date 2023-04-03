@@ -124,24 +124,27 @@ fn main() {
                 .after(CharAnimationSystems)
                 .after(MovePlanners)
         )
-        .add_system_set(
-            SystemSet::new()
-                .label(MovePlanners)
-                .with_system(player_free_plan_move.label(SpriteChangers))
-                .with_system(player_roll_plan_move)
-                .with_system(player_bonk_plan_move)
-        )
-        .add_system_set(
-            SystemSet::new()
-                .label(SpriteChangers)
-                .before(MovePlanners)
-                .with_system(player_roll_enter)
-                .with_system(player_bonk_enter)
-        )
-        .add_system_to_stage(CoreStage::PostUpdate, player_roll_out)
-        .add_system_to_stage(CoreStage::PostUpdate, player_free_out)
-        .add_system_to_stage(CoreStage::PostUpdate, player_bonk_out)
-        // .add_system(charanm_test_animate_system) // in CharAnimationPlugin or somethin'
+        // .add_system_set(
+        //     SystemSet::new()
+        //         .label(MovePlanners)
+        //         .with_system(player_free_plan_move.label(SpriteChangers))
+        //         .with_system(player_roll_plan_move)
+        //         .with_system(player_bonk_plan_move)
+        // )
+        // .add_system_set(
+        //     SystemSet::new()
+        //         .label(SpriteChangers)
+        //         .before(MovePlanners)
+        //         .with_system(player_roll_enter)
+        //         .with_system(player_bonk_enter)
+        // )
+        // .add_system_to_stage(CoreStage::PostUpdate, player_roll_out)
+        // .add_system_to_stage(CoreStage::PostUpdate, player_free_out)
+        // .add_system_to_stage(CoreStage::PostUpdate, player_bonk_out)
+        .add_system(propagate_inputs_to_player_state.before(handle_player_state_exits))
+        .add_system(handle_player_state_exits.before(handle_player_state_entry))
+        .add_system(handle_player_state_entry.label(SpriteChangers).before(MovePlanners))
+        .add_system(plan_move.label(MovePlanners))
         .add_system_set(
             SystemSet::new()
                 .label(CameraMovers)
@@ -203,143 +206,6 @@ pub struct Movers;
 
 #[derive(SystemLabel)]
 struct CameraMovers;
-
-fn player_free_plan_move(
-    inputs: Res<CurrentInputs>,
-    mut player_q: Query<
-        (
-            &mut Motion,
-            &mut Speed,
-            &AnimationsMap,
-            &mut CharAnimationState,
-            &mut PlayerFree,
-        ),
-        With<Player>,
-    >,
-) {
-    for (mut motion, mut speed, animations_map, mut animation_state, mut player_free) in
-        player_q.iter_mut()
-    {
-        if player_free.just_started {
-            speed.0 = Speed::RUN; // TODO hey what's the value here
-            player_free.just_started = false;
-        }
-
-        let move_input = inputs.movement;
-
-        if move_input.length() > 0.0 {
-            // OK, we're running
-            let run = animations_map.get("run").unwrap().clone();
-            animation_state.change_animation(run, Playback::Loop);
-        } else {
-            // Chill
-            let idle = animations_map.get("idle").unwrap().clone();
-            animation_state.change_animation(idle, Playback::Loop);
-        }
-
-        // Publish movement intent
-        let velocity = move_input * speed.0;
-        motion.velocity += velocity;
-        motion.face(move_input);
-
-        // OK, that's movement. Are we doing anything else this frame? For example, an action?
-        if inputs.actioning {
-            // Right now there is only roll.
-            player_free.transition = PlayerFreeTransition::Roll {
-                direction: motion.facing,
-            };
-        }
-    }
-}
-
-fn player_bonk_enter(
-    mut player_q: Query<
-        (
-            &mut Speed,
-            &mut CharAnimationState,
-            &mut Motion,
-            &AnimationsMap,
-        ),
-        Added<PlayerBonk>,
-    >,
-) {
-    for (mut speed, mut animation_state, mut motion, animations_map) in player_q.iter_mut() {
-        speed.0 = Speed::BONK;
-        let hurt = animations_map.get("hurt").unwrap().clone();
-        animation_state.change_animation(hurt, Playback::Once);
-        // single frame on this, so no add'l fussing.
-        motion.remainder = Vec2::ZERO;
-    }
-}
-
-fn player_roll_enter(
-    mut player_q: Query<
-        (
-            &mut Speed,
-            &AnimationsMap,
-            &mut CharAnimationState,
-            &PlayerRoll,
-            &mut Motion,
-        ),
-        Added<PlayerRoll>,
-    >,
-) {
-    for (mut speed, animations_map, mut animation_state, player_roll, mut motion) in
-        player_q.iter_mut()
-    {
-        speed.0 = Speed::ROLL;
-        let roll = animations_map.get("roll").unwrap().clone();
-        animation_state.change_animation(roll, Playback::Once);
-        // Scale the animation to match the configured roll distance/speed:
-        let roll_duration_millis = player_roll.timer.duration().as_millis() as u64;
-        animation_state.set_total_run_time_to(roll_duration_millis);
-
-        // Re-set the motion remainder because we're doing a different kind of motion now:
-        motion.remainder = Vec2::ZERO; // HMM, actually not 100% sure about that. Well anyway!!
-    }
-}
-
-fn player_bonk_plan_move(
-    mut player_q: Query<
-        (&mut Motion, &mut Speed, &mut PlayerBonk, &mut SubTransform),
-        With<Player>,
-    >,
-    time: Res<Time>,
-) {
-    // Right. Basically same as roll, so much so that I clearly need to do some recombining.
-
-    for (mut motion, speed, mut player_bonk, mut transform) in player_q.iter_mut() {
-        // Contribute velocity
-        let velocity = player_bonk.bonk_input * speed.0;
-        motion.velocity += velocity;
-
-        // Chip away at state duration
-        player_bonk.timer.tick(time.delta());
-        let progress = player_bonk.timer.percent();
-        // ^^ ok to go backwards bc sin is symmetric. btw this should probably
-        // be parabolic but shrug for now. Also BTW, progress will be exactly
-        // 1.0 (and thus height_frac 0.0) if the timer finished, so we shouldn't
-        // need a backstop against height drift here. *NARRATOR VOICE:* it was
-        // actually -0.0, and that never came back to bite them.
-        let height_frac = (progress * std::f32::consts::PI).sin();
-        // and...  we're just manipulating Z directly instead of going through
-        // the motion planning system. Sorry!! Maybe later.
-        transform.translation.z = height_frac * PlayerBonk::HEIGHT;
-    }
-}
-
-fn player_roll_plan_move(
-    mut player_q: Query<(&mut Motion, &Speed, &mut PlayerRoll)>,
-    time: Res<Time>,
-) {
-    for (mut motion, speed, mut player_roll) in player_q.iter_mut() {
-        // Contribute velocity
-        let velocity = player_roll.roll_input * speed.0;
-        motion.velocity += velocity;
-        // Spend state duration
-        player_roll.timer.tick(time.delta());
-    }
-}
 
 /// Hey, how much CAN I get away with processing at this point? I know I want to handle
 /// walk/idle transitions here, but..... action button?
@@ -506,49 +372,6 @@ fn plan_move(
                 // the motion planning system. Sorry!! Maybe later.
                 transform.translation.z = height_frac * PlayerState::BONK_HEIGHT;
             },
-        }
-    }
-}
-
-fn player_free_out(mut commands: Commands, player_q: Query<(Entity, &PlayerFree)>) {
-    for (entity, player_free) in player_q.iter() {
-        match &player_free.transition {
-            PlayerFreeTransition::None => (),
-            PlayerFreeTransition::Roll { direction } => {
-                commands
-                    .entity(entity)
-                    .remove::<PlayerFree>()
-                    .insert(PlayerRoll::new(*direction));
-            },
-        }
-    }
-}
-
-fn player_roll_out(mut commands: Commands, mut player_q: Query<(Entity, &PlayerRoll, &Motion)>) {
-    for (entity, player_roll, motion) in player_q.iter_mut() {
-        // If roll animation finished uninterrupted, switch back to free.
-        if player_roll.timer.finished() {
-            commands
-                .entity(entity)
-                .remove::<PlayerRoll>()
-                .insert(PlayerFree::new());
-        } else if let Some(MotionResult { collided: true, .. }) = motion.result {
-            // If we hit a wall, switch to bonk
-            let opposite_direction = Vec2::X.angle_between(-1.0 * Vec2::from_angle(motion.facing));
-            let bonk = PlayerBonk::roll(opposite_direction);
-            commands.entity(entity).remove::<PlayerRoll>().insert(bonk);
-        }
-    }
-}
-
-/// Bonk state ends when it ends.
-fn player_bonk_out(mut commands: Commands, player_q: Query<(Entity, &PlayerBonk)>) {
-    for (entity, player_bonk) in player_q.iter() {
-        if player_bonk.timer.finished() {
-            commands
-                .entity(entity)
-                .remove::<PlayerBonk>()
-                .insert(PlayerFree::new());
         }
     }
 }
@@ -720,12 +543,12 @@ impl PlayerStateMachine {
     fn push_transition(&mut self, next: PlayerState) {
         self.next = Some(next);
     }
-    fn has_transition(&self) -> bool {
-        self.next.is_some()
-    }
-    fn peek_next(&self) -> Option<&PlayerState> {
-        self.next.as_ref()
-    }
+    // fn has_transition(&self) -> bool {
+    //     self.next.is_some()
+    // }
+    // fn peek_next(&self) -> Option<&PlayerState> {
+    //     self.next.as_ref()
+    // }
     fn current(&self) -> &PlayerState {
         &self.current
     }
