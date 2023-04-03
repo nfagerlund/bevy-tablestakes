@@ -345,20 +345,36 @@ fn player_roll_plan_move(
 /// walk/idle transitions here, but..... action button?
 fn propagate_inputs_to_player_state(
     inputs: Res<CurrentInputs>,
-    mut player_q: Query<(&mut PlayerStateMachine, &Motion)>,
+    mut player_q: Query<(&mut PlayerStateMachine, &mut Motion)>,
 ) {
-    for (mut machine, motion) in player_q.iter_mut() {
-        if inputs.movement.length() > 0.0 {
-            if let PlayerState::Idle = machine.current() {
-                machine.push_transition(PlayerState::Run);
-            }
-        } else if let PlayerState::Run = machine.current() {
-            machine.push_transition(PlayerState::Idle);
+    for (mut machine, mut motion) in player_q.iter_mut() {
+        // Moves -- ignored unless run or idle
+        let move_input = inputs.movement;
+        match machine.current() {
+            PlayerState::Idle => {
+                if move_input.length() > 0.0 {
+                    machine.push_transition(PlayerState::Run);
+                }
+                motion.face(move_input); // sprite-relevant.
+            },
+            PlayerState::Run => {
+                if move_input.length() == 0.0 {
+                    machine.push_transition(PlayerState::Idle);
+                }
+                motion.face(move_input);
+            },
+            _ => (),
         }
 
+        // Action button
         if inputs.actioning {
             // Right now there is only roll.
-            machine.push_transition(PlayerState::roll(motion.facing));
+            match machine.current() {
+                PlayerState::Idle | PlayerState::Run => {
+                    machine.push_transition(PlayerState::roll(motion.facing));
+                },
+                _ => (),
+            }
         }
     }
 }
@@ -441,6 +457,55 @@ fn handle_player_state_entry(
 
             // Mark state entry as completed
             machine.state_entered();
+        }
+    }
+}
+
+/// Primarily mutates Motion, but for bonk state I have an unfortunate mutation
+/// of SubTransform.z. Also, this is currently where I'm ticking state timers,
+/// so that's mutable too. hmm.
+fn plan_move(
+    mut player_q: Query<(
+        &mut PlayerStateMachine,
+        &mut Motion,
+        &Speed,
+        &mut SubTransform,
+    )>,
+    time: Res<Time>,
+    inputs: Res<CurrentInputs>,
+) {
+    for (mut machine, mut motion, speed, mut transform) in player_q.iter_mut() {
+        // Contribute velocity
+        let input = match machine.current() {
+            PlayerState::Idle => Vec2::ZERO,
+            PlayerState::Run => inputs.movement,
+            PlayerState::Roll { roll_input, .. } => *roll_input,
+            PlayerState::Bonk { bonk_input, .. } => *bonk_input,
+        };
+        let velocity = input * speed.0;
+        motion.velocity += velocity;
+
+        // Spend state duration (TODO: put this elsewhere)
+        // also: do fucky z-height hack for bonk
+        match machine.current_mut() {
+            PlayerState::Idle => (),
+            PlayerState::Run => (),
+            PlayerState::Roll { timer, .. } => {
+                timer.tick(time.delta());
+            },
+            PlayerState::Bonk { timer, .. } => {
+                timer.tick(time.delta());
+                let progress = timer.percent();
+                // ^^ ok to go backwards bc sin is symmetric. btw this should probably
+                // be parabolic but shrug for now. Also BTW, progress will be exactly
+                // 1.0 (and thus height_frac 0.0) if the timer finished, so we shouldn't
+                // need a backstop against height drift here. *NARRATOR VOICE:* it was
+                // actually -0.0, and that never came back to bite them.
+                let height_frac = (progress * std::f32::consts::PI).sin();
+                // and...  we're just manipulating Z directly instead of going through
+                // the motion planning system. Sorry!! Maybe later.
+                transform.translation.z = height_frac * PlayerState::BONK_HEIGHT;
+            },
         }
     }
 }
