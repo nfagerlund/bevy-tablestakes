@@ -145,6 +145,7 @@ fn main() {
         .add_system(handle_player_state_exits.before(handle_player_state_entry))
         .add_system(handle_player_state_entry.label(SpriteChangers).before(MovePlanners))
         .add_system(plan_move.label(MovePlanners))
+        .add_system(wall_collisions.after(Movers))
         .add_system_set(
             SystemSet::new()
                 .label(CameraMovers)
@@ -372,6 +373,19 @@ fn plan_move(
                 // the motion planning system. Sorry!! Maybe later.
                 transform.translation.z = height_frac * PlayerState::BONK_HEIGHT;
             },
+        }
+    }
+}
+
+fn wall_collisions(mut player_q: Query<(&mut PlayerStateMachine, &Motion)>) {
+    for (mut machine, motion) in player_q.iter_mut() {
+        if let PlayerState::Roll { .. } = machine.current() {
+            if let Some(MotionResult { collided: true, .. }) = motion.result {
+                // We hit a wall, so bounce back:
+                let opposite_direction = flip_angle(motion.facing);
+                let next_state = PlayerState::bonk_from_roll(opposite_direction);
+                machine.push_transition(next_state);
+            }
         }
     }
 }
