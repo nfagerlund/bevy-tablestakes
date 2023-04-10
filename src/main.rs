@@ -12,7 +12,7 @@ use bevy::{
     math::Rect,
     prelude::*,
     render::{RenderApp, RenderStage},
-    utils::{tracing, Duration},
+    utils::tracing,
 };
 use bevy_ecs_ldtk::prelude::*;
 use bevy_inspector_egui::{
@@ -618,79 +618,6 @@ impl PlayerState {
 
     fn bonk_from_roll(direction: f32) -> Self {
         Self::bonk(direction, Self::BONK_FROM_ROLL_DISTANCE)
-    }
-}
-
-/// Player state: freely able to move (but might be idling, idk)
-#[derive(Component, Clone)]
-#[component(storage = "SparseSet")]
-pub struct PlayerFree {
-    pub just_started: bool,
-    pub transition: PlayerFreeTransition,
-}
-impl PlayerFree {
-    fn new() -> Self {
-        PlayerFree {
-            just_started: true,
-            transition: PlayerFreeTransition::None,
-        }
-    }
-}
-#[derive(Clone)]
-pub enum PlayerFreeTransition {
-    None,
-    Roll { direction: f32 },
-}
-impl Default for PlayerFreeTransition {
-    fn default() -> Self {
-        Self::None
-    }
-}
-// ^^ That SparseSet storage might be useful or might not (I haven't profiled
-// it), but this IS the specific use case it is suggested for (marker components
-// that don't contain much data, don't get iterated over en masse on the
-// regular, and get added and removed extremely frequently.)
-/// Player state: rollin at the speed of sound
-#[derive(Component, Clone)]
-#[component(storage = "SparseSet")]
-pub struct PlayerRoll {
-    /// The "player input" equivalent to use when planning motion; a length-1.0
-    /// vector locked to the direction we were facing when starting our roll.
-    pub roll_input: Vec2,
-    pub timer: Timer,
-}
-impl PlayerRoll {
-    const DISTANCE: f32 = 52.0;
-
-    pub fn new(direction: f32) -> Self {
-        let duration_secs = Self::DISTANCE / Speed::ROLL;
-        PlayerRoll {
-            roll_input: Vec2::from_angle(direction),
-            timer: Timer::from_seconds(duration_secs, TimerMode::Once),
-        }
-    }
-}
-/// Player state: bonkin'
-#[derive(Component, Clone)]
-#[component(storage = "SparseSet")]
-pub struct PlayerBonk {
-    pub bonk_input: Vec2,
-    pub timer: Timer,
-}
-
-impl PlayerBonk {
-    const ROLL_BONK: f32 = 18.0;
-    const HEIGHT: f32 = 8.0;
-    pub fn roll(direction: f32) -> Self {
-        Self::new(direction, Self::ROLL_BONK)
-    }
-    pub fn new(direction: f32, distance: f32) -> Self {
-        let bonk_vector = Vec2::from_angle(direction);
-        let duration_secs = distance / Speed::BONK;
-        PlayerBonk {
-            bonk_input: bonk_vector,
-            timer: Timer::from_seconds(duration_secs, TimerMode::Once),
-        }
     }
 }
 
