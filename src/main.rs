@@ -504,7 +504,11 @@ fn setup_player(mut commands: Commands, asset_server: Res<AssetServer>) {
             animations_map: animations,
         },
         // Initial gameplay state
-        PlayerFree::new(),
+        PlayerStateMachine {
+            current: PlayerState::Idle,
+            next: None,
+            just_changed: true,
+        },
         // Shadow marker
         HasShadow,
         // Draw-depth manager
