@@ -32,6 +32,7 @@ mod junk;
 mod movement;
 mod player_states;
 mod render;
+mod util_countup_timer;
 
 const PIXEL_SCALE: f32 = 1.0;
 
