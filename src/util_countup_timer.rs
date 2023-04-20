@@ -17,6 +17,7 @@ pub struct CountupTimer {
     times_finished_this_tick: u32,
 }
 
+#[allow(unused)]
 impl CountupTimer {
     // Initialization
 
@@ -135,6 +136,7 @@ impl CountupTimer {
 }
 
 mod tests {
+    #[allow(unused_imports)] // ???!?!?!?!?!!?!?!?!
     use super::*;
 
     #[test]
