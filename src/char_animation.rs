@@ -29,6 +29,27 @@ pub struct CharAnimationVariant {
     pub frames: Vec<CharAnimationFrame>,
 }
 
+impl CharAnimationVariant {
+    /// Returns the final frame time to use for the requested frame, after
+    /// applying the specified FrameTimeOverride behavior.
+    pub fn resolved_frame_time(
+        &self,
+        frame_index: usize,
+        override_type: FrameTimeOverride,
+    ) -> Duration {
+        let asset_duration = self.frames[frame_index].duration;
+        match override_type {
+            FrameTimeOverride::None => asset_duration,
+            FrameTimeOverride::Ms(millis) => Duration::from_millis(millis),
+            FrameTimeOverride::Scale(scale) => asset_duration.mul_f32(scale),
+            FrameTimeOverride::TotalMs(total_millis) => {
+                let millis = total_millis / (self.frames.len() as u64); // nearest ms is fine
+                Duration::from_millis(millis)
+            },
+        }
+    }
+}
+
 // I've changed my mind about tags: I'm gonna start out with a rigid enum,
 // enforce tag names at load time, and expand behavior as needed later. Duping
 // the Dir type for easier refactors later??
@@ -57,22 +78,31 @@ pub struct CharAnimationFrame {
     // todo: hitbox, hurtbox,
 }
 
+#[derive(SystemLabel)]
+pub struct CharAnimationSystems;
+#[derive(SystemLabel)]
+pub struct SpriteChangers;
+
 pub struct CharAnimationPlugin;
 
 impl Plugin for CharAnimationPlugin {
     fn build(&self, app: &mut App) {
+        let systems = SystemSet::new()
+            .label(CharAnimationSystems)
+            .after(SpriteChangers)
+            .with_system(charanm_atlas_reassign_system)
+            .with_system(charanm_set_directions_system)
+            .with_system(charanm_animate_system.after(charanm_set_directions_system))
+            .with_system(charanm_update_walkbox_system.after(charanm_animate_system));
+
         app.add_asset::<CharAnimation>()
             .init_asset_loader::<CharAnimationLoader>()
+            .add_event::<AnimateFinishedEvent>()
             // These systems should run after any app code that might mutate
             // CharAnimationState or Motion. And set_directions might have
             // mutated the animation state, so that should take effect before
             // the main animate system.
-            .add_system_to_stage(CoreStage::PostUpdate, charanm_atlas_reassign_system)
-            .add_system_to_stage(CoreStage::PostUpdate, charanm_set_directions_system)
-            .add_system_to_stage(
-                CoreStage::PostUpdate,
-                charanm_animate_system.after(charanm_set_directions_system),
-            );
+            .add_system_set(systems);
     }
 }
 
@@ -279,12 +309,10 @@ fn flip_rect_y(r: Rect) -> Rect {
 
 /// Get the bounding Rect for a cel's non-transparent pixels.
 fn rect_from_cel(ase: &AsepriteFile, layer_name: &str, frame_index: u32) -> Option<Rect> {
-    ase.layer_by_name(layer_name)
-        .map(|layer| {
-            let cel_img = layer.frame(frame_index).image();
-            get_rect_lmao(&cel_img)
-        })
-        .flatten()
+    ase.layer_by_name(layer_name).and_then(|layer| {
+        let cel_img = layer.frame(frame_index).image();
+        get_rect_lmao(&cel_img)
+    })
 }
 
 /// Get the bounding Rect for the non-transparent pixels in an RgbaImage.
@@ -357,10 +385,13 @@ fn copy_texture_to_atlas(
 // - Each step, tick down a TIMER (non-repeating) for the current frame.
 // - When the timer runs out, switch your FRAME INDEX to the next frame (or, WRAP AROUND if you're configured to loop).
 
+pub struct AnimateFinishedEvent(pub Entity);
+
 #[derive(Component, Debug)]
 pub struct CharAnimationState {
     pub animation: Handle<CharAnimation>,
     pub variant: Option<VariantName>,
+    pub playback: Playback,
     pub frame: usize,
     // To start with, we'll just always loop.
     pub frame_timer: Option<Timer>,
@@ -370,10 +401,16 @@ pub struct CharAnimationState {
     pub frame_time_override: FrameTimeOverride,
 }
 
+#[derive(Debug, Clone, Copy)]
+pub enum Playback {
+    Loop,
+    Once,
+}
+
 /// Allow programmatically overriding the frame times from the animation source
 /// data, for things like stretching out a motion to fit it to a particular
 /// total duration.
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub enum FrameTimeOverride {
     None,
     Ms(u64),
@@ -382,10 +419,11 @@ pub enum FrameTimeOverride {
 }
 
 impl CharAnimationState {
-    pub fn new(animation: Handle<CharAnimation>, variant: VariantName) -> Self {
+    pub fn new(animation: Handle<CharAnimation>, variant: VariantName, playback: Playback) -> Self {
         CharAnimationState {
             animation,
             variant: Some(variant),
+            playback,
             // in the future I might end up wanting to blend between animations
             // at a particular frame. Doesn't matter yet tho.
             frame: 0,
@@ -394,45 +432,55 @@ impl CharAnimationState {
         }
     }
 
+    pub fn reset(&mut self) {
+        self.frame = 0;
+        self.frame_timer = None;
+        self.frame_time_override = FrameTimeOverride::None;
+    }
+
     /// Change direction of animation, unless already facing the requested direction.
     pub fn change_variant(&mut self, variant: VariantName) {
         if self.variant != Some(variant) {
             self.variant = Some(variant);
-            self.frame = 0;
-            self.frame_timer = None;
-            self.frame_time_override = FrameTimeOverride::None;
+            self.reset();
         }
     }
 
-    pub fn change_animation(&mut self, animation: Handle<CharAnimation>) {
+    pub fn change_animation(&mut self, animation: Handle<CharAnimation>, playback: Playback) {
         if self.animation != animation {
             self.animation = animation;
             // TODO: I'm leaving the variant the same, but actually I don't know if
             // that's the right move -- question is whether I'd ever switch to an
             // animation with fewer variants.
-            self.frame_timer = None;
-            self.frame = 0;
-            self.frame_time_override = FrameTimeOverride::None;
+            self.playback = playback;
+            self.reset();
         }
     }
 
-    pub fn set_frame_times_to(&mut self, millis: u64) {
+    pub fn _set_frame_times_to(&mut self, millis: u64) {
         self.frame_time_override = FrameTimeOverride::Ms(millis);
     }
 
-    pub fn scale_frame_times_by(&mut self, scale: f32) {
+    pub fn _scale_frame_times_by(&mut self, scale: f32) {
         self.frame_time_override = FrameTimeOverride::Scale(scale);
     }
 
     pub fn set_total_run_time_to(&mut self, millis: u64) {
         self.frame_time_override = FrameTimeOverride::TotalMs(millis);
     }
+
+    pub fn timer_just_finished(&self) -> bool {
+        matches!(
+            self.frame_timer.as_ref().map(|t| t.just_finished()),
+            Some(true)
+        )
+    }
 }
 
 fn charanm_set_directions_system(mut query: Query<(&mut CharAnimationState, &Motion)>) {
     for (mut state, motion) in query.iter_mut() {
         // just doing this unconditionally and letting change_variant sort it out.
-        let dir = Dir::cardinal_from_angle(motion.direction);
+        let dir = Dir::cardinal_from_angle(motion.facing);
         state.change_variant(dir);
     }
 }
@@ -441,7 +489,7 @@ pub fn charanm_animate_system(
     animations: Res<Assets<CharAnimation>>,
     mut query: Query<(&mut CharAnimationState, &mut TextureAtlasSprite, Entity)>,
     time: Res<Time>,
-    mut commands: Commands,
+    mut finished_events: EventWriter<AnimateFinishedEvent>,
 ) {
     for (mut state, mut sprite, entity) in query.iter_mut() {
         let Some(animation) = animations.get(&state.animation) else { continue; };
@@ -454,33 +502,47 @@ pub fn charanm_animate_system(
         // update the timer... or initialize it, if it's missing.
         if let Some(frame_timer) = &mut state.frame_timer {
             frame_timer.tick(time.delta());
-            if frame_timer.finished() {
-                updating_frame = true;
-                // increment+loop frame, and replace the timer with the new frame's duration
-                // TODO: we're only looping rn.
+            'timers: while state.timer_just_finished() {
+                // Determine the next frame
                 let frame_count = variant.frames.len();
-                state.frame = (state.frame + 1) % frame_count;
+                let next_frame = (state.frame + 1) % frame_count;
 
-                state.frame_timer = Some(Timer::new(
-                    variant.frames[state.frame].duration,
-                    TimerMode::Once,
-                ));
+                // If next is 0, we just finished the *last* frame... fire an
+                // event in case anyone wants to do something about that. This
+                // is valid for single-frame animations too, although it might
+                // not seem it at first blush.
+                if next_frame == 0 {
+                    finished_events.send(AnimateFinishedEvent(entity));
+                    // If this is a non-looping animation, we bail now and leave
+                    // it perma-stuck on the final frame. Its timer will keep
+                    // accumulating, and this loop won't run again until the
+                    // animation is changed.
+                    match state.playback {
+                        Playback::Once => {
+                            break 'timers;
+                        },
+                        // nothing interesting yet for looping animations, but I
+                        // want the exhaustiveness check from `match` just in case.
+                        Playback::Loop => (),
+                    }
+                }
+
+                updating_frame = true;
+                let excess_time = state.frame_timer.as_ref().unwrap().excess_elapsed();
+
+                // increment+loop frame, and replace the timer with the new frame's duration
+                state.frame = next_frame;
+                let duration = variant.resolved_frame_time(state.frame, state.frame_time_override);
+                let mut new_timer = Timer::new(duration, TimerMode::CountUp);
+                new_timer.tick(excess_time);
+                state.frame_timer = Some(new_timer);
             }
         } else {
             // must be new here. initialize the timer w/ the current
             // frame's duration, can start ticking on the next loop.
             updating_frame = true;
-            let frame = &variant.frames[state.frame];
-            let duration = match state.frame_time_override {
-                FrameTimeOverride::None => frame.duration,
-                FrameTimeOverride::Ms(millis) => Duration::from_millis(millis),
-                FrameTimeOverride::Scale(scale) => frame.duration.mul_f32(scale),
-                FrameTimeOverride::TotalMs(total_millis) => {
-                    let millis = total_millis / (variant.frames.len() as u64); // nearest ms is fine
-                    Duration::from_millis(millis)
-                },
-            };
-            state.frame_timer = Some(Timer::new(duration, TimerMode::Once));
+            let duration = variant.resolved_frame_time(state.frame, state.frame_time_override);
+            state.frame_timer = Some(Timer::new(duration, TimerMode::CountUp));
         }
 
         // ok, where was I.
@@ -491,13 +553,31 @@ pub fn charanm_animate_system(
             sprite.index = frame.index;
             // Also, set the origin:
             sprite.anchor = Anchor::Custom(frame.anchor);
-            // Also, set the walkbox:
-            if let Some(walkbox) = frame.walkbox {
-                commands.entity(entity).insert(Walkbox(walkbox));
-            } else {
-                commands.entity(entity).remove::<Walkbox>();
-            }
+            // But leave colliders to their own systems.
         }
+    }
+}
+
+/// The main animate system updates the origin because everything's gotta have
+/// one, but maybe not everything needs a collider, even if its sprite has one.
+/// So, we only update walkboxes for entities who have opted in by having one
+/// added to them at some point, and we never remove walkboxes. BTW: We're
+/// filtering on `Changed<TextureAtlasSprite>` because the animation state
+/// contains a Timer and thus changes constantly... but we only update the atlas
+/// index when it's time to flip frames.
+fn charanm_update_walkbox_system(
+    animations: Res<Assets<CharAnimation>>,
+    mut query: Query<(&CharAnimationState, &mut Walkbox), Changed<TextureAtlasSprite>>,
+) {
+    for (state, mut walkbox) in query.iter_mut() {
+        let Some(animation) = animations.get(&state.animation) else { continue; };
+        let Some(variant_name) = &state.variant else { continue; };
+        let Some(variant) = animation.variants.get(variant_name) else { continue; };
+        let frame = &variant.frames[state.frame];
+
+        // If there's no walkbox in the frame, you get a 0-sized rectangle at your origin.
+        let sprite_walkbox = frame.walkbox.unwrap_or_default();
+        walkbox.0 = sprite_walkbox;
     }
 }
 
@@ -511,7 +591,6 @@ fn charanm_atlas_reassign_system(
         if let Some(animation) = animations.get(&state.animation) {
             let desired_atlas_handle = &animation.texture_atlas;
             if *desired_atlas_handle != *atlas_handle {
-                println!("Replacing texture handle!");
                 *atlas_handle = desired_atlas_handle.clone();
             }
         }
@@ -524,7 +603,7 @@ fn charanm_test_set_motion_system(
     inputs: Res<crate::input::CurrentInputs>,
 ) {
     for mut motion in query.iter_mut() {
-        motion.update_plan(inputs.movement * -1.0);
+        motion.face(inputs.movement * -1.0);
     }
 }
 
@@ -536,8 +615,8 @@ fn charanm_test_setup_system(mut commands: Commands, asset_server: Res<AssetServ
             transform: Transform::from_translation(Vec3::new(30.0, 60.0, 3.0)),
             ..default()
         },
-        crate::HasShadow,
-        CharAnimationState::new(anim_handle, Dir::W),
+        crate::render::HasShadow,
+        CharAnimationState::new(anim_handle, Dir::W, Playback::Loop),
         Motion::new(Vec2::ZERO),
     ));
 

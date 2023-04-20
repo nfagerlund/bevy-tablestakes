@@ -2,6 +2,17 @@ use bevy::prelude::Vec2;
 use std::f32::consts::*;
 use std::fmt;
 
+/// A real dumb little function to get the opposite direction of an angle in
+/// radians. Using existing glam/bevy convention of keeping angles between
+/// -π..=π.
+pub fn flip_angle(angle: f32) -> f32 {
+    if angle > 0.0 {
+        angle - PI
+    } else {
+        angle + PI
+    }
+}
+
 // Mapping # of directional animation variants to discrete direction usage:
 // - 1 (east) -- horizontal() and set flip if west.
 // - 2 (east, west) -- horizontal(). (Would I ever do this?)
@@ -104,6 +115,7 @@ impl Dir {
 
     /// Given an angle, return one of the four cardinal directions or neutral.
     /// Bias towards horizontal when given an exact diagonal.
+    #[allow(clippy::manual_range_contains)] // Hush, your suggestion's less legible.
     pub fn cardinal_from_angle(angle: f32) -> Self {
         const NE: f32 = FRAC_PI_4 + f32::EPSILON;
         const NW: f32 = 3.0 * FRAC_PI_4 - f32::EPSILON;

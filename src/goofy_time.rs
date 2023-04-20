@@ -32,10 +32,10 @@ pub struct SmoothedTime {
 }
 
 impl SmoothedTime {
-    pub fn delta_seconds(&self) -> f32 {
+    pub fn _delta_seconds(&self) -> f32 {
         self.delta.as_secs_f32()
     }
-    pub fn delta(&self) -> Duration {
+    pub fn _delta(&self) -> Duration {
         self.delta
     }
 }
@@ -44,10 +44,10 @@ impl SmoothedTime {
 pub struct StaticTime;
 
 impl StaticTime {
-    pub fn delta_seconds(&self) -> f32 {
+    pub fn _delta_seconds(&self) -> f32 {
         1. / 60.
     }
-    pub fn delta(&self) -> Duration {
+    pub fn _delta(&self) -> Duration {
         Duration::new(1, 0) / 60
     }
 }
@@ -61,7 +61,7 @@ fn time_smoothing_system(
     let window: usize = 11;
     let delta = time.delta();
     recent_time.buffer.push_back(delta);
-    if recent_time.buffer.len() >= window + 1 {
+    if recent_time.buffer.len() > window {
         recent_time.buffer.pop_front();
         let mut sorted: Vec<Duration> = recent_time.buffer.clone().into();
         sorted.sort_unstable();

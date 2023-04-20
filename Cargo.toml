@@ -13,25 +13,29 @@ asefile = "0.3.5"
 image = "0.23.14" # match asefile's dep
 bevy = { version = "0.9.1", features = [
     "dynamic",
-    # Tracy version support is complicated bc they break protocol versions in
-    # patch releases -- you'll have to crack open Cargo.lock and cross-reference
-    # with the table at https://lib.rs/crates/tracing-tracy. For Bevy 0.8.1, it
-    # just so happens you want Tracy 0.8.1 -- complete coincidince.
+    # Tracy breaks protocol versions in patch releases, so check Cargo.lock.
+    # - table @ https://lib.rs/crates/tracing-tracy
+    # Bevy 0.8.1: Tracy 0.8.1 (coincidince)
+    # Bevy 0.9.1: Tracy 0.9
     "trace_tracy",
 ] }
 bevy-inspector-egui = "0.14.0"
 bevy_ecs_tilemap = "0.9.0"
 bevy_ecs_ldtk = "0.5.0"
+bevy_spatial = { version = "0.4.0", features = ["rstar"]}
 
 # bevy_ecs_tilemap = { git = "https://github.com/StarArawn/bevy_ecs_tilemap", rev = "02b044b99" }
 # bevy_ecs_ldtk = { git = "https://github.com/nfagerlund/bevy_ecs_ldtk.git", rev = "1bfe05f" }
-# bevy_mod_debugdump = "0.3.0" # neat: https://github.com/jakobhellermann/bevy_mod_debugdump
+bevy_mod_debugdump = "0.6.0" # neat: https://github.com/jakobhellermann/bevy_mod_debugdump
 
 [patch.crates-io]
 # bevy = { path = "../bevy" }
 # ^^ local for testing bugfixes
-bevy = { git = "https://github.com/nfagerlund/bevy", rev = "5a1218e0f" }
-# ^^ nf/dec22-personal-0.9.1: fix log suppression
+bevy = { git = "https://github.com/nfagerlund/bevy", rev = "92b4a2b06" }
+bevy_app = { git = "https://github.com/nfagerlund/bevy", rev = "92b4a2b06" }
+bevy_ecs = { git = "https://github.com/nfagerlund/bevy", rev = "92b4a2b06" }
+bevy_render = { git = "https://github.com/nfagerlund/bevy", rev = "92b4a2b06" }
+# ^^ nf/dec22-personal-0.9.1: fix log suppression, add TimerMode::CountUp
 
 # Per https://bevy-cheatbook.github.io/pitfalls/performance.html:
 # medium-optimize this crate's own debug builds
