@@ -13,6 +13,7 @@ use image::RgbaImage;
 use std::collections::HashMap;
 
 use crate::compass::{self, Dir};
+use crate::util_countup_timer::CountupTimer;
 use crate::Motion;
 use crate::Walkbox;
 
@@ -394,7 +395,7 @@ pub struct CharAnimationState {
     pub playback: Playback,
     pub frame: usize,
     // To start with, we'll just always loop.
-    pub frame_timer: Option<Timer>,
+    pub frame_timer: Option<CountupTimer>,
     /// Optionally override the animation's frame timings, setting every frame
     /// to the provided length in milliseconds. If you need frames to be
     /// different lengths, that belongs in the animation data, not the
@@ -528,12 +529,12 @@ pub fn charanm_animate_system(
                 }
 
                 updating_frame = true;
-                let excess_time = state.frame_timer.as_ref().unwrap().excess_elapsed();
+                let excess_time = state.frame_timer.as_ref().unwrap().countup_elapsed();
 
                 // increment+loop frame, and replace the timer with the new frame's duration
                 state.frame = next_frame;
                 let duration = variant.resolved_frame_time(state.frame, state.frame_time_override);
-                let mut new_timer = Timer::new(duration, TimerMode::CountUp);
+                let mut new_timer = CountupTimer::new(duration);
                 new_timer.tick(excess_time);
                 state.frame_timer = Some(new_timer);
             }
@@ -542,7 +543,7 @@ pub fn charanm_animate_system(
             // frame's duration, can start ticking on the next loop.
             updating_frame = true;
             let duration = variant.resolved_frame_time(state.frame, state.frame_time_override);
-            state.frame_timer = Some(Timer::new(duration, TimerMode::CountUp));
+            state.frame_timer = Some(CountupTimer::new(duration));
         }
 
         // ok, where was I.
