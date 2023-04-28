@@ -80,11 +80,11 @@ fn main() {
         // INSPECTOR STUFF
         .add_plugin(WorldInspectorPlugin::new())
         .register_inspectable::<PhysTransform>()
+        .register_inspectable::<PhysOffset>()
         .register_inspectable::<Speed>()
         .register_inspectable::<Walkbox>()
         .register_inspectable::<Hitbox>()
         .register_inspectable::<TopDownMatter>()
-        .register_inspectable::<PhysOffset>()
         .add_plugin(InspectorPlugin::<DebugSettings>::new())
         .add_system(debug_walkboxes_system)
         // LDTK STUFF
@@ -156,7 +156,9 @@ fn main() {
                 .with_system(camera_locked_system)
                 .with_system(camera_lerp_system)
         )
-        .add_system(snap_pixel_positions_system.after(CameraMovers))
+        // PHYSICS SPACE STUFF
+        .add_system(add_new_phys_transforms.before(MovePlanners))
+        .add_system(sync_phys_transforms.after(CameraMovers))
         // OK BYE!!!
         ;
 
@@ -444,19 +446,6 @@ fn camera_locked_system(
     camera_tf.translation.y = player_pos.y;
 }
 
-// This no longer does anything, because we're now handling the sub-pixel stuff
-// in the movement function -- though that's all still up in the air. Anyway,
-// point being we always manipulate this alternate transform, and then this is
-// the system that syncs it to real transform before the sync to global
-// transform happens.
-fn snap_pixel_positions_system(mut query: Query<(&PhysTransform, &mut Transform)>) {
-    // let global_scale = Vec3::new(PIXEL_SCALE, PIXEL_SCALE, 1.0);
-    for (sub_tf, mut pixel_tf) in query.iter_mut() {
-        // pixel_tf.translation = (global_scale * sub_tf.translation).floor();
-        pixel_tf.translation = sub_tf.translation;
-    }
-}
-
 fn setup_level(mut commands: Commands, asset_server: Res<AssetServer>) {
     commands.spawn((
         LdtkWorld,
@@ -473,6 +462,7 @@ fn setup_camera(mut commands: Commands) {
     camera_bundle.projection.scale = 1.0 / 3.0;
     commands.spawn((
         camera_bundle,
+        PhysOffset(Vec2::ZERO),
         PhysTransform {
             translation: Vec3::new(0.0, 0.0, 999.0),
         },
@@ -506,9 +496,10 @@ fn setup_player(mut commands: Commands, asset_server: Res<AssetServer>) {
                     .with_scale(Vec3::splat(PIXEL_SCALE)),
                 ..Default::default()
             },
-            sub_transform: PhysTransform {
+            phys_transform: PhysTransform {
                 translation: Vec3::ZERO,
             },
+            phys_offset: PhysOffset(Vec2::ZERO),
             speed: Speed(Speed::RUN),
             walkbox: Walkbox(Rect::default()),
             // --- New animation system
@@ -540,7 +531,8 @@ struct PlayerBundle {
     identity: Player,
     sprite_sheet: SpriteSheetBundle,
 
-    sub_transform: PhysTransform,
+    phys_transform: PhysTransform,
+    phys_offset: PhysOffset,
     speed: Speed,
     walkbox: Walkbox,
 
