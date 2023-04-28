@@ -1,6 +1,6 @@
 use crate::{
-    AbsBBox, DebugSettings, Motion, MotionKind, MotionResult, PhysicsSpaceOffset, Player, Solid,
-    SubTransform, Walkbox,
+    AbsBBox, DebugSettings, Motion, MotionKind, MotionResult, PhysOffset, PhysTransform, Player,
+    Solid, Walkbox,
 };
 use bevy::prelude::*;
 use bevy_spatial::{RTreeAccess2D, SpatialAccess};
@@ -9,7 +9,7 @@ type SolidsTree = RTreeAccess2D<Solid>;
 const SOLID_SCANNING_DISTANCE: f32 = 64.0;
 
 pub(crate) fn move_continuous_no_collision(
-    mut mover_q: Query<(&mut SubTransform, &mut Motion)>,
+    mut mover_q: Query<(&mut PhysTransform, &mut Motion)>,
     time: Res<Time>,
     debug_settings: Res<DebugSettings>,
 ) {
@@ -31,8 +31,8 @@ pub(crate) fn move_continuous_no_collision(
 }
 
 pub(crate) fn move_continuous_ray_test(
-    mut mover_q: Query<(&mut SubTransform, &mut Motion, &Walkbox)>,
-    solids_q: Query<(&Walkbox, &Transform, &PhysicsSpaceOffset), With<Solid>>,
+    mut mover_q: Query<(&mut PhysTransform, &mut Motion, &Walkbox)>,
+    solids_q: Query<(&Walkbox, &Transform, &PhysOffset), With<Solid>>,
     solids_tree: Res<SolidsTree>,
     time: Res<Time>,
     debug_settings: Res<DebugSettings>,
@@ -118,8 +118,8 @@ pub(crate) fn move_continuous_ray_test(
 
 /// This version is willing to move by fractional pixels, and ignores movement.remainder.
 pub(crate) fn move_continuous_faceplant(
-    mut mover_q: Query<(&mut SubTransform, &mut Motion, &Walkbox)>,
-    solids_q: Query<(&Walkbox, &Transform, &PhysicsSpaceOffset), With<Solid>>,
+    mut mover_q: Query<(&mut PhysTransform, &mut Motion, &Walkbox)>,
+    solids_q: Query<(&Walkbox, &Transform, &PhysOffset), With<Solid>>,
     solids_tree: Res<SolidsTree>,
     time: Res<Time>,
     debug_settings: Res<DebugSettings>,
@@ -193,7 +193,7 @@ pub(crate) fn move_continuous_faceplant(
 /// Shared system for Moving Crap Around. Consumes a planned movement from
 /// Motion component, updates direction on same as needed, writes result to...
 pub(crate) fn move_whole_pixel(
-    mut mover_q: Query<(&mut SubTransform, &mut Motion, &Walkbox), With<Player>>,
+    mut mover_q: Query<(&mut PhysTransform, &mut Motion, &Walkbox), With<Player>>,
     solids_q: Query<(&GlobalTransform, &Walkbox), With<Solid>>,
     time: Res<Time>,
     debug_settings: Res<DebugSettings>,
