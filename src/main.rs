@@ -34,6 +34,7 @@ mod movement;
 mod phys_space;
 mod player_states;
 mod render;
+mod space_lookup;
 mod util_countup_timer;
 
 const PIXEL_SCALE: f32 = 1.0;
