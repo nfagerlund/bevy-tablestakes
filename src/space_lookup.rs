@@ -12,6 +12,24 @@ pub struct EntityLoc {
     pub entity: Entity,
 }
 
+// Lil from/into helpers for easy construction
+impl From<(Vec2, Entity)> for EntityLoc {
+    fn from(value: (Vec2, Entity)) -> Self {
+        EntityLoc {
+            loc: value.0,
+            entity: value.1,
+        }
+    }
+}
+impl From<(Entity, Vec2)> for EntityLoc {
+    fn from(value: (Entity, Vec2)) -> Self {
+        EntityLoc {
+            loc: value.1,
+            entity: value.0,
+        }
+    }
+}
+
 // Like in bevy_spatial, we're only comparing entity identity.
 impl PartialEq for EntityLoc {
     fn eq(&self, other: &Self) -> bool {
@@ -101,6 +119,45 @@ impl<MarkComp> RstarAccess<MarkComp> {
             .locate_within_distance([loc.x, loc.y], distance.powi(2))
             .map(|e| (e.loc, e.entity))
             .collect::<Vec<(Vec2, Entity)>>();
+    }
+
+    /// Recreates the tree with the provided entity locations/coordinates.
+    ///
+    /// Only use if manually updating, the plugin will overwrite changes.
+    fn recreate(&mut self, all: Vec<(Vec2, Entity)>) {
+        let _span_d = info_span!("collect-data").entered();
+        let data: Vec<EntityLoc> = all.iter().map(|e| (*e).into()).collect();
+        _span_d.exit();
+        let _span = info_span!("recreate").entered();
+        let tree: RTree<EntityLoc, DefaultParams> = RTree::bulk_load_with_params(data);
+        self.tree = tree;
+    }
+
+    /// Adds a point to the tree.
+    ///
+    /// Only use if manually updating, the plugin will overwrite changes.
+    fn add_point(&mut self, point: (Vec2, Entity)) {
+        self.tree.insert(point.into())
+    }
+
+    /// Removes a point from the tree.
+    ///
+    /// Only use if manually updating, the plugin will overwrite changes.
+    fn remove_point(&mut self, point: (Vec2, Entity)) -> bool {
+        self.tree.remove(&point.into()).is_some()
+    }
+
+    /// Removed a point from the tree by its entity.
+    ///
+    /// Only use if manually updating, the plugin will overwrite changes.
+    fn remove_entity(&mut self, entity: Entity) -> bool {
+        let point = EntityLoc::from((entity, Vec2::ZERO));
+        self.tree.remove(&point).is_some()
+    }
+
+    /// Size of the tree
+    fn size(&self) -> usize {
+        self.tree.size()
     }
 }
 
