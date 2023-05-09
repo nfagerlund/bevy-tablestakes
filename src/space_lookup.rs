@@ -6,7 +6,10 @@ use std::marker::PhantomData;
 use bevy::prelude::*;
 use rstar::{DefaultParams, PointDistance, RTree, RTreeObject, RTreeParams, AABB};
 
-/// A little Entity + position wrapper for storing in an r* tree.
+/// A little Entity + position wrapper for storing in an r* tree. So the idea
+/// here is, the rtree gets a nice well-defined type with legible impls of stuff
+/// to hold onto, but the interface we expose to gameplay bevy systems is plain
+/// Vec2s, Entities, and tuples of same.
 pub struct EntityLoc {
     pub loc: Vec2,
     pub entity: Entity,
@@ -52,6 +55,7 @@ impl PointDistance for EntityLoc {
         Vec2::from_slice(point).distance_squared(self.loc)
     }
 }
+// Question: would anything be nicer if I implemented Point for Vec2?
 
 // Ok, so we need to be generic over the marker component, so I can have multiple instances.
 struct RstarPlugin<MarkComp> {
@@ -82,11 +86,16 @@ struct RstarAccess<MarkComp> {
     component_type: PhantomData<MarkComp>,
     /// The underlying RTree struct.
     pub tree: RTree<EntityLoc, DefaultParams>,
-    /// The amount of entities which moved per frame after which the tree is fully recreated instead of updated.
-    pub recreate_after: usize,
-    /// The distance after which a entity is updated in the tree
-    pub min_moved: f32,
 }
+
+// These consts were members of the plugin in bevy_spatial, but I don't need to be generic like that.
+
+// The amount of entities which moved per frame after which the tree is fully recreated instead of updated.
+// Default from bevy_spatial: 100.
+const RECREATE_AFTER: usize = 100;
+// The distance after which a entity is updated in the tree
+// Default from bevy_spatial: 1.0.
+const MIN_MOVED: f32 = 1.0;
 
 // Mostly lifted directly from bevy_spatial! (And mostly just delegating to the rstar crate.)
 impl<MarkComp> RstarAccess<MarkComp> {
