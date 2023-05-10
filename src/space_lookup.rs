@@ -233,3 +233,14 @@ pub fn add_added<MarkComp>(
         update.exit();
     }
 }
+
+fn delete<MarkComp>(
+    mut tree_access: ResMut<RstarAccess<MarkComp>>,
+    removed: RemovedComponents<MarkComp>,
+) where
+    MarkComp: Component,
+{
+    for entity in removed.iter() {
+        tree_access.remove_entity(entity);
+    }
+}
