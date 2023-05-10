@@ -3,6 +3,7 @@
 
 use std::marker::PhantomData;
 
+use bevy::ecs::query::WorldQuery;
 use bevy::prelude::*;
 use rstar::{DefaultParams, PointDistance, RTree, RTreeObject, RTreeParams, AABB};
 
@@ -114,6 +115,7 @@ const RECREATE_AFTER: usize = 100;
 // The distance after which a entity is updated in the tree
 // Default from bevy_spatial: 1.0.
 const MIN_MOVED: f32 = 1.0;
+const MIN_MOVED_SQUARED: f32 = MIN_MOVED * MIN_MOVED; // powi() and powf() aren't const 😹
 
 // Mostly lifted directly from bevy_spatial! (And mostly just delegating to the rstar crate.)
 impl<MarkComp> RstarAccess<MarkComp> {
@@ -230,6 +232,87 @@ pub fn add_added<MarkComp>(
                 .insert(MovementTracked::<MarkComp>::new(loc));
         }
 
+        update.exit();
+    }
+}
+
+// OK, this is really interesting, I hadn't seen a worldquery struct before
+// taking spatial apart. Seems occasionally convenient!
+#[derive(WorldQuery)]
+#[world_query(mutable)]
+pub struct TrackedQuery<'a, MarkComp>
+where
+    MarkComp: Sync + Send + 'static,
+{
+    pub entity: Entity,
+    pub transform: &'a PhysTransform,
+    pub tracker: &'static mut MovementTracked<MarkComp>,
+}
+
+fn update_moved<MarkComp>(
+    mut tree_access: ResMut<RstarAccess<MarkComp>>,
+    mut set: ParamSet<(
+        Query<TrackedQuery<MarkComp>, Changed<PhysTransform>>,
+        Query<TrackedQuery<MarkComp>>,
+    )>,
+) where
+    MarkComp: Component,
+{
+    // decide what we're doing by checking how much movement happened, then
+    // update tree and update trackers.
+    // (entity, lastpos, currentpos)
+    let move_dist = info_span!(
+        "compute_moved_significant_distance",
+        name = "compute_moved_significant_distance"
+    )
+    .entered();
+    let moved: Vec<(Entity, Vec2, Vec2)> = set
+        .p0()
+        .iter()
+        .filter_map(|tqi| {
+            let entity = tqi.entity;
+            let last = tqi.tracker.lastpos;
+            let cur = tqi.transform.translation.truncate();
+            if last.distance_squared(cur) >= MIN_MOVED_SQUARED {
+                Some((entity, last, cur))
+            } else {
+                None
+            }
+        })
+        .collect();
+    move_dist.exit();
+
+    // See, and unlike add_added, this compares to constant number instead of proportion of size 🤷🏽
+    if moved.len() >= RECREATE_AFTER {
+        let recreate = info_span!("recreate_with_all", name = "recreate_with_all").entered();
+        let all: Vec<(Vec2, Entity)> = set
+            .p1()
+            .iter_mut()
+            .map(|mut tqi| {
+                let cur = tqi.transform.translation.truncate();
+                // 1. update trackers
+                tqi.tracker.lastpos = cur;
+                // 0. finish map transform
+                (cur, tqi.entity)
+            })
+            .collect();
+        // 2. update tree
+        tree_access.recreate(all);
+        recreate.exit();
+    } else {
+        let update = info_span!("partial_update", name = "partial_update").entered();
+        let mut p1 = set.p1();
+        for (entity, last, cur) in moved {
+            let Ok(mut mut_tqi) = p1.get_mut(entity) else { continue };
+            // Hmm, conditional guard on point already being there... I think
+            // that only finds by entity, bc of EntityPos's PartialEq.
+            if tree_access.remove_point((last, entity)) {
+                // 1. update tree
+                tree_access.add_point((cur, entity));
+                // 2. update trackers
+                mut_tqi.tracker.lastpos = cur;
+            }
+        }
         update.exit();
     }
 }
