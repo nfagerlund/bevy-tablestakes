@@ -6,6 +6,8 @@ use std::marker::PhantomData;
 use bevy::prelude::*;
 use rstar::{DefaultParams, PointDistance, RTree, RTreeObject, RTreeParams, AABB};
 
+use crate::phys_space::PhysTransform;
+
 /// A little Entity + position wrapper for storing in an r* tree. So the idea
 /// here is, the rtree gets a nice well-defined type with legible impls of stuff
 /// to hold onto, but the interface we expose to gameplay bevy systems is plain
@@ -57,6 +59,22 @@ impl PointDistance for EntityLoc {
 }
 // Question: would anything be nicer if I implemented Point for Vec2?
 
+/// Internal component which tracks the last position at which the entity was updated in the tree.
+#[derive(Component)]
+pub struct MovementTracked<T> {
+    pub lastpos: Vec2,
+    pub component_type: PhantomData<T>,
+}
+
+impl<T> MovementTracked<T> {
+    pub fn new(last: Vec2) -> Self {
+        MovementTracked {
+            lastpos: last,
+            component_type: PhantomData,
+        }
+    }
+}
+
 // Ok, so we need to be generic over the marker component, so I can have multiple instances.
 struct RstarPlugin<MarkComp> {
     #[doc(hidden)]
@@ -81,7 +99,7 @@ where
 /// A resource for doing spatial queries from the set of entities that have some
 /// marker component on them.
 #[derive(Resource)]
-struct RstarAccess<MarkComp> {
+pub struct RstarAccess<MarkComp> {
     #[doc(hidden)]
     component_type: PhantomData<MarkComp>,
     /// The underlying RTree struct.
@@ -171,3 +189,47 @@ impl<MarkComp> RstarAccess<MarkComp> {
 }
 
 // Then we're gonna need the systems -- add_added, delete, and update_moved.
+
+pub fn add_added<MarkComp>(
+    mut tree_access: ResMut<RstarAccess<MarkComp>>,
+    mut commands: Commands,
+    all_query: Query<(Entity, &PhysTransform), With<MarkComp>>,
+    added_query: Query<(Entity, &PhysTransform), Added<MarkComp>>,
+) where
+    MarkComp: Component,
+{
+    let added: Vec<(Entity, &PhysTransform)> = added_query.iter().collect();
+    // Why re-create if over-half-size? unsure yet
+    if added.len() >= tree_access.size() / 2 {
+        let recreate = info_span!("recreate_with_all", name = "recreate_with_all").entered();
+        let all: Vec<(Vec2, Entity)> = all_query
+            .iter()
+            .map(|(entity, transform)| {
+                let loc = transform.translation.truncate();
+                // 1. add last-position component, while we're iterating anyway
+                commands
+                    .entity(entity)
+                    .insert(MovementTracked::<MarkComp>::new(loc));
+                // 0. finish map transform
+                (loc, entity)
+            })
+            .collect();
+
+        // 2. update tree
+        tree_access.recreate(all);
+        recreate.exit();
+    } else {
+        let update = info_span!("partial_update", name = "partial_update").entered();
+        for (entity, transform) in added {
+            let loc = transform.translation.truncate();
+            // 1. update tree
+            tree_access.add_point((loc, entity));
+            // 2. add last-position component
+            commands
+                .entity(entity)
+                .insert(MovementTracked::<MarkComp>::new(loc));
+        }
+
+        update.exit();
+    }
+}
