@@ -82,6 +82,14 @@ struct RstarPlugin<MarkComp> {
     component_type: PhantomData<MarkComp>,
 }
 
+impl<MarkComp> RstarPlugin<MarkComp> {
+    pub fn new() -> Self {
+        Self {
+            component_type: PhantomData,
+        }
+    }
+}
+
 // Need a plugin impl... fill this in later, bc it's the meat of it.
 impl<MarkComp> Plugin for RstarPlugin<MarkComp>
 where
