@@ -5,7 +5,7 @@ use std::marker::PhantomData;
 
 use bevy::ecs::query::WorldQuery;
 use bevy::prelude::*;
-use rstar::{DefaultParams, PointDistance, RTree, RTreeObject, RTreeParams, AABB};
+use rstar::{DefaultParams, PointDistance, RTree, RTreeObject, AABB};
 
 use crate::phys_space::PhysTransform;
 
@@ -83,11 +83,18 @@ struct RstarPlugin<MarkComp> {
 }
 
 // Need a plugin impl... fill this in later, bc it's the meat of it.
-impl<Marker> Plugin for RstarPlugin<Marker>
+impl<MarkComp> Plugin for RstarPlugin<MarkComp>
 where
-    Marker: Component + Send + Sync + 'static,
+    MarkComp: Component + Send + Sync + 'static,
 {
-    fn build(&self, app: &mut App) {}
+    fn build(&self, app: &mut App) {
+        let tree_access = RstarAccess::<MarkComp>::new();
+        app.insert_resource(tree_access)
+            .add_startup_system_to_stage(StartupStage::PostStartup, add_added::<MarkComp>)
+            .add_system_to_stage(CoreStage::PostUpdate, add_added::<MarkComp>)
+            .add_system_to_stage(CoreStage::PostUpdate, delete::<MarkComp>)
+            .add_system_to_stage(CoreStage::PostUpdate, update_moved::<MarkComp>);
+    }
 }
 
 // Also, need clone/copy/default, come back to that cuz it's easy
@@ -119,6 +126,14 @@ const MIN_MOVED_SQUARED: f32 = MIN_MOVED * MIN_MOVED; // powi() and powf() aren'
 
 // Mostly lifted directly from bevy_spatial! (And mostly just delegating to the rstar crate.)
 impl<MarkComp> RstarAccess<MarkComp> {
+    fn new() -> Self {
+        let tree: RTree<EntityLoc, DefaultParams> = RTree::new(); // don't need new_with_params
+        Self {
+            component_type: PhantomData,
+            tree,
+        }
+    }
+
     /// Get the nearest neighbour to a position.
     fn nearest_neighbour(&self, loc: Vec2) -> Option<(Vec2, Entity)> {
         let res = self.tree.nearest_neighbor(&[loc.x, loc.y]);
