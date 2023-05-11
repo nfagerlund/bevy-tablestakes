@@ -77,7 +77,7 @@ impl<T> MovementTracked<T> {
 }
 
 // Ok, so we need to be generic over the marker component, so I can have multiple instances.
-struct RstarPlugin<MarkComp> {
+pub struct RstarPlugin<MarkComp> {
     #[doc(hidden)]
     component_type: PhantomData<MarkComp>,
 }
@@ -143,7 +143,7 @@ impl<MarkComp> RstarAccess<MarkComp> {
     }
 
     /// Get the nearest neighbour to a position.
-    fn nearest_neighbour(&self, loc: Vec2) -> Option<(Vec2, Entity)> {
+    pub fn nearest_neighbour(&self, loc: Vec2) -> Option<(Vec2, Entity)> {
         let res = self.tree.nearest_neighbor(&[loc.x, loc.y]);
         res.map(|point| (point.loc, point.entity))
     }
@@ -151,7 +151,7 @@ impl<MarkComp> RstarAccess<MarkComp> {
     /// Get the `k` neighbours to `loc`
     ///
     /// If `loc` is the location of a tracked entity, you might want to skip the first.
-    fn k_nearest_neighbour(&self, loc: Vec2, k: usize) -> Vec<(Vec2, Entity)> {
+    pub fn k_nearest_neighbour(&self, loc: Vec2, k: usize) -> Vec<(Vec2, Entity)> {
         let _span = info_span!("k-nearest").entered();
 
         return self
@@ -163,7 +163,7 @@ impl<MarkComp> RstarAccess<MarkComp> {
     }
 
     /// Get all entities within a certain distance (radius) of `loc`
-    fn within_distance(&self, loc: Vec2, distance: f32) -> Vec<(Vec2, Entity)> {
+    pub fn within_distance(&self, loc: Vec2, distance: f32) -> Vec<(Vec2, Entity)> {
         let _span = info_span!("within-distance").entered();
 
         return self
@@ -176,7 +176,7 @@ impl<MarkComp> RstarAccess<MarkComp> {
     /// Recreates the tree with the provided entity locations/coordinates.
     ///
     /// Only use if manually updating, the plugin will overwrite changes.
-    fn recreate(&mut self, all: Vec<(Vec2, Entity)>) {
+    pub fn recreate(&mut self, all: Vec<(Vec2, Entity)>) {
         let _span_d = info_span!("collect-data").entered();
         let data: Vec<EntityLoc> = all.iter().map(|e| (*e).into()).collect();
         _span_d.exit();
@@ -188,34 +188,34 @@ impl<MarkComp> RstarAccess<MarkComp> {
     /// Adds a point to the tree.
     ///
     /// Only use if manually updating, the plugin will overwrite changes.
-    fn add_point(&mut self, point: (Vec2, Entity)) {
+    pub fn add_point(&mut self, point: (Vec2, Entity)) {
         self.tree.insert(point.into())
     }
 
     /// Removes a point from the tree.
     ///
     /// Only use if manually updating, the plugin will overwrite changes.
-    fn remove_point(&mut self, point: (Vec2, Entity)) -> bool {
+    pub fn remove_point(&mut self, point: (Vec2, Entity)) -> bool {
         self.tree.remove(&point.into()).is_some()
     }
 
     /// Removed a point from the tree by its entity.
     ///
     /// Only use if manually updating, the plugin will overwrite changes.
-    fn remove_entity(&mut self, entity: Entity) -> bool {
+    pub fn remove_entity(&mut self, entity: Entity) -> bool {
         let point = EntityLoc::from((entity, Vec2::ZERO));
         self.tree.remove(&point).is_some()
     }
 
     /// Size of the tree
-    fn size(&self) -> usize {
+    pub fn size(&self) -> usize {
         self.tree.size()
     }
 }
 
 // Then we're gonna need the systems -- add_added, delete, and update_moved.
 
-pub fn add_added<MarkComp>(
+fn add_added<MarkComp>(
     mut tree_access: ResMut<RstarAccess<MarkComp>>,
     mut commands: Commands,
     all_query: Query<(Entity, &PhysTransform), With<MarkComp>>,

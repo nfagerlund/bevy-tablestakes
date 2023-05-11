@@ -1,10 +1,12 @@
 use crate::{
-    AbsBBox, DebugSettings, Motion, MotionKind, MotionResult, PhysTransform, Solid, Walkbox,
+    space_lookup::RstarAccess, AbsBBox, DebugSettings, Motion, MotionKind, MotionResult,
+    PhysTransform, Solid, Walkbox,
 };
 use bevy::prelude::*;
-use bevy_spatial::{RTreeAccess2D, SpatialAccess};
+// use bevy_spatial::{RTreeAccess2D, SpatialAccess};
 
-type SolidsTree = RTreeAccess2D<Solid>;
+// type SolidsTree = RTreeAccess2D<Solid>;
+type SolidsTree = RstarAccess<Solid>;
 const SOLID_SCANNING_DISTANCE: f32 = 64.0;
 
 pub(crate) fn move_continuous_no_collision(
@@ -58,7 +60,7 @@ pub(crate) fn move_continuous_ray_test(
 
         // search for nearby solids
         let candidate_solid_locs =
-            solids_tree.within_distance(transform.translation, SOLID_SCANNING_DISTANCE);
+            solids_tree.within_distance(transform.translation.truncate(), SOLID_SCANNING_DISTANCE);
         let mut collided_solids: Vec<(AbsBBox, f32)> = candidate_solid_locs
             .iter()
             .filter_map(|&(_loc, ent)| {
@@ -135,11 +137,11 @@ pub(crate) fn move_continuous_faceplant(
     // *per-player-entity,* instead of outside the loop.
 
     let collect_sorted_solids =
-        |player_loc: Vec2, mut candidate_locs: Vec<(Vec3, Entity)>| -> Vec<AbsBBox> {
+        |player_loc: Vec2, mut candidate_locs: Vec<(Vec2, Entity)>| -> Vec<AbsBBox> {
             // Claiming ownership of that input vec bc I'm sorting.
             candidate_locs.sort_by(|a, b| {
-                let a_dist = player_loc.distance_squared(a.0.truncate());
-                let b_dist = player_loc.distance_squared(b.0.truncate());
+                let a_dist = player_loc.distance_squared(a.0);
+                let b_dist = player_loc.distance_squared(b.0);
                 a_dist.total_cmp(&b_dist)
             });
             candidate_locs
@@ -168,7 +170,7 @@ pub(crate) fn move_continuous_faceplant(
 
         // search for nearby solids
         let candidate_solid_locs =
-            solids_tree.within_distance(transform.translation, SOLID_SCANNING_DISTANCE);
+            solids_tree.within_distance(transform.translation.truncate(), SOLID_SCANNING_DISTANCE);
         let solids = collect_sorted_solids(transform.translation.truncate(), candidate_solid_locs);
 
         // check for collisions and clamp the movement plan if we hit something
