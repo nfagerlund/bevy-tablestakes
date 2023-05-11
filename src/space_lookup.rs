@@ -133,6 +133,7 @@ const MIN_MOVED: f32 = 1.0;
 const MIN_MOVED_SQUARED: f32 = MIN_MOVED * MIN_MOVED; // powi() and powf() aren't const 😹
 
 // Mostly lifted directly from bevy_spatial! (And mostly just delegating to the rstar crate.)
+#[allow(dead_code)]
 impl<MarkComp> RstarAccess<MarkComp> {
     fn new() -> Self {
         let tree: RTree<EntityLoc, DefaultParams> = RTree::new(); // don't need new_with_params
