@@ -1,15 +1,14 @@
 use crate::{
-    AbsBBox, DebugSettings, Motion, MotionKind, MotionResult, PhysicsSpaceOffset, Player, Solid,
-    SubTransform, Walkbox,
+    space_lookup::RstarAccess, AbsBBox, DebugSettings, Motion, MotionKind, MotionResult,
+    PhysTransform, Solid, Walkbox,
 };
 use bevy::prelude::*;
-use bevy_spatial::{RTreeAccess2D, SpatialAccess};
 
-type SolidsTree = RTreeAccess2D<Solid>;
+type SolidsTree = RstarAccess<Solid>;
 const SOLID_SCANNING_DISTANCE: f32 = 64.0;
 
 pub(crate) fn move_continuous_no_collision(
-    mut mover_q: Query<(&mut SubTransform, &mut Motion)>,
+    mut mover_q: Query<(&mut PhysTransform, &mut Motion)>,
     time: Res<Time>,
     debug_settings: Res<DebugSettings>,
 ) {
@@ -31,8 +30,8 @@ pub(crate) fn move_continuous_no_collision(
 }
 
 pub(crate) fn move_continuous_ray_test(
-    mut mover_q: Query<(&mut SubTransform, &mut Motion, &Walkbox)>,
-    solids_q: Query<(&Walkbox, &Transform, &PhysicsSpaceOffset), With<Solid>>,
+    mut mover_q: Query<(&mut PhysTransform, &mut Motion, &Walkbox), Without<Solid>>,
+    solids_q: Query<(&Walkbox, &PhysTransform), With<Solid>>,
     solids_tree: Res<SolidsTree>,
     time: Res<Time>,
     debug_settings: Res<DebugSettings>,
@@ -59,13 +58,13 @@ pub(crate) fn move_continuous_ray_test(
 
         // search for nearby solids
         let candidate_solid_locs =
-            solids_tree.within_distance(transform.translation, SOLID_SCANNING_DISTANCE);
+            solids_tree.within_distance(transform.translation.truncate(), SOLID_SCANNING_DISTANCE);
         let mut collided_solids: Vec<(AbsBBox, f32)> = candidate_solid_locs
             .iter()
             .filter_map(|&(_loc, ent)| {
                 // UNWRAP: is ok as long as tree doesn't have stale entities.
-                let (s_walkbox, s_transform, s_offset) = solids_q.get(ent).unwrap();
-                let s_origin = s_transform.translation.truncate() + s_offset.0;
+                let (s_walkbox, s_transform) = solids_q.get(ent).unwrap();
+                let s_origin = s_transform.translation.truncate();
                 let solid = AbsBBox::from_rect(s_walkbox.0, s_origin);
                 // Extend the solid's bounds by the opposite spans of the
                 // player's walkbox, so a simple ray test will detect projected
@@ -118,8 +117,8 @@ pub(crate) fn move_continuous_ray_test(
 
 /// This version is willing to move by fractional pixels, and ignores movement.remainder.
 pub(crate) fn move_continuous_faceplant(
-    mut mover_q: Query<(&mut SubTransform, &mut Motion, &Walkbox)>,
-    solids_q: Query<(&Walkbox, &Transform, &PhysicsSpaceOffset), With<Solid>>,
+    mut mover_q: Query<(&mut PhysTransform, &mut Motion, &Walkbox), Without<Solid>>,
+    solids_q: Query<(&Walkbox, &PhysTransform), With<Solid>>,
     solids_tree: Res<SolidsTree>,
     time: Res<Time>,
     debug_settings: Res<DebugSettings>,
@@ -136,19 +135,19 @@ pub(crate) fn move_continuous_faceplant(
     // *per-player-entity,* instead of outside the loop.
 
     let collect_sorted_solids =
-        |player_loc: Vec2, mut candidate_locs: Vec<(Vec3, Entity)>| -> Vec<AbsBBox> {
+        |player_loc: Vec2, mut candidate_locs: Vec<(Vec2, Entity)>| -> Vec<AbsBBox> {
             // Claiming ownership of that input vec bc I'm sorting.
             candidate_locs.sort_by(|a, b| {
-                let a_dist = player_loc.distance_squared(a.0.truncate());
-                let b_dist = player_loc.distance_squared(b.0.truncate());
+                let a_dist = player_loc.distance_squared(a.0);
+                let b_dist = player_loc.distance_squared(b.0);
                 a_dist.total_cmp(&b_dist)
             });
             candidate_locs
                 .iter()
                 .map(|ent_loc| {
                     // unwrap is ok as long as tree doesn't have stale entities.
-                    let (walkbox, transform, offset) = solids_q.get(ent_loc.1).unwrap();
-                    let origin = transform.translation.truncate() + offset.0;
+                    let (walkbox, transform) = solids_q.get(ent_loc.1).unwrap();
+                    let origin = transform.translation.truncate();
                     AbsBBox::from_rect(walkbox.0, origin)
                 })
                 .collect()
@@ -169,7 +168,7 @@ pub(crate) fn move_continuous_faceplant(
 
         // search for nearby solids
         let candidate_solid_locs =
-            solids_tree.within_distance(transform.translation, SOLID_SCANNING_DISTANCE);
+            solids_tree.within_distance(transform.translation.truncate(), SOLID_SCANNING_DISTANCE);
         let solids = collect_sorted_solids(transform.translation.truncate(), candidate_solid_locs);
 
         // check for collisions and clamp the movement plan if we hit something
@@ -193,8 +192,8 @@ pub(crate) fn move_continuous_faceplant(
 /// Shared system for Moving Crap Around. Consumes a planned movement from
 /// Motion component, updates direction on same as needed, writes result to...
 pub(crate) fn move_whole_pixel(
-    mut mover_q: Query<(&mut SubTransform, &mut Motion, &Walkbox), With<Player>>,
-    solids_q: Query<(&GlobalTransform, &Walkbox), With<Solid>>,
+    mut mover_q: Query<(&mut PhysTransform, &mut Motion, &Walkbox), Without<Solid>>,
+    solids_q: Query<(&PhysTransform, &Walkbox), With<Solid>>,
     time: Res<Time>,
     debug_settings: Res<DebugSettings>,
 ) {
@@ -204,7 +203,7 @@ pub(crate) fn move_whole_pixel(
 
     let solids: Vec<AbsBBox> = solids_q
         .iter()
-        .map(|(global_transform, walkbox)| {
+        .map(|(transform, walkbox)| {
             // TODO: This can't handle solids that move, because GlobalTransform
             // lags by one frame. I don't have a solution for this yet! Treat them
             // separately? Manually sync frames of reference for everything?
@@ -213,7 +212,7 @@ pub(crate) fn move_whole_pixel(
             // because as of bevy_ecs_ldtk 0.5 / bevy_ecs_tilemap 0.8+, tile
             // entities are offset from (0,0) by a half a tile in both axes in order
             // to make the bottom left corner of the first tile render at (0,0).
-            let origin = global_transform.translation().truncate();
+            let origin = transform.translation.truncate();
             AbsBBox::from_rect(walkbox.0, origin)
         })
         .collect();

@@ -5,7 +5,9 @@ use crate::collision::*;
 use crate::compass::*;
 use crate::input::*;
 use crate::movement::*;
+use crate::phys_space::*;
 use crate::render::*;
+use crate::space_lookup::RstarPlugin;
 use bevy::{
     input::InputSystem,
     log::LogPlugin,
@@ -18,7 +20,6 @@ use bevy_ecs_ldtk::prelude::*;
 use bevy_inspector_egui::{
     Inspectable, InspectorPlugin, RegisterInspectable, WorldInspectorPlugin,
 };
-use bevy_spatial::RTreePlugin2D;
 use std::collections::HashMap;
 use std::io::Write;
 
@@ -30,8 +31,10 @@ mod hellow;
 mod input;
 mod junk;
 mod movement;
+mod phys_space;
 mod player_states;
 mod render;
+mod space_lookup;
 mod util_countup_timer;
 
 const PIXEL_SCALE: f32 = 1.0;
@@ -77,12 +80,12 @@ fn main() {
         .insert_resource(DebugSettings::default())
         // INSPECTOR STUFF
         .add_plugin(WorldInspectorPlugin::new())
-        .register_inspectable::<SubTransform>()
+        .register_inspectable::<PhysTransform>()
+        .register_inspectable::<PhysOffset>()
         .register_inspectable::<Speed>()
         .register_inspectable::<Walkbox>()
         .register_inspectable::<Hitbox>()
         .register_inspectable::<TopDownMatter>()
-        .register_inspectable::<PhysicsSpaceOffset>()
         .add_plugin(InspectorPlugin::<DebugSettings>::new())
         .add_system(debug_walkboxes_system)
         // LDTK STUFF
@@ -90,7 +93,7 @@ fn main() {
         .insert_resource(LevelSelection::Index(1))
         .register_ldtk_int_cell_for_layer::<Wall>("StructureKind", 1)
         // SPATIAL PARTITIONING STUFF
-        .add_plugin(RTreePlugin2D::<Solid> { ..default() })
+        .add_plugin(RstarPlugin::<Solid>::new())
         // CAMERA
         .add_startup_system(setup_camera)
         // INPUT STUFF
@@ -154,7 +157,9 @@ fn main() {
                 .with_system(camera_locked_system)
                 .with_system(camera_lerp_system)
         )
-        .add_system(snap_pixel_positions_system.after(CameraMovers))
+        // PHYSICS SPACE STUFF
+        .add_system(add_new_phys_transforms.before(MovePlanners))
+        .add_system(sync_phys_transforms.after(CameraMovers))
         // OK BYE!!!
         ;
 
@@ -337,7 +342,7 @@ fn plan_move(
         &mut PlayerStateMachine,
         &mut Motion,
         &Speed,
-        &mut SubTransform,
+        &mut PhysTransform,
     )>,
     time: Res<Time>,
     inputs: Res<CurrentInputs>,
@@ -396,8 +401,8 @@ fn camera_lerp_system(
     // time: Res<StaticTime>,
     // time: Res<SmoothedTime>,
     mut params: ParamSet<(
-        Query<&SubTransform, With<Player>>,
-        Query<&mut SubTransform, With<Camera>>,
+        Query<&PhysTransform, With<Player>>,
+        Query<&mut PhysTransform, With<Camera>>,
     )>,
     debug_settings: Res<DebugSettings>,
 ) {
@@ -426,8 +431,8 @@ fn camera_lerp_system(
 
 fn camera_locked_system(
     mut params: ParamSet<(
-        Query<&SubTransform, With<Player>>,
-        Query<&mut SubTransform, With<Camera>>,
+        Query<&PhysTransform, With<Player>>,
+        Query<&mut PhysTransform, With<Camera>>,
     )>,
     debug_settings: Res<DebugSettings>,
 ) {
@@ -440,19 +445,6 @@ fn camera_locked_system(
     let mut camera_tf = camera_q.single_mut();
     camera_tf.translation.x = player_pos.x;
     camera_tf.translation.y = player_pos.y;
-}
-
-// This no longer does anything, because we're now handling the sub-pixel stuff
-// in the movement function -- though that's all still up in the air. Anyway,
-// point being we always manipulate this alternate transform, and then this is
-// the system that syncs it to real transform before the sync to global
-// transform happens.
-fn snap_pixel_positions_system(mut query: Query<(&SubTransform, &mut Transform)>) {
-    // let global_scale = Vec3::new(PIXEL_SCALE, PIXEL_SCALE, 1.0);
-    for (sub_tf, mut pixel_tf) in query.iter_mut() {
-        // pixel_tf.translation = (global_scale * sub_tf.translation).floor();
-        pixel_tf.translation = sub_tf.translation;
-    }
 }
 
 fn setup_level(mut commands: Commands, asset_server: Res<AssetServer>) {
@@ -471,7 +463,8 @@ fn setup_camera(mut commands: Commands) {
     camera_bundle.projection.scale = 1.0 / 3.0;
     commands.spawn((
         camera_bundle,
-        SubTransform {
+        PhysOffset(Vec2::ZERO),
+        PhysTransform {
             translation: Vec3::new(0.0, 0.0, 999.0),
         },
         // ^^ hack: I looked up the Z coord on new_2D and fudged it so we won't accidentally round it to 1000.
@@ -504,9 +497,10 @@ fn setup_player(mut commands: Commands, asset_server: Res<AssetServer>) {
                     .with_scale(Vec3::splat(PIXEL_SCALE)),
                 ..Default::default()
             },
-            sub_transform: SubTransform {
+            phys_transform: PhysTransform {
                 translation: Vec3::ZERO,
             },
+            phys_offset: PhysOffset(Vec2::ZERO),
             speed: Speed(Speed::RUN),
             walkbox: Walkbox(Rect::default()),
             // --- New animation system
@@ -538,7 +532,8 @@ struct PlayerBundle {
     identity: Player,
     sprite_sheet: SpriteSheetBundle,
 
-    sub_transform: SubTransform,
+    phys_transform: PhysTransform,
+    phys_offset: PhysOffset,
     speed: Speed,
     walkbox: Walkbox,
 
@@ -672,10 +667,4 @@ impl Motion {
 pub struct MotionResult {
     pub collided: bool,
     pub new_location: Vec2,
-}
-
-/// Additional transform component for things whose movements should be synced to hard pixel boundaries.
-#[derive(Component, Inspectable)]
-pub struct SubTransform {
-    translation: Vec3,
 }
