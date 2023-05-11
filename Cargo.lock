@@ -292,7 +292,6 @@ dependencies = [
  "bevy_ecs_ldtk",
  "bevy_ecs_tilemap",
  "bevy_mod_debugdump",
- "bevy_spatial",
  "image 0.23.14",
  "rstar",
 ]
@@ -815,16 +814,6 @@ dependencies = [
  "serde",
  "thiserror",
  "uuid",
-]
-
-[[package]]
-name = "bevy_spatial"
-version = "0.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "12c8289642d619d36f54c7e6a815bdee61baaf31b94646aaf5ccd5374a61d22d"
-dependencies = [
- "bevy",
- "rstar",
 ]
 
 [[package]]

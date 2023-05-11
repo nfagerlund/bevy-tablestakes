@@ -3,9 +3,7 @@ use crate::{
     PhysTransform, Solid, Walkbox,
 };
 use bevy::prelude::*;
-// use bevy_spatial::{RTreeAccess2D, SpatialAccess};
 
-// type SolidsTree = RTreeAccess2D<Solid>;
 type SolidsTree = RstarAccess<Solid>;
 const SOLID_SCANNING_DISTANCE: f32 = 64.0;
 

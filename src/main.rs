@@ -20,7 +20,6 @@ use bevy_ecs_ldtk::prelude::*;
 use bevy_inspector_egui::{
     Inspectable, InspectorPlugin, RegisterInspectable, WorldInspectorPlugin,
 };
-// use bevy_spatial::RTreePlugin2D;
 use std::collections::HashMap;
 use std::io::Write;
 
@@ -94,7 +93,6 @@ fn main() {
         .insert_resource(LevelSelection::Index(1))
         .register_ldtk_int_cell_for_layer::<Wall>("StructureKind", 1)
         // SPATIAL PARTITIONING STUFF
-        // .add_plugin(RTreePlugin2D::<Solid> { ..default() })
         .add_plugin(RstarPlugin::<Solid>::new())
         // CAMERA
         .add_startup_system(setup_camera)
