@@ -18,7 +18,8 @@ use bevy::{
 };
 use bevy_ecs_ldtk::prelude::*;
 use bevy_inspector_egui::{
-    Inspectable, InspectorPlugin, RegisterInspectable, WorldInspectorPlugin,
+    prelude,
+    quick::{ResourceInspectorPlugin, WorldInspectorPlugin},
 };
 use std::collections::HashMap;
 use std::io::Write;
@@ -88,13 +89,13 @@ fn main() {
         .insert_resource(DebugSettings::default())
         // INSPECTOR STUFF
         .add_plugin(WorldInspectorPlugin::new())
-        .register_inspectable::<PhysTransform>()
-        .register_inspectable::<PhysOffset>()
-        .register_inspectable::<Speed>()
-        .register_inspectable::<Walkbox>()
-        .register_inspectable::<Hitbox>()
-        .register_inspectable::<TopDownMatter>()
-        .add_plugin(InspectorPlugin::<DebugSettings>::new())
+        .register_type::<PhysTransform>()
+        .register_type::<PhysOffset>()
+        .register_type::<Speed>()
+        .register_type::<Walkbox>()
+        .register_type::<Hitbox>()
+        .register_type::<TopDownMatter>()
+        .add_plugin(ResourceInspectorPlugin::<DebugSettings>::new())
         .add_system(debug_walkboxes_system)
         // LDTK STUFF
         .add_startup_system(setup_level)
@@ -190,14 +191,14 @@ fn main() {
     app.run();
 }
 
-#[derive(Resource, Default, Reflect, Inspectable, PartialEq, Eq)]
+#[derive(Resource, Default, Reflect, Reflect, PartialEq, Eq)]
 pub struct DebugSettings {
     debug_walkboxes: bool,
     motion_kind: MotionKind,
     camera_kind: CameraKind,
 }
 
-#[derive(Resource, Reflect, Inspectable, Default, PartialEq, Eq)]
+#[derive(Resource, Reflect, Reflect, Default, PartialEq, Eq)]
 enum MotionKind {
     NoCollision,
     Faceplant,
@@ -206,7 +207,7 @@ enum MotionKind {
     WholePixel,
 }
 
-#[derive(Resource, Reflect, Inspectable, Default, PartialEq, Eq)]
+#[derive(Resource, Reflect, Reflect, Default, PartialEq, Eq)]
 enum CameraKind {
     #[default]
     Locked,
@@ -634,7 +635,7 @@ pub struct LdtkWorld;
 pub struct Player;
 
 /// Speed in pixels... per... second?
-#[derive(Component, Inspectable)]
+#[derive(Component, Reflect)]
 pub struct Speed(f32);
 impl Speed {
     const RUN: f32 = 120.0;

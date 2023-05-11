@@ -2,13 +2,12 @@ use crate::char_animation::*;
 use bevy::prelude::*;
 use bevy::render::Extract;
 use bevy::sprite::ExtractedSprites;
-use bevy_inspector_egui::Inspectable;
 
 const DEPTH_DUDES: f32 = 4.0;
 const DEPTH_SHADOWS: f32 = DEPTH_DUDES - 0.1;
 
 /// Some spatial details about an entity.
-#[derive(Component, Inspectable)]
+#[derive(Component, Reflect)]
 pub struct TopDownMatter {
     /// For now, depth tracks the absolute, global draw-depth coordinate for
     /// anything it's placed on. I'm not doing any Y-sorting yet. An extract

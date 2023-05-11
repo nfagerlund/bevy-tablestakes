@@ -25,16 +25,15 @@
 //!   in this module.
 
 use bevy::prelude::*;
-use bevy_inspector_egui::Inspectable;
 
 /// Global offset from 0,0 for entities that particpate in physical interactions.
-#[derive(Component, Deref, DerefMut, Inspectable)]
+#[derive(Component, Deref, DerefMut, Reflect)]
 pub struct PhysOffset(pub Vec2);
 
 /// Isolated transform component for things that participate in physical
 /// interactions. (We're not supporting rotation or scale, so it's just
 /// translation for now.)
-#[derive(Component, Inspectable)]
+#[derive(Component, Reflect)]
 pub struct PhysTransform {
     pub translation: Vec3,
 }
