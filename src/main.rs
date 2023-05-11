@@ -42,14 +42,22 @@ const PIXEL_SCALE: f32 = 1.0;
 fn main() {
     let configured_default_plugins = DefaultPlugins
         .set(WindowPlugin {
-            window: WindowDescriptor {
+            primary_window: Some(Window {
+                cursor: bevy::window::Cursor {
+                    icon: bevy::window::CursorIcon::Default,
+                    visible: true,
+                    grab_mode: bevy::window::CursorGrabMode::None,
+                    hit_test: true,
+                    ..default() // need default in constructor bc private fields
+                },
                 present_mode: bevy::window::PresentMode::Fifo,
-                cursor_visible: true,
-                // mode: bevy::window::WindowMode::BorderlessFullscreen,
-                // width: 1920.0,
-                // height: 1080.0,
+                mode: bevy::window::WindowMode::Windowed,
+                position: bevy::window::WindowPosition::Automatic,
+                resolution: bevy::window::WindowResolution::new(1280.0, 720.0),
+                title: String::from("Kittyzone"),
+                resizable: true,
                 ..default()
-            },
+            }),
             ..default()
         })
         .set(AssetPlugin {
