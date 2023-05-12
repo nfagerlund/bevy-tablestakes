@@ -188,14 +188,14 @@ fn main() {
     app.run();
 }
 
-#[derive(Resource, Default, Reflect, Reflect, PartialEq, Eq)]
+#[derive(Resource, Default, Reflect, PartialEq, Eq)]
 pub struct DebugSettings {
     debug_walkboxes: bool,
     motion_kind: MotionKind,
     camera_kind: CameraKind,
 }
 
-#[derive(Resource, Reflect, Reflect, Default, PartialEq, Eq)]
+#[derive(Resource, Reflect, Default, PartialEq, Eq)]
 enum MotionKind {
     NoCollision,
     Faceplant,
@@ -204,7 +204,7 @@ enum MotionKind {
     WholePixel,
 }
 
-#[derive(Resource, Reflect, Reflect, Default, PartialEq, Eq)]
+#[derive(Resource, Reflect, Default, PartialEq, Eq)]
 enum CameraKind {
     #[default]
     Locked,
