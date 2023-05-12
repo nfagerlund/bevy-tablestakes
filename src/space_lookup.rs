@@ -98,10 +98,16 @@ where
     fn build(&self, app: &mut App) {
         let tree_access = RstarAccess::<MarkComp>::new();
         app.insert_resource(tree_access)
-            .add_startup_system_to_stage(StartupStage::PostStartup, add_added::<MarkComp>)
-            .add_system_to_stage(CoreStage::PostUpdate, add_added::<MarkComp>)
-            .add_system_to_stage(CoreStage::PostUpdate, delete::<MarkComp>)
-            .add_system_to_stage(CoreStage::PostUpdate, update_moved::<MarkComp>);
+            .add_startup_system(add_added::<MarkComp>.in_base_set(StartupSet::PostStartup))
+            .add_systems(
+                (
+                    delete::<MarkComp>,
+                    add_added::<MarkComp>,
+                    update_moved::<MarkComp>,
+                )
+                    .chain()
+                    .in_base_set(CoreSet::PostUpdate),
+            );
     }
 }
 

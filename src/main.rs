@@ -9,12 +9,7 @@ use crate::phys_space::*;
 use crate::render::*;
 use crate::space_lookup::RstarPlugin;
 use bevy::{
-    input::InputSystem,
-    log::LogPlugin,
-    math::Rect,
-    prelude::*,
-    render::{RenderApp, RenderStage},
-    utils::tracing,
+    input::InputSystem, log::LogPlugin, math::Rect, prelude::*, render::RenderApp, utils::tracing,
 };
 use bevy_ecs_ldtk::prelude::*;
 use bevy_inspector_egui::quick::{ResourceInspectorPlugin, WorldInspectorPlugin};
@@ -105,34 +100,24 @@ fn main() {
         // INPUT STUFF
         .add_system(connect_gamepads_system)
         .insert_resource(CurrentInputs::default())
-        .add_system_to_stage(CoreStage::PreUpdate, accept_input_system.after(InputSystem))
+        .add_system(accept_input_system
+            .in_base_set(CoreSet::PreUpdate)
+            .after(InputSystem)
+        )
         // BODY STUFF
         .add_system(shadow_stitcher_system)
         // PLAYER STUFF
         .add_startup_system(setup_player)
-        .add_system(
-            move_whole_pixel
-                .label(Movers)
-                .after(CharAnimationSystems)
-                .after(MovePlanners)
-        )
-        .add_system(
-            move_continuous_no_collision
-                .label(Movers)
-                .after(CharAnimationSystems)
-                .after(MovePlanners)
-        )
-        .add_system(
-            move_continuous_faceplant
-                .label(Movers)
-                .after(CharAnimationSystems)
-                .after(MovePlanners)
-        )
-        .add_system(
-            move_continuous_ray_test
-                .label(Movers)
-                .after(CharAnimationSystems)
-                .after(MovePlanners)
+        .configure_set(Movers.after(CharAnimationSystems).after(MovePlanners))
+        .configure_set(MovePlanners.after(SpriteChangers))
+        .configure_set(CameraMovers.after(Movers))
+        .add_systems(
+            (
+                move_whole_pixel,
+                move_continuous_no_collision,
+                move_continuous_faceplant,
+                move_continuous_ray_test,
+            ).in_set(Movers)
         )
         // .add_system_set(
         //     SystemSet::new()
@@ -153,15 +138,11 @@ fn main() {
         // .add_system_to_stage(CoreStage::PostUpdate, player_bonk_out)
         .add_system(propagate_inputs_to_player_state.before(handle_player_state_exits))
         .add_system(handle_player_state_exits.before(handle_player_state_entry))
-        .add_system(handle_player_state_entry.label(SpriteChangers).before(MovePlanners))
-        .add_system(plan_move.label(MovePlanners))
+        .add_system(handle_player_state_entry.in_set(SpriteChangers).before(MovePlanners))
+        .add_system(plan_move.in_set(MovePlanners))
         .add_system(wall_collisions.after(Movers))
-        .add_system_set(
-            SystemSet::new()
-                .label(CameraMovers)
-                .after(Movers)
-                .with_system(camera_locked_system)
-                .with_system(camera_lerp_system)
+        .add_systems(
+            (camera_locked_system, camera_lerp_system).in_set(CameraMovers)
         )
         // PHYSICS SPACE STUFF
         .add_system(add_new_phys_transforms.before(MovePlanners))
@@ -172,9 +153,10 @@ fn main() {
     if let Ok(render_app) = app.get_sub_app_mut(RenderApp) {
         render_app
             // SPACE STUFF
-            .add_system_to_stage(
-                RenderStage::Extract,
-                extract_and_flatten_space_system.after(bevy::sprite::SpriteSystem::ExtractSprites),
+            .add_system(
+                extract_and_flatten_space_system
+                    .in_schedule(ExtractSchedule)
+                    .after(bevy::sprite::SpriteSystem::ExtractSprites),
             );
     }
 
@@ -211,13 +193,13 @@ enum CameraKind {
     Lerp,
 }
 
-#[derive(SystemLabel)]
+#[derive(SystemSet, Clone, Debug, PartialEq, Eq, Hash)]
 pub struct MovePlanners;
 
-#[derive(SystemLabel)]
+#[derive(SystemSet, Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Movers;
 
-#[derive(SystemLabel)]
+#[derive(SystemSet, Clone, Debug, PartialEq, Eq, Hash)]
 struct CameraMovers;
 
 /// Hey, how much CAN I get away with processing at this point? I know I want to handle
