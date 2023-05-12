@@ -343,7 +343,7 @@ fn update_moved<MarkComp>(
 
 fn delete<MarkComp>(
     mut tree_access: ResMut<RstarAccess<MarkComp>>,
-    removed: RemovedComponents<MarkComp>,
+    mut removed: RemovedComponents<MarkComp>,
 ) where
     MarkComp: Component,
 {
