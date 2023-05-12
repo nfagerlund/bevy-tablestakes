@@ -162,7 +162,9 @@ fn main() {
 
     if std::env::args().any(|arg| &arg == "--graph") {
         // Write the debug dump to a file and exit. (not sure why it exits, though??? oh well!)
-        let system_schedule = bevy_mod_debugdump::get_schedule(&mut app);
+        let settings = bevy_mod_debugdump::schedule_graph::Settings::default();
+        let system_schedule =
+            bevy_mod_debugdump::schedule_graph_dot(&mut app, CoreSchedule::Main, &settings);
         let mut sched_file = std::fs::File::create("./schedule.dot").unwrap();
         sched_file.write_all(system_schedule.as_bytes()).unwrap();
     }
