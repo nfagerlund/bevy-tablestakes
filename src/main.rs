@@ -36,13 +36,7 @@ fn main() {
     let configured_default_plugins = DefaultPlugins
         .set(WindowPlugin {
             primary_window: Some(Window {
-                cursor: bevy::window::Cursor {
-                    icon: bevy::window::CursorIcon::Default,
-                    visible: true,
-                    grab_mode: bevy::window::CursorGrabMode::None,
-                    hit_test: true,
-                    ..default() // need default in constructor bc private fields
-                },
+                cursor: bevy::window::Cursor::default(),
                 present_mode: bevy::window::PresentMode::Fifo,
                 mode: bevy::window::WindowMode::Windowed,
                 position: bevy::window::WindowPosition::Automatic,
