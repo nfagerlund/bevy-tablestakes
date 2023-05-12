@@ -17,10 +17,7 @@ use bevy::{
     utils::tracing,
 };
 use bevy_ecs_ldtk::prelude::*;
-use bevy_inspector_egui::{
-    prelude,
-    quick::{ResourceInspectorPlugin, WorldInspectorPlugin},
-};
+use bevy_inspector_egui::quick::{ResourceInspectorPlugin, WorldInspectorPlugin};
 use std::collections::HashMap;
 use std::io::Write;
 
