@@ -366,7 +366,7 @@ pub fn spawn_collider_debugs(
                 mesh_bundle: MaterialMesh2dBundle {
                     mesh,
                     material,
-                    visibility: Visibility { is_visible: false },
+                    visibility: Visibility::Inherited,
                     ..default()
                 },
                 marker: WalkboxDebug,
@@ -388,7 +388,8 @@ pub fn debug_walkboxes_system(
             continue;
         };
         if debug_settings.debug_walkboxes {
-            visibility.is_visible = true;
+            // Unconditional, not inherited:
+            *visibility = Visibility::Visible;
             // ok... need to set our scale to the size of the walkbox, and then
             // offset our translation relative to our parent by the difference
             // between their walkbox's center and their actual anchor point
@@ -400,7 +401,7 @@ pub fn debug_walkboxes_system(
             // draw on top of parent by A LOT. (cheating out of interactions with the TopDownMatter system.)
             transform.translation = center.extend(40.0);
         } else {
-            visibility.is_visible = false;
+            *visibility = Visibility::Hidden;
             // we're done
         }
     }
