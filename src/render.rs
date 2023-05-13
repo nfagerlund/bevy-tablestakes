@@ -2,13 +2,12 @@ use crate::char_animation::*;
 use bevy::prelude::*;
 use bevy::render::Extract;
 use bevy::sprite::ExtractedSprites;
-use bevy_inspector_egui::Inspectable;
 
 const DEPTH_DUDES: f32 = 4.0;
 const DEPTH_SHADOWS: f32 = DEPTH_DUDES - 0.1;
 
 /// Some spatial details about an entity.
-#[derive(Component, Inspectable)]
+#[derive(Component, Reflect)]
 pub struct TopDownMatter {
     /// For now, depth tracks the absolute, global draw-depth coordinate for
     /// anything it's placed on. I'm not doing any Y-sorting yet. An extract
@@ -114,11 +113,13 @@ pub fn extract_and_flatten_space_system(
     // over that and correlate it with our query.
     for ex_sprite in extracted_sprites.sprites.iter_mut() {
         if let Ok(matter) = has_z_query.get(ex_sprite.entity) {
-            let transform = ex_sprite.transform.translation_mut();
+            let mut translation = ex_sprite.transform.translation();
+
             if !matter.ignore_height {
-                transform.y += transform.z;
+                translation.y += translation.z;
             }
-            transform.z = matter.depth;
+            translation.z = matter.depth;
+            ex_sprite.transform = Transform::from_translation(translation).into();
         }
     }
     // Also!! Counterpoint! It makes somewhat more sense to do this in the

@@ -1,19 +1,18 @@
 use std::collections::HashMap;
 
-use crate::DebugSettings;
+use crate::{phys_space::PhysOffset, DebugSettings};
 use bevy::{
     prelude::*,
     sprite::{MaterialMesh2dBundle, Mesh2dHandle},
 };
 use bevy_ecs_ldtk::prelude::*;
-use bevy_inspector_egui::Inspectable;
 
 /// BBox defining the space an entity takes up on the ground.
-#[derive(Component, Inspectable, Default)]
+#[derive(Component, Reflect, Default)]
 pub struct Walkbox(pub Rect);
 
 /// BBox defining the space where an entity can be hit by attacks.
-#[derive(Component, Inspectable, Default)]
+#[derive(Component, Reflect, Default)]
 pub struct Hitbox(pub Rect);
 // ...and then eventually I'll want Hurtbox for attacks, but, tbh I have no
 // idea how to best handle that yet. Is that even a component? Or is it a larger
@@ -280,28 +279,6 @@ impl Toward {
     }
 }
 
-/// Global offset from 0,0 for entities that particpate in collision physics.
-/// OK, so here's the scoop: GlobalTransform is awkward or prohibitive to work
-/// with for physics purposes, even real dumb physics like I intend to do. It's
-/// better to interact with an immediately responsive transform that doesn't
-/// require an end-of-frame sync up the hierarchy. HOWEVER, because I'm using
-/// bevy_ecs_ldtk to position tile-based walls and starting positions for
-/// entities in my levels, I'm going to have entities all over the place that
-/// are parented to something with a non-zero transform. So. In order to
-/// interact with all these in a reliable shared reference frame, a couple
-/// conditions need met: make sure physics objects's offsets from zero are
-/// static (i.e. their hierarchical parents are NOT moving around), and make a
-/// note of them when they're spawned. As best as I can tell, LDTK tiles and
-/// entities meet that static requirement -- tiles are children of their
-/// tilemaps, and entities are either children of their level or of the world.
-/// Oh, also, I think for broad phase I can probably get away with cheating with
-/// GlobalTransform, as long as I make my margin of error large enough that you
-/// can't get away from it in a single simulation frame... at least for now it
-/// should be fine. To be more rigorous I should probably roll my own spatial
-/// query thing and use physics space instead.
-#[derive(Component, Deref, DerefMut, Inspectable)]
-pub struct PhysicsSpaceOffset(pub Vec2);
-
 /// Collidable solid marker component... but you also need a position Vec3 and a
 /// size Vec2 from somewhere.
 #[derive(Component)]
@@ -312,7 +289,7 @@ pub struct Solid;
 pub struct Wall {
     solid: Solid,
     walkbox: Walkbox,
-    offset: PhysicsSpaceOffset,
+    offset: PhysOffset,
     int_grid_cell: IntGridCell,
     // transform: Transform, // This is needed, but it's handled by the plugin.
 }
@@ -330,7 +307,7 @@ impl LdtkIntCell for Wall {
             solid: Solid,
             // the plugin puts tile anchor points in the center:
             walkbox: Walkbox(centered_rect(grid_size, grid_size)),
-            offset: PhysicsSpaceOffset(translation_offset),
+            offset: PhysOffset(translation_offset),
             int_grid_cell,
         }
     }
@@ -389,7 +366,7 @@ pub fn spawn_collider_debugs(
                 mesh_bundle: MaterialMesh2dBundle {
                     mesh,
                     material,
-                    visibility: Visibility { is_visible: false },
+                    visibility: Visibility::Inherited,
                     ..default()
                 },
                 marker: WalkboxDebug,
@@ -411,7 +388,8 @@ pub fn debug_walkboxes_system(
             continue;
         };
         if debug_settings.debug_walkboxes {
-            visibility.is_visible = true;
+            // Unconditional, not inherited:
+            *visibility = Visibility::Visible;
             // ok... need to set our scale to the size of the walkbox, and then
             // offset our translation relative to our parent by the difference
             // between their walkbox's center and their actual anchor point
@@ -423,7 +401,7 @@ pub fn debug_walkboxes_system(
             // draw on top of parent by A LOT. (cheating out of interactions with the TopDownMatter system.)
             transform.translation = center.extend(40.0);
         } else {
-            visibility.is_visible = false;
+            *visibility = Visibility::Hidden;
             // we're done
         }
     }

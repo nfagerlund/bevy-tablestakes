@@ -1,4 +1,7 @@
-use bevy::prelude::*;
+use bevy::{
+    input::gamepad::{GamepadButtonChangedEvent, GamepadConnection, GamepadConnectionEvent},
+    prelude::*,
+};
 
 /// Resource for stashing the current frame's inputs. Expect this'll expand as I
 /// add more input intent types. Also, might just switch to leafwing input or
@@ -50,17 +53,18 @@ pub fn get_kb_movement_vector(keys: &Res<Input<KeyCode>>) -> Vec2 {
 pub fn connect_gamepads_system(
     mut commands: Commands,
     active_gamepad: Option<Res<ActiveGamepad>>,
-    mut gamepad_events: EventReader<GamepadEvent>,
+    mut connection_events: EventReader<GamepadConnectionEvent>,
+    mut button_events: EventReader<GamepadButtonChangedEvent>,
     // ^^ eventreader params have to be mutable because reading events immutably
     // still updates an internal tracking cursor on the reader instance. cool.
 ) {
-    for GamepadEvent {
+    for GamepadConnectionEvent {
         gamepad,
-        event_type,
-    } in gamepad_events.iter()
+        connection,
+    } in connection_events.iter()
     {
-        match event_type {
-            GamepadEventType::Connected(_) => {
+        match connection {
+            GamepadConnection::Connected(_) => {
                 info!("pad in: {:?}", gamepad);
                 // let's see, I de-focused the cookbook tab, so what do *I* want to have happen?
                 // First pad in gets it, but if another pad hits start, it'll take over. Nice.
@@ -68,7 +72,7 @@ pub fn connect_gamepads_system(
                     commands.insert_resource(ActiveGamepad(*gamepad));
                 }
             },
-            GamepadEventType::Disconnected => {
+            GamepadConnection::Disconnected => {
                 info!("pad out: {:?}", gamepad);
                 // byeeee
                 // ok, I'm back to the example code, what's going on here:
@@ -79,27 +83,34 @@ pub fn connect_gamepads_system(
                     }
                 }
             },
-            GamepadEventType::ButtonChanged(GamepadButtonType::Start, val) if *val == 1.0 => {
-                info!("Pressed start: {:?}", gamepad);
-                // If there's an active gamepad...
-                if let Some(ActiveGamepad(old_id)) = active_gamepad.as_deref() {
-                    // ...but it's not the one you just pressed start on...
-                    if old_id != gamepad {
-                        // ...then let it take over.
-                        commands.insert_resource(ActiveGamepad(*gamepad));
-                        // per the cheatbook: "If you insert a resource of a
-                        // type that already exists, it will be overwritten."
-                    }
-                }
-            },
-            // ignore other events for now, ^H^H^H (never mind) but fyi see
-            // examples/input/gamepad_input_events.rs in bevy. The
-            // ButtonChanged(button_type, value) and AxisChanged(axis_type,
-            // value) all return new values as floats, I guess so you can handle
-            // buttons and analog axes with similar code.
-            _ => {},
         }
     }
+
+    for GamepadButtonChangedEvent {
+        gamepad,
+        button_type,
+        value,
+    } in button_events.iter()
+    {
+        if *button_type == GamepadButtonType::Start && *value == 1.0 {
+            info!("Pressed start: {:?}", gamepad);
+            // If there's an active gamepad...
+            if let Some(ActiveGamepad(old_id)) = active_gamepad.as_deref() {
+                // ...but it's not the one you just pressed start on...
+                if old_id != gamepad {
+                    // ...then let it take over.
+                    commands.insert_resource(ActiveGamepad(*gamepad));
+                    // per the cheatbook: "If you insert a resource of a
+                    // type that already exists, it will be overwritten."
+                }
+            }
+        }
+    }
+    // ignore other events for now, ^H^H^H (never mind) but fyi see
+    // examples/input/gamepad_input_events.rs in bevy. The
+    // ButtonChanged(button_type, value) and AxisChanged(axis_type,
+    // value) all return new values as floats, I guess so you can handle
+    // buttons and analog axes with similar code.
 }
 
 /// System for getting the current frame's input intents and stashing them in

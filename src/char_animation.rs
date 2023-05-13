@@ -13,6 +13,7 @@ use image::RgbaImage;
 use std::collections::HashMap;
 
 use crate::compass::{self, Dir};
+use crate::util_countup_timer::CountupTimer;
 use crate::Motion;
 use crate::Walkbox;
 
@@ -78,23 +79,15 @@ pub struct CharAnimationFrame {
     // todo: hitbox, hurtbox,
 }
 
-#[derive(SystemLabel)]
+#[derive(SystemSet, Clone, Debug, PartialEq, Eq, Hash)]
 pub struct CharAnimationSystems;
-#[derive(SystemLabel)]
+#[derive(SystemSet, Clone, Debug, PartialEq, Eq, Hash)]
 pub struct SpriteChangers;
 
 pub struct CharAnimationPlugin;
 
 impl Plugin for CharAnimationPlugin {
     fn build(&self, app: &mut App) {
-        let systems = SystemSet::new()
-            .label(CharAnimationSystems)
-            .after(SpriteChangers)
-            .with_system(charanm_atlas_reassign_system)
-            .with_system(charanm_set_directions_system)
-            .with_system(charanm_animate_system.after(charanm_set_directions_system))
-            .with_system(charanm_update_walkbox_system.after(charanm_animate_system));
-
         app.add_asset::<CharAnimation>()
             .init_asset_loader::<CharAnimationLoader>()
             .add_event::<AnimateFinishedEvent>()
@@ -102,7 +95,17 @@ impl Plugin for CharAnimationPlugin {
             // CharAnimationState or Motion. And set_directions might have
             // mutated the animation state, so that should take effect before
             // the main animate system.
-            .add_system_set(systems);
+            .add_systems(
+                (
+                    charanm_atlas_reassign_system,
+                    charanm_set_directions_system,
+                    charanm_animate_system,
+                    charanm_update_walkbox_system,
+                )
+                    .chain()
+                    .in_set(CharAnimationSystems),
+            )
+            .configure_set(CharAnimationSystems.after(SpriteChangers));
     }
 }
 
@@ -394,7 +397,7 @@ pub struct CharAnimationState {
     pub playback: Playback,
     pub frame: usize,
     // To start with, we'll just always loop.
-    pub frame_timer: Option<Timer>,
+    pub frame_timer: Option<CountupTimer>,
     /// Optionally override the animation's frame timings, setting every frame
     /// to the provided length in milliseconds. If you need frames to be
     /// different lengths, that belongs in the animation data, not the
@@ -528,12 +531,12 @@ pub fn charanm_animate_system(
                 }
 
                 updating_frame = true;
-                let excess_time = state.frame_timer.as_ref().unwrap().excess_elapsed();
+                let excess_time = state.frame_timer.as_ref().unwrap().countup_elapsed();
 
                 // increment+loop frame, and replace the timer with the new frame's duration
                 state.frame = next_frame;
                 let duration = variant.resolved_frame_time(state.frame, state.frame_time_override);
-                let mut new_timer = Timer::new(duration, TimerMode::CountUp);
+                let mut new_timer = CountupTimer::new(duration);
                 new_timer.tick(excess_time);
                 state.frame_timer = Some(new_timer);
             }
@@ -542,7 +545,7 @@ pub fn charanm_animate_system(
             // frame's duration, can start ticking on the next loop.
             updating_frame = true;
             let duration = variant.resolved_frame_time(state.frame, state.frame_time_override);
-            state.frame_timer = Some(Timer::new(duration, TimerMode::CountUp));
+            state.frame_timer = Some(CountupTimer::new(duration));
         }
 
         // ok, where was I.
@@ -611,6 +614,7 @@ fn charanm_test_setup_system(mut commands: Commands, asset_server: Res<AssetServ
     let anim_handle: Handle<CharAnimation> = asset_server.load("sprites/sPlayerRun.aseprite");
     commands.spawn((
         Goofus,
+        Name::new("Goofus"),
         SpriteSheetBundle {
             transform: Transform::from_translation(Vec3::new(30.0, 60.0, 3.0)),
             ..default()

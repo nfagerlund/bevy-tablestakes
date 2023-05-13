@@ -5,20 +5,14 @@ use crate::collision::*;
 use crate::compass::*;
 use crate::input::*;
 use crate::movement::*;
+use crate::phys_space::*;
 use crate::render::*;
+use crate::space_lookup::RstarPlugin;
 use bevy::{
-    input::InputSystem,
-    log::LogPlugin,
-    math::Rect,
-    prelude::*,
-    render::{RenderApp, RenderStage},
-    utils::tracing,
+    input::InputSystem, log::LogPlugin, math::Rect, prelude::*, render::RenderApp, utils::tracing,
 };
 use bevy_ecs_ldtk::prelude::*;
-use bevy_inspector_egui::{
-    Inspectable, InspectorPlugin, RegisterInspectable, WorldInspectorPlugin,
-};
-use bevy_spatial::RTreePlugin2D;
+use bevy_inspector_egui::quick::{ResourceInspectorPlugin, WorldInspectorPlugin};
 use std::collections::HashMap;
 use std::io::Write;
 
@@ -30,22 +24,27 @@ mod hellow;
 mod input;
 mod junk;
 mod movement;
+mod phys_space;
 mod player_states;
 mod render;
+mod space_lookup;
+mod util_countup_timer;
 
 const PIXEL_SCALE: f32 = 1.0;
 
 fn main() {
     let configured_default_plugins = DefaultPlugins
         .set(WindowPlugin {
-            window: WindowDescriptor {
+            primary_window: Some(Window {
+                cursor: bevy::window::Cursor::default(),
                 present_mode: bevy::window::PresentMode::Fifo,
-                cursor_visible: true,
-                // mode: bevy::window::WindowMode::BorderlessFullscreen,
-                // width: 1920.0,
-                // height: 1080.0,
+                mode: bevy::window::WindowMode::Windowed,
+                position: bevy::window::WindowPosition::Automatic,
+                resolution: bevy::window::WindowResolution::new(1280.0, 720.0),
+                title: String::from("Kittyzone"),
+                resizable: true,
                 ..default()
-            },
+            }),
             ..default()
         })
         .set(AssetPlugin {
@@ -76,53 +75,43 @@ fn main() {
         .insert_resource(DebugSettings::default())
         // INSPECTOR STUFF
         .add_plugin(WorldInspectorPlugin::new())
-        .register_inspectable::<SubTransform>()
-        .register_inspectable::<Speed>()
-        .register_inspectable::<Walkbox>()
-        .register_inspectable::<Hitbox>()
-        .register_inspectable::<TopDownMatter>()
-        .register_inspectable::<PhysicsSpaceOffset>()
-        .add_plugin(InspectorPlugin::<DebugSettings>::new())
+        .register_type::<PhysTransform>()
+        .register_type::<PhysOffset>()
+        .register_type::<Speed>()
+        .register_type::<Walkbox>()
+        .register_type::<Hitbox>()
+        .register_type::<TopDownMatter>()
+        .add_plugin(ResourceInspectorPlugin::<DebugSettings>::new())
         .add_system(debug_walkboxes_system)
         // LDTK STUFF
         .add_startup_system(setup_level)
         .insert_resource(LevelSelection::Index(1))
         .register_ldtk_int_cell_for_layer::<Wall>("StructureKind", 1)
         // SPATIAL PARTITIONING STUFF
-        .add_plugin(RTreePlugin2D::<Solid> { ..default() })
+        .add_plugin(RstarPlugin::<Solid>::new())
         // CAMERA
         .add_startup_system(setup_camera)
         // INPUT STUFF
         .add_system(connect_gamepads_system)
         .insert_resource(CurrentInputs::default())
-        .add_system_to_stage(CoreStage::PreUpdate, accept_input_system.after(InputSystem))
+        .add_system(accept_input_system
+            .in_base_set(CoreSet::PreUpdate)
+            .after(InputSystem)
+        )
         // BODY STUFF
         .add_system(shadow_stitcher_system)
         // PLAYER STUFF
         .add_startup_system(setup_player)
-        .add_system(
-            move_whole_pixel
-                .label(Movers)
-                .after(CharAnimationSystems)
-                .after(MovePlanners)
-        )
-        .add_system(
-            move_continuous_no_collision
-                .label(Movers)
-                .after(CharAnimationSystems)
-                .after(MovePlanners)
-        )
-        .add_system(
-            move_continuous_faceplant
-                .label(Movers)
-                .after(CharAnimationSystems)
-                .after(MovePlanners)
-        )
-        .add_system(
-            move_continuous_ray_test
-                .label(Movers)
-                .after(CharAnimationSystems)
-                .after(MovePlanners)
+        .configure_set(Movers.after(CharAnimationSystems).after(MovePlanners))
+        .configure_set(MovePlanners.after(SpriteChangers))
+        .configure_set(CameraMovers.after(Movers))
+        .add_systems(
+            (
+                move_whole_pixel,
+                move_continuous_no_collision,
+                move_continuous_faceplant,
+                move_continuous_ray_test,
+            ).in_set(Movers)
         )
         // .add_system_set(
         //     SystemSet::new()
@@ -143,32 +132,33 @@ fn main() {
         // .add_system_to_stage(CoreStage::PostUpdate, player_bonk_out)
         .add_system(propagate_inputs_to_player_state.before(handle_player_state_exits))
         .add_system(handle_player_state_exits.before(handle_player_state_entry))
-        .add_system(handle_player_state_entry.label(SpriteChangers).before(MovePlanners))
-        .add_system(plan_move.label(MovePlanners))
+        .add_system(handle_player_state_entry.in_set(SpriteChangers).before(MovePlanners))
+        .add_system(plan_move.in_set(MovePlanners))
         .add_system(wall_collisions.after(Movers))
-        .add_system_set(
-            SystemSet::new()
-                .label(CameraMovers)
-                .after(Movers)
-                .with_system(camera_locked_system)
-                .with_system(camera_lerp_system)
+        .add_systems(
+            (camera_locked_system, camera_lerp_system).in_set(CameraMovers)
         )
-        .add_system(snap_pixel_positions_system.after(CameraMovers))
+        // PHYSICS SPACE STUFF
+        .add_system(add_new_phys_transforms.before(MovePlanners))
+        .add_system(sync_phys_transforms.after(CameraMovers))
         // OK BYE!!!
         ;
 
     if let Ok(render_app) = app.get_sub_app_mut(RenderApp) {
         render_app
             // SPACE STUFF
-            .add_system_to_stage(
-                RenderStage::Extract,
-                extract_and_flatten_space_system.after(bevy::sprite::SpriteSystem::ExtractSprites),
+            .add_system(
+                extract_and_flatten_space_system
+                    .in_schedule(ExtractSchedule)
+                    .after(bevy::sprite::SpriteSystem::ExtractSprites),
             );
     }
 
     if std::env::args().any(|arg| &arg == "--graph") {
         // Write the debug dump to a file and exit. (not sure why it exits, though??? oh well!)
-        let system_schedule = bevy_mod_debugdump::get_schedule(&mut app);
+        let settings = bevy_mod_debugdump::schedule_graph::Settings::default();
+        let system_schedule =
+            bevy_mod_debugdump::schedule_graph_dot(&mut app, CoreSchedule::Main, &settings);
         let mut sched_file = std::fs::File::create("./schedule.dot").unwrap();
         sched_file.write_all(system_schedule.as_bytes()).unwrap();
     }
@@ -176,14 +166,14 @@ fn main() {
     app.run();
 }
 
-#[derive(Resource, Default, Reflect, Inspectable, PartialEq, Eq)]
+#[derive(Resource, Default, Reflect, PartialEq, Eq)]
 pub struct DebugSettings {
     debug_walkboxes: bool,
     motion_kind: MotionKind,
     camera_kind: CameraKind,
 }
 
-#[derive(Resource, Reflect, Inspectable, Default, PartialEq, Eq)]
+#[derive(Resource, Reflect, Default, PartialEq, Eq)]
 enum MotionKind {
     NoCollision,
     Faceplant,
@@ -192,20 +182,20 @@ enum MotionKind {
     WholePixel,
 }
 
-#[derive(Resource, Reflect, Inspectable, Default, PartialEq, Eq)]
+#[derive(Resource, Reflect, Default, PartialEq, Eq)]
 enum CameraKind {
     #[default]
     Locked,
     Lerp,
 }
 
-#[derive(SystemLabel)]
+#[derive(SystemSet, Clone, Debug, PartialEq, Eq, Hash)]
 pub struct MovePlanners;
 
-#[derive(SystemLabel)]
+#[derive(SystemSet, Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Movers;
 
-#[derive(SystemLabel)]
+#[derive(SystemSet, Clone, Debug, PartialEq, Eq, Hash)]
 struct CameraMovers;
 
 /// Hey, how much CAN I get away with processing at this point? I know I want to handle
@@ -336,7 +326,7 @@ fn plan_move(
         &mut PlayerStateMachine,
         &mut Motion,
         &Speed,
-        &mut SubTransform,
+        &mut PhysTransform,
     )>,
     time: Res<Time>,
     inputs: Res<CurrentInputs>,
@@ -395,8 +385,8 @@ fn camera_lerp_system(
     // time: Res<StaticTime>,
     // time: Res<SmoothedTime>,
     mut params: ParamSet<(
-        Query<&SubTransform, With<Player>>,
-        Query<&mut SubTransform, With<Camera>>,
+        Query<&PhysTransform, With<Player>>,
+        Query<&mut PhysTransform, With<Camera>>,
     )>,
     debug_settings: Res<DebugSettings>,
 ) {
@@ -425,8 +415,8 @@ fn camera_lerp_system(
 
 fn camera_locked_system(
     mut params: ParamSet<(
-        Query<&SubTransform, With<Player>>,
-        Query<&mut SubTransform, With<Camera>>,
+        Query<&PhysTransform, With<Player>>,
+        Query<&mut PhysTransform, With<Camera>>,
     )>,
     debug_settings: Res<DebugSettings>,
 ) {
@@ -439,19 +429,6 @@ fn camera_locked_system(
     let mut camera_tf = camera_q.single_mut();
     camera_tf.translation.x = player_pos.x;
     camera_tf.translation.y = player_pos.y;
-}
-
-// This no longer does anything, because we're now handling the sub-pixel stuff
-// in the movement function -- though that's all still up in the air. Anyway,
-// point being we always manipulate this alternate transform, and then this is
-// the system that syncs it to real transform before the sync to global
-// transform happens.
-fn snap_pixel_positions_system(mut query: Query<(&SubTransform, &mut Transform)>) {
-    // let global_scale = Vec3::new(PIXEL_SCALE, PIXEL_SCALE, 1.0);
-    for (sub_tf, mut pixel_tf) in query.iter_mut() {
-        // pixel_tf.translation = (global_scale * sub_tf.translation).floor();
-        pixel_tf.translation = sub_tf.translation;
-    }
 }
 
 fn setup_level(mut commands: Commands, asset_server: Res<AssetServer>) {
@@ -470,7 +447,8 @@ fn setup_camera(mut commands: Commands) {
     camera_bundle.projection.scale = 1.0 / 3.0;
     commands.spawn((
         camera_bundle,
-        SubTransform {
+        PhysOffset(Vec2::ZERO),
+        PhysTransform {
             translation: Vec3::new(0.0, 0.0, 999.0),
         },
         // ^^ hack: I looked up the Z coord on new_2D and fudged it so we won't accidentally round it to 1000.
@@ -503,9 +481,10 @@ fn setup_player(mut commands: Commands, asset_server: Res<AssetServer>) {
                     .with_scale(Vec3::splat(PIXEL_SCALE)),
                 ..Default::default()
             },
-            sub_transform: SubTransform {
+            phys_transform: PhysTransform {
                 translation: Vec3::ZERO,
             },
+            phys_offset: PhysOffset(Vec2::ZERO),
             speed: Speed(Speed::RUN),
             walkbox: Walkbox(Rect::default()),
             // --- New animation system
@@ -527,6 +506,8 @@ fn setup_player(mut commands: Commands, asset_server: Res<AssetServer>) {
         HasShadow,
         // Draw-depth manager
         TopDownMatter::character(),
+        // Inspector?
+        Name::new("Kittybuddy"),
     ));
 }
 
@@ -537,7 +518,8 @@ struct PlayerBundle {
     identity: Player,
     sprite_sheet: SpriteSheetBundle,
 
-    sub_transform: SubTransform,
+    phys_transform: PhysTransform,
+    phys_offset: PhysOffset,
     speed: Speed,
     walkbox: Walkbox,
 
@@ -630,7 +612,7 @@ pub struct LdtkWorld;
 pub struct Player;
 
 /// Speed in pixels... per... second?
-#[derive(Component, Inspectable)]
+#[derive(Component, Reflect)]
 pub struct Speed(f32);
 impl Speed {
     const RUN: f32 = 120.0;
@@ -671,10 +653,4 @@ impl Motion {
 pub struct MotionResult {
     pub collided: bool,
     pub new_location: Vec2,
-}
-
-/// Additional transform component for things whose movements should be synced to hard pixel boundaries.
-#[derive(Component, Inspectable)]
-pub struct SubTransform {
-    translation: Vec3,
 }
