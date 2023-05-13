@@ -614,6 +614,7 @@ fn charanm_test_setup_system(mut commands: Commands, asset_server: Res<AssetServ
     let anim_handle: Handle<CharAnimation> = asset_server.load("sprites/sPlayerRun.aseprite");
     commands.spawn((
         Goofus,
+        Name::new("Goofus"),
         SpriteSheetBundle {
             transform: Transform::from_translation(Vec3::new(30.0, 60.0, 3.0)),
             ..default()

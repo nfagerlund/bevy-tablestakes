@@ -506,6 +506,8 @@ fn setup_player(mut commands: Commands, asset_server: Res<AssetServer>) {
         HasShadow,
         // Draw-depth manager
         TopDownMatter::character(),
+        // Inspector?
+        Name::new("Kittybuddy"),
     ));
 }
 
