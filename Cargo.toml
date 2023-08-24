@@ -11,7 +11,7 @@ edition = "2021"
 anyhow = "1.0.56"
 asefile = "0.3.5"
 image = "0.23.14" # match asefile's dep
-bevy = { version = "0.10.1", features = [
+bevy = { version = "0.11.2", features = [
     "dynamic_linking",
     # Tracy breaks protocol versions in patch releases, so check Cargo.lock.
     # - table @ https://lib.rs/crates/tracing-tracy
@@ -19,15 +19,15 @@ bevy = { version = "0.10.1", features = [
     # Bevy 0.9.1: Tracy 0.9
     "trace_tracy",
 ] }
-bevy-inspector-egui = "0.18.3"
-bevy_ecs_tilemap = "0.10.0"
-bevy_ecs_ldtk = "0.6.0"
+bevy-inspector-egui = "0.19.0"
+bevy_ecs_tilemap = "0.11.0"
+bevy_ecs_ldtk = "0.8.0"
 # bevy_spatial = { version = "0.4.0", features = ["rstar"]}
 rstar = "0.9.3"
 
 # bevy_ecs_tilemap = { git = "https://github.com/StarArawn/bevy_ecs_tilemap", rev = "02b044b99" }
 # bevy_ecs_ldtk = { git = "https://github.com/nfagerlund/bevy_ecs_ldtk.git", rev = "1bfe05f" }
-bevy_mod_debugdump = "0.7.0" # neat: https://github.com/jakobhellermann/bevy_mod_debugdump
+bevy_mod_debugdump = "0.8.0" # neat: https://github.com/jakobhellermann/bevy_mod_debugdump
 
 [patch.crates-io]
 # bevy = { path = "../bevy" }
