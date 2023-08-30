@@ -11,7 +11,7 @@ impl Plugin for SmoothedTimePlugin {
         .insert_resource(SmoothedTime {
             delta: Duration::new(0, 0),
         })
-        .add_system(time_smoothing_system.in_base_set(CoreSet::PreUpdate));
+        .add_systems(PreUpdate, time_smoothing_system);
     }
 }
 

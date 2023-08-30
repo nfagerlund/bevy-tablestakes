@@ -7,7 +7,7 @@ use bevy::utils::Duration;
 /// a pain so I'm pulling it out into a duplicate implementation. I'll throw
 /// this away if we ever resolve the set_duration/set_elapsed expectations such
 /// that I feel safe PRing a new TimerMode.
-#[derive(Clone, Debug, Default, Reflect, FromReflect)]
+#[derive(Clone, Debug, Default, Reflect)]
 #[cfg_attr(feature = "serialize", derive(serde::Deserialize, serde::Serialize))]
 #[reflect(Default)]
 pub struct CountupTimer {

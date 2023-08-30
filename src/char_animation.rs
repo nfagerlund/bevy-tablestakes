@@ -2,7 +2,7 @@ use asefile::AsepriteFile;
 use bevy::asset::{AssetLoader, AssetServer, BoxedFuture, Handle, LoadContext, LoadedAsset};
 use bevy::math::{prelude::*, Affine2, Rect};
 use bevy::prelude::*;
-use bevy::reflect::TypeUuid;
+use bevy::reflect::{TypePath, TypeUuid};
 use bevy::render::{
     render_resource::{Extent3d, TextureDimension, TextureFormat},
     texture::{Image, TextureFormatPixelInfo},
@@ -17,7 +17,7 @@ use crate::util_countup_timer::CountupTimer;
 use crate::Motion;
 use crate::Walkbox;
 
-#[derive(Debug, TypeUuid)]
+#[derive(Debug, TypeUuid, TypePath)]
 #[uuid = "585e2e41-4a97-42ef-a13e-55761c854bb4"]
 pub struct CharAnimation {
     pub variants: VariantsMap,
@@ -96,6 +96,7 @@ impl Plugin for CharAnimationPlugin {
             // mutated the animation state, so that should take effect before
             // the main animate system.
             .add_systems(
+                Update,
                 (
                     charanm_atlas_reassign_system,
                     charanm_set_directions_system,
@@ -105,7 +106,7 @@ impl Plugin for CharAnimationPlugin {
                     .chain()
                     .in_set(CharAnimationSystems),
             )
-            .configure_set(CharAnimationSystems.after(SpriteChangers));
+            .configure_set(Update, CharAnimationSystems.after(SpriteChangers));
     }
 }
 
@@ -388,6 +389,7 @@ fn copy_texture_to_atlas(
 // - Each step, tick down a TIMER (non-repeating) for the current frame.
 // - When the timer runs out, switch your FRAME INDEX to the next frame (or, WRAP AROUND if you're configured to loop).
 
+#[derive(Event)]
 pub struct AnimateFinishedEvent(pub Entity);
 
 #[derive(Component, Debug)]
@@ -495,10 +497,16 @@ pub fn charanm_animate_system(
     mut finished_events: EventWriter<AnimateFinishedEvent>,
 ) {
     for (mut state, mut sprite, entity) in query.iter_mut() {
-        let Some(animation) = animations.get(&state.animation) else { continue; };
-        let Some(variant_name) = &state.variant else { continue; };
+        let Some(animation) = animations.get(&state.animation) else {
+            continue;
+        };
+        let Some(variant_name) = &state.variant else {
+            continue;
+        };
         // get the stugff
-        let Some(variant) = animation.variants.get(variant_name) else { continue; };
+        let Some(variant) = animation.variants.get(variant_name) else {
+            continue;
+        };
 
         let mut updating_frame = false;
 
@@ -573,9 +581,15 @@ fn charanm_update_walkbox_system(
     mut query: Query<(&CharAnimationState, &mut Walkbox), Changed<TextureAtlasSprite>>,
 ) {
     for (state, mut walkbox) in query.iter_mut() {
-        let Some(animation) = animations.get(&state.animation) else { continue; };
-        let Some(variant_name) = &state.variant else { continue; };
-        let Some(variant) = animation.variants.get(variant_name) else { continue; };
+        let Some(animation) = animations.get(&state.animation) else {
+            continue;
+        };
+        let Some(variant_name) = &state.variant else {
+            continue;
+        };
+        let Some(variant) = animation.variants.get(variant_name) else {
+            continue;
+        };
         let frame = &variant.frames[state.frame];
 
         // If there's no walkbox in the frame, you get a 0-sized rectangle at your origin.

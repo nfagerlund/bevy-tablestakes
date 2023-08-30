@@ -9,7 +9,12 @@ use crate::phys_space::*;
 use crate::render::*;
 use crate::space_lookup::RstarPlugin;
 use bevy::{
-    input::InputSystem, log::LogPlugin, math::Rect, prelude::*, render::RenderApp, utils::tracing,
+    input::InputSystem,
+    log::LogPlugin,
+    math::Rect,
+    prelude::*,
+    render::RenderApp,
+    utils::{tracing, Duration},
 };
 use bevy_ecs_ldtk::prelude::*;
 use bevy_inspector_egui::quick::{ResourceInspectorPlugin, WorldInspectorPlugin};
@@ -48,7 +53,7 @@ fn main() {
             ..default()
         })
         .set(AssetPlugin {
-            watch_for_changes: true,
+            watch_for_changes: bevy::asset::ChangeWatcher::with_delay(Duration::from_millis(200)),
             ..default()
         })
         .set(ImagePlugin::default_nearest())
@@ -94,18 +99,18 @@ fn main() {
         // INPUT STUFF
         .add_system(connect_gamepads_system)
         .insert_resource(CurrentInputs::default())
-        .add_system(accept_input_system
-            .in_base_set(CoreSet::PreUpdate)
+        .add_systems(PreUpdate, accept_input_system
             .after(InputSystem)
         )
         // BODY STUFF
         .add_system(shadow_stitcher_system)
         // PLAYER STUFF
         .add_startup_system(setup_player)
-        .configure_set(Movers.after(CharAnimationSystems).after(MovePlanners))
-        .configure_set(MovePlanners.after(SpriteChangers))
-        .configure_set(CameraMovers.after(Movers))
+        .configure_set(Update, Movers.after(CharAnimationSystems).after(MovePlanners))
+        .configure_set(Update, MovePlanners.after(SpriteChangers))
+        .configure_set(Update, CameraMovers.after(Movers))
         .add_systems(
+            Update,
             (
                 move_whole_pixel,
                 move_continuous_no_collision,
@@ -136,6 +141,7 @@ fn main() {
         .add_system(plan_move.in_set(MovePlanners))
         .add_system(wall_collisions.after(Movers))
         .add_systems(
+            Update,
             (camera_locked_system, camera_lerp_system).in_set(CameraMovers)
         )
         // PHYSICS SPACE STUFF
@@ -157,8 +163,7 @@ fn main() {
     if std::env::args().any(|arg| &arg == "--graph") {
         // Write the debug dump to a file and exit. (not sure why it exits, though??? oh well!)
         let settings = bevy_mod_debugdump::schedule_graph::Settings::default();
-        let system_schedule =
-            bevy_mod_debugdump::schedule_graph_dot(&mut app, CoreSchedule::Main, &settings);
+        let system_schedule = bevy_mod_debugdump::schedule_graph_dot(&mut app, Main, &settings);
         let mut sched_file = std::fs::File::create("./schedule.dot").unwrap();
         sched_file.write_all(system_schedule.as_bytes()).unwrap();
     }
