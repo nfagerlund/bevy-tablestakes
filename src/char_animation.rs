@@ -654,7 +654,7 @@ pub struct TestCharAnimationPlugin;
 
 impl Plugin for TestCharAnimationPlugin {
     fn build(&self, app: &mut App) {
-        app.add_startup_system(charanm_test_setup_system)
-            .add_system(charanm_test_set_motion_system);
+        app.add_systems(Startup, charanm_test_setup_system)
+            .add_systems(Update, charanm_test_set_motion_system);
     }
 }

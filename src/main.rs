@@ -65,9 +65,9 @@ fn main() {
     let mut app = App::new();
     app
         .add_plugins(configured_default_plugins)
-        .add_plugin(CharAnimationPlugin)
-        .add_plugin(TestCharAnimationPlugin)
-        .add_plugin(LdtkPlugin)
+        .add_plugins(CharAnimationPlugin)
+        .add_plugins(TestCharAnimationPlugin)
+        .add_plugins(LdtkPlugin)
         // DEBUG STUFF
         // .add_plugin(FrameTimeDiagnosticsPlugin)
         // .add_startup_system(junk::setup_fps_debug)
@@ -75,37 +75,37 @@ fn main() {
         // .add_system(junk::debug_z_system)
         // .add_system(junk::tile_info_barfing_system)
         .insert_resource(DebugAssets::default())
-        .add_startup_system(setup_debug_assets.before(setup_player))
-        .add_system(spawn_collider_debugs)
+        .add_systems(Startup, setup_debug_assets.before(setup_player))
+        .add_systems(Update, spawn_collider_debugs)
         .insert_resource(DebugSettings::default())
         // INSPECTOR STUFF
-        .add_plugin(WorldInspectorPlugin::new())
+        .add_plugins(WorldInspectorPlugin::new())
         .register_type::<PhysTransform>()
         .register_type::<PhysOffset>()
         .register_type::<Speed>()
         .register_type::<Walkbox>()
         .register_type::<Hitbox>()
         .register_type::<TopDownMatter>()
-        .add_plugin(ResourceInspectorPlugin::<DebugSettings>::new())
-        .add_system(debug_walkboxes_system)
+        .add_plugins(ResourceInspectorPlugin::<DebugSettings>::new())
+        .add_systems(Update, debug_walkboxes_system)
         // LDTK STUFF
-        .add_startup_system(setup_level)
+        .add_systems(Startup, setup_level)
         .insert_resource(LevelSelection::Index(1))
         .register_ldtk_int_cell_for_layer::<Wall>("StructureKind", 1)
         // SPATIAL PARTITIONING STUFF
-        .add_plugin(RstarPlugin::<Solid>::new())
+        .add_plugins(RstarPlugin::<Solid>::new())
         // CAMERA
-        .add_startup_system(setup_camera)
+        .add_systems(Startup, setup_camera)
         // INPUT STUFF
-        .add_system(connect_gamepads_system)
+        .add_systems(Update, connect_gamepads_system)
         .insert_resource(CurrentInputs::default())
         .add_systems(PreUpdate, accept_input_system
             .after(InputSystem)
         )
         // BODY STUFF
-        .add_system(shadow_stitcher_system)
+        .add_systems(Update, shadow_stitcher_system)
         // PLAYER STUFF
-        .add_startup_system(setup_player)
+        .add_systems(Startup, setup_player)
         .configure_set(Update, Movers.after(CharAnimationSystems).after(MovePlanners))
         .configure_set(Update, MovePlanners.after(SpriteChangers))
         .configure_set(Update, CameraMovers.after(Movers))
@@ -135,28 +135,27 @@ fn main() {
         // .add_system_to_stage(CoreStage::PostUpdate, player_roll_out)
         // .add_system_to_stage(CoreStage::PostUpdate, player_free_out)
         // .add_system_to_stage(CoreStage::PostUpdate, player_bonk_out)
-        .add_system(propagate_inputs_to_player_state.before(handle_player_state_exits))
-        .add_system(handle_player_state_exits.before(handle_player_state_entry))
-        .add_system(handle_player_state_entry.in_set(SpriteChangers).before(MovePlanners))
-        .add_system(plan_move.in_set(MovePlanners))
-        .add_system(wall_collisions.after(Movers))
+        .add_systems(Update, propagate_inputs_to_player_state.before(handle_player_state_exits))
+        .add_systems(Update, handle_player_state_exits.before(handle_player_state_entry))
+        .add_systems(Update, handle_player_state_entry.in_set(SpriteChangers).before(MovePlanners))
+        .add_systems(Update, plan_move.in_set(MovePlanners))
+        .add_systems(Update, wall_collisions.after(Movers))
         .add_systems(
             Update,
             (camera_locked_system, camera_lerp_system).in_set(CameraMovers)
         )
         // PHYSICS SPACE STUFF
-        .add_system(add_new_phys_transforms.before(MovePlanners))
-        .add_system(sync_phys_transforms.after(CameraMovers))
+        .add_systems(Update, add_new_phys_transforms.before(MovePlanners))
+        .add_systems(Update, sync_phys_transforms.after(CameraMovers))
         // OK BYE!!!
         ;
 
     if let Ok(render_app) = app.get_sub_app_mut(RenderApp) {
         render_app
             // SPACE STUFF
-            .add_system(
-                extract_and_flatten_space_system
-                    .in_schedule(ExtractSchedule)
-                    .after(bevy::sprite::SpriteSystem::ExtractSprites),
+            .add_systems(
+                ExtractSchedule,
+                extract_and_flatten_space_system.after(bevy::sprite::SpriteSystem::ExtractSprites),
             );
     }
 

@@ -61,9 +61,9 @@ impl Plugin for HelloPlugin {
         // the reason we call from_seconds with the true flag is to make the timer repeat itself
         // ...oh. you're just explaining the fact that the second arg to from_seconds is named `repeating`. ok.
         app.insert_resource(GreetTimer(Timer::from_seconds(2.0, TimerMode::Repeating)))
-            .add_startup_system(add_people)
-            // .add_system(hellow_orld)
-            .add_system(greet_peeps)
-            .add_system(blunch.after(greet_peeps));
+            .add_systems(Startup, add_people)
+            // .add_systems(Update, hellow_orld)
+            .add_systems(Update, greet_peeps)
+            .add_systems(Update, blunch.after(greet_peeps));
     }
 }
