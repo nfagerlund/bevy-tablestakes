@@ -1,5 +1,5 @@
 use bevy::{
-    diagnostic::{Diagnostics, FrameTimeDiagnosticsPlugin},
+    diagnostic::{DiagnosticsStore, FrameTimeDiagnosticsPlugin},
     prelude::*,
 };
 use bevy_ecs_ldtk::prelude::*;
@@ -65,11 +65,8 @@ pub fn _setup_fps_debug(mut commands: Commands, asset_server: Res<AssetServer>) 
             },
             style: Style {
                 position_type: PositionType::Absolute,
-                position: UiRect {
-                    top: Val::Px(5.0),
-                    left: Val::Px(5.0),
-                    ..Default::default()
-                },
+                top: Val::Px(5.0),
+                left: Val::Px(5.0),
                 ..Default::default() // boy, LOTS of these
             },
             ..Default::default()
@@ -79,7 +76,7 @@ pub fn _setup_fps_debug(mut commands: Commands, asset_server: Res<AssetServer>) 
 
 // again borrowed from bevymark example
 pub fn _update_fps_debug_system(
-    diagnostics: Res<Diagnostics>,
+    diagnostics: Res<DiagnosticsStore>,
     mut query: Query<&mut Text, With<FPSCounter>>,
 ) {
     if let Some(fps) = diagnostics.get(FrameTimeDiagnosticsPlugin::FPS) {

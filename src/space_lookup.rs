@@ -98,15 +98,15 @@ where
     fn build(&self, app: &mut App) {
         let tree_access = RstarAccess::<MarkComp>::new();
         app.insert_resource(tree_access)
-            .add_startup_system(add_added::<MarkComp>.in_base_set(StartupSet::PostStartup))
+            .add_systems(PostStartup, add_added::<MarkComp>)
             .add_systems(
+                PostUpdate,
                 (
                     delete::<MarkComp>,
                     add_added::<MarkComp>,
                     update_moved::<MarkComp>,
                 )
-                    .chain()
-                    .in_base_set(CoreSet::PostUpdate),
+                    .chain(),
             );
     }
 }
@@ -333,7 +333,9 @@ fn update_moved<MarkComp>(
         let update = info_span!("partial_update", name = "partial_update").entered();
         let mut p1 = set.p1();
         for (entity, last, cur) in moved {
-            let Ok(mut mut_tqi) = p1.get_mut(entity) else { continue };
+            let Ok(mut mut_tqi) = p1.get_mut(entity) else {
+                continue;
+            };
             // Hmm, conditional guard on point already being there... I think
             // that only finds by entity, bc of EntityPos's PartialEq.
             if tree_access.remove_point((last, entity)) {
