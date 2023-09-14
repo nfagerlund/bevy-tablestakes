@@ -118,23 +118,6 @@ fn main() {
                 move_continuous_ray_test,
             ).in_set(Movers)
         )
-        // .add_system_set(
-        //     SystemSet::new()
-        //         .label(MovePlanners)
-        //         .with_system(player_free_plan_move.label(SpriteChangers))
-        //         .with_system(player_roll_plan_move)
-        //         .with_system(player_bonk_plan_move)
-        // )
-        // .add_system_set(
-        //     SystemSet::new()
-        //         .label(SpriteChangers)
-        //         .before(MovePlanners)
-        //         .with_system(player_roll_enter)
-        //         .with_system(player_bonk_enter)
-        // )
-        // .add_system_to_stage(CoreStage::PostUpdate, player_roll_out)
-        // .add_system_to_stage(CoreStage::PostUpdate, player_free_out)
-        // .add_system_to_stage(CoreStage::PostUpdate, player_bonk_out)
         .add_systems(Update, propagate_inputs_to_player_state.before(handle_player_state_exits))
         .add_systems(Update, handle_player_state_exits.before(handle_player_state_entry))
         .add_systems(Update, handle_player_state_entry.in_set(SpriteChangers).before(MovePlanners))
