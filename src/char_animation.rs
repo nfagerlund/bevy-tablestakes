@@ -13,7 +13,7 @@ use image::RgbaImage;
 use std::collections::HashMap;
 
 use crate::compass::{self, Dir};
-use crate::util_countup_timer::CountupTimer;
+use crate::countup_timer::CountupTimer;
 use crate::Motion;
 use crate::Walkbox;
 

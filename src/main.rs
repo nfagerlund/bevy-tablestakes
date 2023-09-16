@@ -24,6 +24,7 @@ use std::io::Write;
 mod char_animation;
 mod collision;
 mod compass;
+mod countup_timer;
 mod goofy_time;
 mod hellow;
 mod input;
@@ -33,7 +34,6 @@ mod phys_space;
 mod player_states;
 mod render;
 mod space_lookup;
-mod util_countup_timer;
 
 const PIXEL_SCALE: f32 = 1.0;
 
