@@ -21,10 +21,11 @@ use bevy_inspector_egui::quick::{ResourceInspectorPlugin, WorldInspectorPlugin};
 use std::collections::HashMap;
 use std::io::Write;
 
+mod toolbox;
+
 mod char_animation;
 mod collision;
 mod compass;
-mod countup_timer;
 mod goofy_time;
 mod hellow;
 mod input;
