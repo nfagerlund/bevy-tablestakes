@@ -112,10 +112,10 @@ fn main() {
         .add_systems(
             Update,
             (
-                move_whole_pixel,
-                move_continuous_no_collision,
-                move_continuous_faceplant,
-                move_continuous_ray_test,
+                move_whole_pixel.run_if(motion_is(MotionKind::WholePixel)),
+                move_continuous_no_collision.run_if(motion_is(MotionKind::NoCollision)),
+                move_continuous_faceplant.run_if(motion_is(MotionKind::Faceplant)),
+                move_continuous_ray_test.run_if(motion_is(MotionKind::RayTest)),
             ).in_set(Movers)
         )
         .add_systems(Update, propagate_inputs_to_player_state.before(handle_player_state_exits))
@@ -125,7 +125,10 @@ fn main() {
         .add_systems(Update, wall_collisions.after(Movers))
         .add_systems(
             Update,
-            (camera_locked_system, camera_lerp_system).in_set(CameraMovers)
+            (
+                camera_locked_system.run_if(camera_is(CameraKind::Locked)),
+                camera_lerp_system.run_if(camera_is(CameraKind::Lerp)),
+            ).in_set(CameraMovers)
         )
         // PHYSICS SPACE STUFF
         .add_systems(Update, add_new_phys_transforms.before(MovePlanners))
@@ -174,6 +177,13 @@ enum CameraKind {
     #[default]
     Locked,
     Lerp,
+}
+
+fn motion_is(kind: MotionKind) -> impl Fn(Res<DebugSettings>) -> bool {
+    move |debugs: Res<DebugSettings>| debugs.motion_kind == kind
+}
+fn camera_is(kind: CameraKind) -> impl Fn(Res<DebugSettings>) -> bool {
+    move |debugs: Res<DebugSettings>| debugs.camera_kind == kind
 }
 
 #[derive(SystemSet, Clone, Debug, PartialEq, Eq, Hash)]
@@ -375,12 +385,7 @@ fn camera_lerp_system(
         Query<&PhysTransform, With<Player>>,
         Query<&mut PhysTransform, With<Camera>>,
     )>,
-    debug_settings: Res<DebugSettings>,
 ) {
-    if debug_settings.camera_kind != CameraKind::Lerp {
-        return;
-    }
-
     let delta = time.delta_seconds();
     let player_pos = params.p0().single().translation.truncate();
     // let player_pos = player_tf.translation.truncate();
@@ -405,12 +410,7 @@ fn camera_locked_system(
         Query<&PhysTransform, With<Player>>,
         Query<&mut PhysTransform, With<Camera>>,
     )>,
-    debug_settings: Res<DebugSettings>,
 ) {
-    if debug_settings.camera_kind != CameraKind::Locked {
-        return;
-    }
-
     let player_pos = params.p0().single().translation;
     let mut camera_q = params.p1();
     let mut camera_tf = camera_q.single_mut();

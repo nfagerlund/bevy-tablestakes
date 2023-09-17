@@ -10,12 +10,7 @@ const SOLID_SCANNING_DISTANCE: f32 = 64.0;
 pub(crate) fn move_continuous_no_collision(
     mut mover_q: Query<(&mut PhysTransform, &mut Motion)>,
     time: Res<Time>,
-    debug_settings: Res<DebugSettings>,
 ) {
-    if debug_settings.motion_kind != MotionKind::NoCollision {
-        return;
-    }
-
     let delta = time.delta_seconds();
     for (mut transform, mut motion) in mover_q.iter_mut() {
         let raw_movement_intent = motion.velocity * delta;
@@ -34,12 +29,7 @@ pub(crate) fn move_continuous_ray_test(
     solids_q: Query<(&Walkbox, &PhysTransform), With<Solid>>,
     solids_tree: Res<SolidsTree>,
     time: Res<Time>,
-    debug_settings: Res<DebugSettings>,
 ) {
-    if debug_settings.motion_kind != MotionKind::RayTest {
-        return;
-    }
-
     let delta = time.delta_seconds();
 
     for (mut transform, mut motion, walkbox) in mover_q.iter_mut() {
@@ -121,12 +111,7 @@ pub(crate) fn move_continuous_faceplant(
     solids_q: Query<(&Walkbox, &PhysTransform), With<Solid>>,
     solids_tree: Res<SolidsTree>,
     time: Res<Time>,
-    debug_settings: Res<DebugSettings>,
 ) {
-    if debug_settings.motion_kind != MotionKind::Faceplant {
-        return;
-    }
-
     // Make some assumptions: solid colliders are generally tiles, and tiles are
     // 16x16. Player walkbox is even smaller. We aren't moving more than, say,
     // two tile-widths per physics tick (and even that's outrageous). A radius
@@ -195,12 +180,7 @@ pub(crate) fn move_whole_pixel(
     mut mover_q: Query<(&mut PhysTransform, &mut Motion, &Walkbox), Without<Solid>>,
     solids_q: Query<(&PhysTransform, &Walkbox), With<Solid>>,
     time: Res<Time>,
-    debug_settings: Res<DebugSettings>,
 ) {
-    if debug_settings.motion_kind != MotionKind::WholePixel {
-        return;
-    }
-
     let solids: Vec<AbsBBox> = solids_q
         .iter()
         .map(|(transform, walkbox)| {
