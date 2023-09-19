@@ -76,7 +76,9 @@ pub struct CharAnimationFrame {
     pub anchor: Vec2,
     /// Bbox for the projected foot position on the ground.
     pub walkbox: Option<Rect>,
-    // todo: hitbox, hurtbox,
+    /// Bbox for the damage-dealing area of a frame.
+    pub hitbox: Option<Rect>,
+    // todo: hurtbox,
 }
 
 #[derive(SystemSet, Clone, Debug, PartialEq, Eq, Hash)]
@@ -221,13 +223,11 @@ fn load_aseprite(bytes: &[u8], load_context: &mut LoadContext) -> anyhow::Result
 
                     // Get the walkbox, offset it relative to the origin, THEN flip the Y.
                     let absolute_walkbox = rect_from_cel(&ase, "walkbox", i);
-                    let walkbox = absolute_walkbox.map(|wbox| {
-                        let relative_walkbox = Rect {
-                            min: wbox.min - origin,
-                            max: wbox.max - origin,
-                        };
-                        flip_rect_y(relative_walkbox)
-                    });
+                    let walkbox = absolute_walkbox.map(|r| relative_to_origin(r, origin));
+
+                    // Same deal for hitbox as walkbox.
+                    let absolute_hitbox = rect_from_cel(&ase, "hitbox", i);
+                    let hitbox = absolute_hitbox.map(|r| relative_to_origin(r, origin));
 
                     let anchor = anchor_transform.transform_point2(origin);
 
@@ -237,6 +237,7 @@ fn load_aseprite(bytes: &[u8], load_context: &mut LoadContext) -> anyhow::Result
                         origin,
                         anchor,
                         walkbox,
+                        hitbox,
                     }
                 })
                 .collect();
@@ -309,6 +310,16 @@ fn flip_rect_y(r: Rect) -> Rect {
         min: invert_vec2_y(bottom_left),
         max: invert_vec2_y(top_right),
     }
+}
+
+/// Translate a Rect so its corners are relative to a provided origin/anchor/pivot
+/// point, then flip the corners' Y coordinates.
+fn relative_to_origin(r: Rect, origin: Vec2) -> Rect {
+    let relative = Rect {
+        min: r.min - origin,
+        max: r.max - origin,
+    };
+    flip_rect_y(relative)
 }
 
 /// Get the bounding Rect for a cel's non-transparent pixels.
