@@ -447,6 +447,7 @@ fn setup_player(mut commands: Commands, asset_server: Res<AssetServer>) {
     let idle: Handle<CharAnimation> = asset_server.load("sprites/sPlayer.aseprite");
     let hurt: Handle<CharAnimation> = asset_server.load("sprites/sPlayerHurt.aseprite");
     let roll: Handle<CharAnimation> = asset_server.load("sprites/sPlayerRoll.aseprite");
+    let slash: Handle<CharAnimation> = asset_server.load("sprites/sPlayerAttackSlash.aseprite");
 
     let initial_animation = idle.clone();
 
@@ -457,6 +458,7 @@ fn setup_player(mut commands: Commands, asset_server: Res<AssetServer>) {
     animations.insert("idle", idle);
     animations.insert("hurt", hurt);
     animations.insert("roll", roll);
+    animations.insert("slash", slash);
 
     // IT'S THE PLAYER, GIVE IT UP!!
     commands.spawn((
