@@ -14,6 +14,7 @@ use std::collections::HashMap;
 
 use crate::compass::{self, Dir};
 use crate::toolbox::countup_timer::CountupTimer;
+use crate::Hitbox;
 use crate::Motion;
 use crate::Walkbox;
 
@@ -103,7 +104,7 @@ impl Plugin for CharAnimationPlugin {
                     charanm_atlas_reassign_system,
                     charanm_set_directions_system,
                     charanm_animate_system,
-                    charanm_update_walkbox_system,
+                    charanm_update_colliders_system,
                 )
                     .chain()
                     .in_set(CharAnimationSystems),
@@ -582,16 +583,23 @@ pub fn charanm_animate_system(
 
 /// The main animate system updates the origin because everything's gotta have
 /// one, but maybe not everything needs a collider, even if its sprite has one.
-/// So, we only update walkboxes for entities who have opted in by having one
-/// added to them at some point, and we never remove walkboxes. BTW: We're
-/// filtering on `Changed<TextureAtlasSprite>` because the animation state
+/// So, we only update colliders for entities who have opted in by having one
+/// added to them at some point.
+/// Notes:
+/// - We don't remove collider components! The component itself needs to be able
+/// to express the condition of "yeah I do this type of interaction, but have no
+/// collider info for this frame".
+/// - We're filtering on `Changed<TextureAtlasSprite>` because the animation state
 /// contains a Timer and thus changes constantly... but we only update the atlas
 /// index when it's time to flip frames.
-fn charanm_update_walkbox_system(
+fn charanm_update_colliders_system(
     animations: Res<Assets<CharAnimation>>,
-    mut query: Query<(&CharAnimationState, &mut Walkbox), Changed<TextureAtlasSprite>>,
+    mut query: Query<
+        (&CharAnimationState, &mut Walkbox, Option<&mut Hitbox>),
+        Changed<TextureAtlasSprite>,
+    >,
 ) {
-    for (state, mut walkbox) in query.iter_mut() {
+    for (state, mut walkbox, hitbox) in query.iter_mut() {
         let Some(animation) = animations.get(&state.animation) else {
             continue;
         };
@@ -606,6 +614,12 @@ fn charanm_update_walkbox_system(
         // If there's no walkbox in the frame, you get a 0-sized rectangle at your origin.
         let sprite_walkbox = frame.walkbox.unwrap_or_default();
         walkbox.0 = sprite_walkbox;
+
+        // Hitbox is both optional as a whole (entity does/doesn't ever attack), and has
+        // an optional inner value (entity is/isn't dealing damage this frame).
+        if let Some(mut hb) = hitbox {
+            hb.0 = frame.hitbox;
+        }
     }
 }
 

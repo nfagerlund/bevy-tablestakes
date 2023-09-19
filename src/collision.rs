@@ -11,12 +11,9 @@ use bevy_ecs_ldtk::prelude::*;
 #[derive(Component, Reflect, Default)]
 pub struct Walkbox(pub Rect);
 
-/// BBox defining the space where an entity can be hit by attacks.
+/// BBox defining the space where an entity can deal damage to others.
 #[derive(Component, Reflect, Default)]
-pub struct Hitbox(pub Rect);
-// ...and then eventually I'll want Hurtbox for attacks, but, tbh I have no
-// idea how to best handle that yet. Is that even a component? Or is it a larger
-// data structure associated with an animation or something?
+pub struct Hitbox(pub Option<Rect>);
 
 pub fn centered_rect(width: f32, height: f32) -> Rect {
     let min = Vec2::new(-width / 2., -height / 2.);
@@ -352,8 +349,10 @@ pub fn spawn_collider_debugs(
     debug_assets: Res<DebugAssets>,
 ) {
     for collider in new_collider_q.iter() {
-        let (Some(mesh_untyped), Some(material_untyped)) = (debug_assets.get("walkbox_mesh"), debug_assets.get("walkbox_material"))
-        else {
+        let (Some(mesh_untyped), Some(material_untyped)) = (
+            debug_assets.get("walkbox_mesh"),
+            debug_assets.get("walkbox_material"),
+        ) else {
             warn!("Hey!! I couldn't get ahold of the collider debug assets for some reason!!");
             return;
         };

@@ -474,6 +474,7 @@ fn setup_player(mut commands: Commands, asset_server: Res<AssetServer>) {
             phys_offset: PhysOffset(Vec2::ZERO),
             speed: Speed(Speed::RUN),
             walkbox: Walkbox(Rect::default()),
+            hitbox: Hitbox(None),
             // --- New animation system
             char_animation_state: CharAnimationState::new(
                 initial_animation,
@@ -509,6 +510,7 @@ struct PlayerBundle {
     phys_offset: PhysOffset,
     speed: Speed,
     walkbox: Walkbox,
+    hitbox: Hitbox,
 
     char_animation_state: CharAnimationState,
     motion: Motion,
