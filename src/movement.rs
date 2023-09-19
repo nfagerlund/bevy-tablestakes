@@ -1,6 +1,5 @@
 use crate::{
-    space_lookup::RstarAccess, AbsBBox, DebugSettings, Motion, MotionKind, MotionResult,
-    PhysTransform, Solid, Walkbox,
+    space_lookup::RstarAccess, AbsBBox, Motion, MotionResult, PhysTransform, Solid, Walkbox,
 };
 use bevy::prelude::*;
 
