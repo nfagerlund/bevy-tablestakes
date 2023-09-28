@@ -118,9 +118,8 @@ fn main() {
                 move_continuous_ray_test.run_if(motion_is(MotionKind::RayTest)),
             ).in_set(Movers)
         )
-        .add_systems(Update, propagate_inputs_to_player_state.before(handle_player_state_exits))
-        .add_systems(Update, handle_player_state_exits.before(handle_player_state_entry))
-        .add_systems(Update, handle_player_state_entry.in_set(SpriteChangers).before(MovePlanners))
+        .add_systems(Update, propagate_inputs_to_player_state.before(player_state_changes))
+        .add_systems(Update, player_state_changes.in_set(SpriteChangers).before(MovePlanners))
         .add_systems(Update, plan_move.in_set(MovePlanners))
         .add_systems(Update, wall_collisions.after(Movers))
         .add_systems(
@@ -233,12 +232,21 @@ fn propagate_inputs_to_player_state(
     }
 }
 
-/// Case 1: interrupted states (something got requested as "next"). Case 2:
-/// states coming to their natural conclusions (timers ran out). Either way,
-/// two jobs: switch to the new state, and handle any state entry setup.
-fn handle_player_state_exits(mut player_q: Query<&mut PlayerStateMachine>) {
-    for mut machine in player_q.iter_mut() {
-        // First, natural endings -- only queue these up if not pre-empted.
+/// Near the start of every frame, check whether the player state machine is switching
+/// states; if so, handle any setup and housekeeping to make the new state usable on the
+/// current frame.
+fn player_state_changes(
+    mut player_q: Query<(
+        &mut PlayerStateMachine,
+        &mut Speed,
+        &mut CharAnimationState,
+        &AnimationsMap,
+    )>,
+    time: Res<Time>,
+) {
+    for (mut machine, mut speed, mut animation_state, animations_map) in player_q.iter_mut() {
+        // ZEROTH: if a state used up its time allotment last frame (without being interrupted),
+        // this is where we queue up a transition to the next state.
         if machine.next.is_none() {
             match machine.current() {
                 PlayerState::Idle => (), // not timed
@@ -262,24 +270,10 @@ fn handle_player_state_exits(mut player_q: Query<&mut PlayerStateMachine>) {
             }
         }
 
-        // Then, move to next state, if any.
+        // FIRST: change states, if it's time to.
         machine.finish_transition();
-    }
-}
 
-fn handle_player_state_entry(
-    mut player_q: Query<(
-        &mut PlayerStateMachine,
-        &mut Speed,
-        &mut CharAnimationState,
-        &AnimationsMap,
-        &mut Motion,
-    )>,
-) {
-    for (mut machine, mut speed, mut animation_state, animations_map, mut motion) in
-        player_q.iter_mut()
-    {
-        // only:
+        // SECOND: if we changed states, do all our setup housekeeping for the new state.
         if machine.just_changed {
             // Update sprite
             let mut set_anim = |name: &str, play: Playback| {
@@ -306,29 +300,32 @@ fn handle_player_state_entry(
                 PlayerState::Bonk { .. } => Speed::BONK,
             };
 
-            // Re-set motion remainder (not actually sure about this; also only applies to by-pixels move)
-            motion.remainder = Vec2::ZERO;
-
             // Mark state entry as completed
             machine.state_entered();
+        }
+
+        // THIRD: If the current state has a timer, tick it forward.
+        match machine.current_mut() {
+            PlayerState::Idle => (),
+            PlayerState::Run => (),
+            PlayerState::Roll { timer, .. } => {
+                timer.tick(time.delta());
+            },
+            PlayerState::Bonk { timer, .. } => {
+                timer.tick(time.delta());
+            },
         }
     }
 }
 
+/// Compute player's velocity for the current frame.
 /// Primarily mutates Motion, but for bonk state I have an unfortunate mutation
-/// of SubTransform.z. Also, this is currently where I'm ticking state timers,
-/// so that's mutable too. hmm.
+/// of PhysTransform.z.
 fn plan_move(
-    mut player_q: Query<(
-        &mut PlayerStateMachine,
-        &mut Motion,
-        &Speed,
-        &mut PhysTransform,
-    )>,
-    time: Res<Time>,
+    mut player_q: Query<(&PlayerStateMachine, &mut Motion, &Speed, &mut PhysTransform)>,
     inputs: Res<CurrentInputs>,
 ) {
-    for (mut machine, mut motion, speed, mut transform) in player_q.iter_mut() {
+    for (machine, mut motion, speed, mut transform) in player_q.iter_mut() {
         // Contribute velocity
         let input = match machine.current() {
             PlayerState::Idle => Vec2::ZERO,
@@ -339,27 +336,18 @@ fn plan_move(
         let velocity = input * speed.0;
         motion.velocity += velocity;
 
-        // Spend state duration (TODO: put this elsewhere)
-        // also: do fucky z-height hack for bonk
-        match machine.current_mut() {
-            PlayerState::Idle => (),
-            PlayerState::Run => (),
-            PlayerState::Roll { timer, .. } => {
-                timer.tick(time.delta());
-            },
-            PlayerState::Bonk { timer, .. } => {
-                timer.tick(time.delta());
-                let progress = timer.percent();
-                // ^^ ok to go backwards bc sin is symmetric. btw this should probably
-                // be parabolic but shrug for now. Also BTW, progress will be exactly
-                // 1.0 (and thus height_frac 0.0) if the timer finished, so we shouldn't
-                // need a backstop against height drift here. *NARRATOR VOICE:* it was
-                // actually -0.0, and that never came back to bite them.
-                let height_frac = (progress * std::f32::consts::PI).sin();
-                // and...  we're just manipulating Z directly instead of going through
-                // the motion planning system. Sorry!! Maybe later.
-                transform.translation.z = height_frac * PlayerState::BONK_HEIGHT;
-            },
+        // do fucky z-height hack for bonk
+        if let PlayerState::Bonk { timer, .. } = machine.current() {
+            let progress = timer.percent();
+            // ^^ ok to go backwards bc sin is symmetric. btw this should probably
+            // be parabolic but shrug for now. Also BTW, progress will be exactly
+            // 1.0 (and thus height_frac 0.0) if the timer finished, so we shouldn't
+            // need a backstop against height drift here. *NARRATOR VOICE:* it was
+            // actually -0.0, and that never came back to bite them.
+            let height_frac = (progress * std::f32::consts::PI).sin();
+            // and...  we're just manipulating Z directly instead of going through
+            // the motion planning system. Sorry!! Maybe later.
+            transform.translation.z = height_frac * PlayerState::BONK_HEIGHT;
         }
     }
 }
