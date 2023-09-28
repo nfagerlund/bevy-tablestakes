@@ -118,10 +118,10 @@ fn main() {
                 move_continuous_ray_test.run_if(motion_is(MotionKind::RayTest)),
             ).in_set(Movers)
         )
-        .add_systems(Update, propagate_inputs_to_player_state.before(player_state_changes))
+        .add_systems(Update, player_state_read_inputs.before(player_state_changes))
         .add_systems(Update, player_state_changes.in_set(SpriteChangers).before(MovePlanners))
-        .add_systems(Update, plan_move.in_set(MovePlanners))
-        .add_systems(Update, wall_collisions.after(Movers))
+        .add_systems(Update, player_plan_move.in_set(MovePlanners))
+        .add_systems(Update, player_queue_wall_bonk.after(Movers))
         .add_systems(
             Update,
             (
@@ -196,7 +196,7 @@ struct CameraMovers;
 
 /// Hey, how much CAN I get away with processing at this point? I know I want to handle
 /// walk/idle transitions here, but..... action button?
-fn propagate_inputs_to_player_state(
+fn player_state_read_inputs(
     inputs: Res<CurrentInputs>,
     mut player_q: Query<(&mut PlayerStateMachine, &mut Motion)>,
 ) {
@@ -321,7 +321,7 @@ fn player_state_changes(
 /// Compute player's velocity for the current frame.
 /// Primarily mutates Motion, but for bonk state I have an unfortunate mutation
 /// of PhysTransform.z.
-fn plan_move(
+fn player_plan_move(
     mut player_q: Query<(&PlayerStateMachine, &mut Motion, &Speed, &mut PhysTransform)>,
     inputs: Res<CurrentInputs>,
 ) {
@@ -352,7 +352,9 @@ fn plan_move(
     }
 }
 
-fn wall_collisions(mut player_q: Query<(&mut PlayerStateMachine, &Motion)>) {
+/// If player bonked into a wall, queue a state transition.
+/// TODO: Generalize knockback. why should this be player-specific? Or bonk-specific?
+fn player_queue_wall_bonk(mut player_q: Query<(&mut PlayerStateMachine, &Motion)>) {
     for (mut machine, motion) in player_q.iter_mut() {
         if let PlayerState::Roll { .. } = machine.current() {
             if let Some(MotionResult { collided: true, .. }) = motion.result {
