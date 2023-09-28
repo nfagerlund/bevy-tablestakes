@@ -11,6 +11,7 @@ use bevy::{
 pub struct CurrentInputs {
     pub movement: Vec2,
     pub actioning: bool,
+    pub attacking: bool,
 }
 
 /// Resource for storing the active gamepad
@@ -141,4 +142,7 @@ pub fn accept_input_system(
 
     // How about action button? Start w/ just keyboard to get basics working.
     inputs.actioning = keys.just_pressed(KeyCode::Space);
+    // Uhhhhhh okay it is WAY past time to improve this gamepad / kb input fight
+    // situation, but, I'm in the middle of something rn, so,,,
+    inputs.attacking = keys.just_pressed(KeyCode::ShiftLeft);
 }
