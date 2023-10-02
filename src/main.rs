@@ -229,6 +229,16 @@ fn player_state_read_inputs(
                 _ => (),
             }
         }
+
+        // Attack button
+        if inputs.attacking {
+            match machine.current() {
+                PlayerState::Idle | PlayerState::Run => {
+                    machine.push_transition(PlayerState::attack());
+                },
+                _ => (),
+            }
+        }
     }
 }
 
@@ -267,6 +277,11 @@ fn player_state_changes(
                         machine.push_transition(PlayerState::Idle);
                     }
                 },
+                PlayerState::Attack { timer } => {
+                    if timer.finished() {
+                        machine.push_transition(PlayerState::Idle);
+                    }
+                },
             }
         }
 
@@ -290,6 +305,7 @@ fn player_state_changes(
                     animation_state.set_total_run_time_to(roll_millis);
                 },
                 PlayerState::Bonk { .. } => set_anim("hurt", Playback::Once),
+                PlayerState::Attack { .. } => set_anim("slash", Playback::Once),
             };
 
             // Update speed
@@ -298,6 +314,7 @@ fn player_state_changes(
                 PlayerState::Run => Speed::RUN,
                 PlayerState::Roll { .. } => Speed::ROLL,
                 PlayerState::Bonk { .. } => Speed::BONK,
+                PlayerState::Attack { .. } => 0.0,
             };
 
             // Mark state entry as completed
@@ -305,6 +322,7 @@ fn player_state_changes(
         }
 
         // THIRD: If the current state has a timer, tick it forward.
+        // TODO: Could make this a method on &mut PlayerState :thonk:
         match machine.current_mut() {
             PlayerState::Idle => (),
             PlayerState::Run => (),
@@ -312,6 +330,9 @@ fn player_state_changes(
                 timer.tick(time.delta());
             },
             PlayerState::Bonk { timer, .. } => {
+                timer.tick(time.delta());
+            },
+            PlayerState::Attack { timer } => {
                 timer.tick(time.delta());
             },
         }
@@ -332,6 +353,7 @@ fn player_plan_move(
             PlayerState::Run => inputs.movement,
             PlayerState::Roll { roll_input, .. } => *roll_input,
             PlayerState::Bonk { bonk_input, .. } => *bonk_input,
+            PlayerState::Attack { .. } => Vec2::ZERO,
         };
         let velocity = input * speed.0;
         motion.velocity += velocity;
@@ -554,6 +576,7 @@ pub enum PlayerState {
     Run,
     Roll { roll_input: Vec2, timer: Timer },
     Bonk { bonk_input: Vec2, timer: Timer },
+    Attack { timer: Timer },
 }
 
 impl PlayerState {
@@ -562,6 +585,17 @@ impl PlayerState {
     const BONK_HEIGHT: f32 = 8.0;
     const ROLL_SPEED: f32 = Speed::ROLL;
     const BONK_SPEED: f32 = Speed::BONK;
+    const ATTACK_DURATION_MS: u64 = 599;
+
+    // TODO: Need to learn the length of the attack state based on sprite asset! For now, hardcoded.
+    fn attack() -> Self {
+        Self::Attack {
+            timer: Timer::new(
+                Duration::from_millis(Self::ATTACK_DURATION_MS),
+                TimerMode::Once,
+            ),
+        }
+    }
 
     fn roll(direction: f32) -> Self {
         let duration_secs = Self::ROLL_DISTANCE / Self::ROLL_SPEED;
