@@ -305,7 +305,11 @@ fn player_state_changes(
                     animation_state.set_total_run_time_to(roll_millis);
                 },
                 PlayerState::Bonk { .. } => set_anim("hurt", Playback::Once),
-                PlayerState::Attack { .. } => set_anim("slash", Playback::Once),
+                PlayerState::Attack { timer } => {
+                    set_anim("slash", Playback::Once);
+                    let attack_millis = timer.duration().as_millis() as u64;
+                    animation_state.set_total_run_time_to(attack_millis);
+                },
             };
 
             // Update speed
@@ -585,9 +589,11 @@ impl PlayerState {
     const BONK_HEIGHT: f32 = 8.0;
     const ROLL_SPEED: f32 = Speed::ROLL;
     const BONK_SPEED: f32 = Speed::BONK;
-    const ATTACK_DURATION_MS: u64 = 599;
+    const ATTACK_DURATION_MS: u64 = 400;
 
-    // TODO: Need to learn the length of the attack state based on sprite asset! For now, hardcoded.
+    // TODO: I'm scaling this one for now anyway, but, it'd be good to learn the length of a state
+    // based on its sprite asset, so it can be *dictated* by the source file but not *managed*
+    // by the animation system. ...Cache it with a startup system?
     fn attack() -> Self {
         Self::Attack {
             timer: Timer::new(
