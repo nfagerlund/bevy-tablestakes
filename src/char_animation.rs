@@ -29,6 +29,7 @@ pub struct CharAnimation {
 pub struct CharAnimationVariant {
     pub name: VariantName,
     pub frames: Vec<CharAnimationFrame>,
+    pub duration: Duration,
 }
 
 impl CharAnimationVariant {
@@ -39,13 +40,16 @@ impl CharAnimationVariant {
         frame_index: usize,
         override_type: FrameTimeOverride,
     ) -> Duration {
-        let asset_duration = self.frames[frame_index].duration;
+        let frame_duration = self.frames[frame_index].duration;
         match override_type {
-            FrameTimeOverride::None => asset_duration,
+            FrameTimeOverride::None => frame_duration,
             FrameTimeOverride::Ms(millis) => Duration::from_millis(millis),
-            FrameTimeOverride::Scale(scale) => asset_duration.mul_f32(scale),
+            FrameTimeOverride::Scale(scale) => frame_duration.mul_f32(scale),
             FrameTimeOverride::TotalMs(total_millis) => {
-                let millis = total_millis / (self.frames.len() as u64); // nearest ms is fine
+                // Split the total milliseconds between the frames, proportional to the fraction of
+                // the total duration they occupy.
+                let millis = total_millis * (frame_duration.as_millis() as u64)
+                    / (self.duration.as_millis() as u64); // Integer division is fine
                 Duration::from_millis(millis)
             },
         }
@@ -209,12 +213,15 @@ fn load_aseprite(bytes: &[u8], load_context: &mut LoadContext) -> anyhow::Result
     // in the same for-loop):
     let mut process_frame_range =
         |name: VariantName, frame_range: core::ops::RangeInclusive<u32>| {
+            let mut total_duration = Duration::default();
             let frames: Vec<CharAnimationFrame> = frame_range
                 .map(|i| {
                     let frame = ase.frame(i);
                     let index = i as usize;
                     let duration_ms = frame.duration() as u64;
                     let duration = Duration::from_millis(duration_ms);
+
+                    total_duration += duration;
 
                     // Wasteful, bc we could exit early on first non-clear px, but meh.
                     let origin = match rect_from_cel(&ase, "origin", i) {
@@ -242,8 +249,11 @@ fn load_aseprite(bytes: &[u8], load_context: &mut LoadContext) -> anyhow::Result
                     }
                 })
                 .collect();
-
-            let variant = CharAnimationVariant { name, frames };
+            let variant = CharAnimationVariant {
+                name,
+                frames,
+                duration: total_duration,
+            };
             variants.insert(name, variant);
         };
 
