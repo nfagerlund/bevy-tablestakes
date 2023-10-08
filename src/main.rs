@@ -477,44 +477,38 @@ fn setup_player(mut commands: Commands, asset_server: Res<AssetServer>) {
     animations.insert("slash", slash);
 
     // IT'S THE PLAYER, GIVE IT UP!!
-    commands.spawn((
-        PlayerBundle {
-            // Remember who u are
-            identity: Player,
-            sprite_sheet: SpriteSheetBundle {
-                transform: Transform::from_translation(Vec3::new(0.0, 0.0, 3.0))
-                    .with_scale(Vec3::splat(PIXEL_SCALE)),
-                ..Default::default()
-            },
-            phys_transform: PhysTransform {
-                translation: Vec3::ZERO,
-            },
-            phys_offset: PhysOffset(Vec2::ZERO),
-            speed: Speed(Speed::RUN),
-            walkbox: Walkbox(Rect::default()),
-            hitbox: Hitbox(None),
-            // --- New animation system
-            char_animation_state: CharAnimationState::new(
-                initial_animation,
-                Dir::E,
-                Playback::Loop,
-            ),
-            motion: Motion::new(Vec2::ZERO),
-            animations_map: animations,
+    commands.spawn((PlayerBundle {
+        // Remember who u are
+        identity: Player,
+        sprite_sheet: SpriteSheetBundle {
+            transform: Transform::from_translation(Vec3::new(0.0, 0.0, 3.0))
+                .with_scale(Vec3::splat(PIXEL_SCALE)),
+            ..Default::default()
         },
+        phys_transform: PhysTransform {
+            translation: Vec3::ZERO,
+        },
+        phys_offset: PhysOffset(Vec2::ZERO),
+        speed: Speed(Speed::RUN),
+        walkbox: Walkbox(Rect::default()),
+        hitbox: Hitbox(None),
+        // --- New animation system
+        char_animation_state: CharAnimationState::new(initial_animation, Dir::E, Playback::Loop),
+        motion: Motion::new(Vec2::ZERO),
+        animations_map: animations,
         // Initial gameplay state
-        PlayerStateMachine {
+        state_machine: PlayerStateMachine {
             current: PlayerState::Idle,
             next: None,
             just_changed: true,
         },
         // Shadow marker
-        HasShadow,
+        shadow: HasShadow,
         // Draw-depth manager
-        TopDownMatter::character(),
+        top_down_matter: TopDownMatter::character(),
         // Inspector?
-        Name::new("Kittybuddy"),
-    ));
+        name: Name::new("Kittybuddy"),
+    },));
 }
 
 // Structs and crap!
@@ -522,17 +516,24 @@ fn setup_player(mut commands: Commands, asset_server: Res<AssetServer>) {
 #[derive(Bundle)]
 struct PlayerBundle {
     identity: Player,
+    name: Name,
+    state_machine: PlayerStateMachine,
+
     sprite_sheet: SpriteSheetBundle,
+    char_animation_state: CharAnimationState,
+    animations_map: AnimationsMap,
 
     phys_transform: PhysTransform,
     phys_offset: PhysOffset,
-    speed: Speed,
+
     walkbox: Walkbox,
     hitbox: Hitbox,
 
-    char_animation_state: CharAnimationState,
+    shadow: HasShadow,
+    top_down_matter: TopDownMatter,
+
+    speed: Speed,
     motion: Motion,
-    animations_map: AnimationsMap,
 }
 
 #[derive(Component, Deref, DerefMut, Default)]
