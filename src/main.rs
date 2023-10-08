@@ -539,16 +539,21 @@ struct PlayerBundle {
 #[derive(Component, Deref, DerefMut, Default)]
 pub struct AnimationsMap(HashMap<&'static str, Handle<CharAnimation>>);
 
+type PlayerStateMachine = EntityStateMachine<PlayerState>;
+
 #[derive(Component)]
-pub struct PlayerStateMachine {
+pub struct EntityStateMachine<T>
+where
+    T: Clone,
+{
     // fields are private
-    current: PlayerState,
-    next: Option<PlayerState>,
+    current: T,
+    next: Option<T>,
     just_changed: bool,
 }
 
-impl PlayerStateMachine {
-    fn push_transition(&mut self, next: PlayerState) {
+impl<T: Clone> EntityStateMachine<T> {
+    fn push_transition(&mut self, next: T) {
         self.next = Some(next);
     }
     // fn has_transition(&self) -> bool {
@@ -557,10 +562,10 @@ impl PlayerStateMachine {
     // fn peek_next(&self) -> Option<&PlayerState> {
     //     self.next.as_ref()
     // }
-    fn current(&self) -> &PlayerState {
+    fn current(&self) -> &T {
         &self.current
     }
-    fn current_mut(&mut self) -> &mut PlayerState {
+    fn current_mut(&mut self) -> &mut T {
         &mut self.current
     }
     fn state_entered(&mut self) {
