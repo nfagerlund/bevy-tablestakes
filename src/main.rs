@@ -104,10 +104,13 @@ fn main() {
         .add_systems(PreUpdate, accept_input_system
             .after(InputSystem)
         )
+        // SPRITE ASSET STUFF
+        .insert_resource(AnimationsMap::default())
+        .add_systems(Startup, load_sprite_assets)
         // BODY STUFF
         .add_systems(Update, shadow_stitcher_system)
         // PLAYER STUFF
-        .add_systems(Startup, setup_player)
+        .add_systems(Startup, setup_player.after(load_sprite_assets))
         .configure_set(Update, Movers.after(CharAnimationSystems).after(MovePlanners))
         .configure_set(Update, MovePlanners.after(SpriteChangers))
         .configure_set(Update, CameraMovers.after(Movers))
@@ -248,15 +251,11 @@ fn player_state_read_inputs(
 /// states; if so, handle any setup and housekeeping to make the new state usable on the
 /// current frame.
 fn player_state_changes(
-    mut player_q: Query<(
-        &mut PlayerStateMachine,
-        &mut Speed,
-        &mut CharAnimationState,
-        &AnimationsMap,
-    )>,
+    mut player_q: Query<(&mut PlayerStateMachine, &mut Speed, &mut CharAnimationState)>,
+    animations_map: Res<AnimationsMap>,
     time: Res<Time>,
 ) {
-    for (mut machine, mut speed, mut animation_state, animations_map) in player_q.iter_mut() {
+    for (mut machine, mut speed, mut animation_state) in player_q.iter_mut() {
         // ZEROTH: if a state used up its time allotment last frame (without being interrupted),
         // this is where we queue up a transition to the next state.
         if machine.next.is_none() {
@@ -293,22 +292,25 @@ fn player_state_changes(
         // SECOND: if we changed states, do all our setup housekeeping for the new state.
         if machine.just_changed {
             // Update sprite
-            let mut set_anim = |name: &str, play: Playback| {
-                let ani = animations_map.get(name).unwrap().clone();
-                animation_state.change_animation(ani, play);
+            let mut set_anim = |name: &Ases, play: Playback| {
+                if let Some(ani) = animations_map.get(name) {
+                    animation_state.change_animation(ani.clone(), play);
+                } else {
+                    info!("Whoa oops, tried to set animation {:?} on player", name);
+                }
             };
             match machine.current() {
-                PlayerState::Idle => set_anim("idle", Playback::Loop),
-                PlayerState::Run => set_anim("run", Playback::Loop),
+                PlayerState::Idle => set_anim(&Ases::TkIdle, Playback::Loop),
+                PlayerState::Run => set_anim(&Ases::TkRun, Playback::Loop),
                 PlayerState::Roll { timer, .. } => {
                     // little extra on this one, sets animation parameters based on gameplay effect
-                    set_anim("roll", Playback::Once);
+                    set_anim(&Ases::TkRoll, Playback::Once);
                     let roll_millis = timer.duration().as_millis() as u64;
                     animation_state.set_total_run_time_to(roll_millis);
                 },
-                PlayerState::Bonk { .. } => set_anim("hurt", Playback::Once),
+                PlayerState::Bonk { .. } => set_anim(&Ases::TkHurt, Playback::Once),
                 PlayerState::Attack { timer } => {
-                    set_anim("slash", Playback::Once);
+                    set_anim(&Ases::TkSlash, Playback::Once);
                     let attack_millis = timer.duration().as_millis() as u64;
                     animation_state.set_total_run_time_to(attack_millis);
                 },
@@ -406,23 +408,41 @@ fn setup_level(mut commands: Commands, asset_server: Res<AssetServer>) {
     ));
 }
 
-fn setup_player(mut commands: Commands, asset_server: Res<AssetServer>) {
-    let run: Handle<CharAnimation> = asset_server.load("sprites/sPlayerRun.aseprite");
-    let idle: Handle<CharAnimation> = asset_server.load("sprites/sPlayer.aseprite");
-    let hurt: Handle<CharAnimation> = asset_server.load("sprites/sPlayerHurt.aseprite");
-    let roll: Handle<CharAnimation> = asset_server.load("sprites/sPlayerRoll.aseprite");
-    let slash: Handle<CharAnimation> = asset_server.load("sprites/sPlayerAttackSlash.aseprite");
+/// Name enum for ALL the sprites I'm using. 😵‍💫😽 I just want something type-checked instead
+/// of a hashmap of strings, that's all. Keep it dumb.
+#[derive(PartialEq, Eq, Hash, Clone, Copy, Debug)]
+pub enum Ases {
+    // Tk = Tutorial Kitty
+    TkIdle,
+    TkRun,
+    TkHurt,
+    TkRoll,
+    TkSlash,
+}
 
-    let initial_animation = idle.clone();
+/// Sets up a shared hashmap resource of loaded animated sprite assets.
+fn load_sprite_assets(asset_server: Res<AssetServer>, mut animations: ResMut<AnimationsMap>) {
+    animations.insert(
+        Ases::TkRun,
+        asset_server.load("sprites/sPlayerRun.aseprite"),
+    );
+    animations.insert(Ases::TkIdle, asset_server.load("sprites/sPlayer.aseprite"));
+    animations.insert(
+        Ases::TkHurt,
+        asset_server.load("sprites/sPlayerHurt.aseprite"),
+    );
+    animations.insert(
+        Ases::TkRoll,
+        asset_server.load("sprites/sPlayerRoll.aseprite"),
+    );
+    animations.insert(
+        Ases::TkSlash,
+        asset_server.load("sprites/sPlayerAttackSlash.aseprite"),
+    );
+}
 
-    // Okay, I'm going to be lazy here: hashmap w/ string literals. SORRY. I'll
-    // come back to it later.
-    let mut animations = AnimationsMap::default();
-    animations.insert("run", run);
-    animations.insert("idle", idle);
-    animations.insert("hurt", hurt);
-    animations.insert("roll", roll);
-    animations.insert("slash", slash);
+fn setup_player(mut commands: Commands, animations: Res<AnimationsMap>) {
+    let initial_animation = animations.get(&Ases::TkIdle).unwrap().clone();
 
     // IT'S THE PLAYER, GIVE IT UP!!
     commands.spawn((PlayerBundle {
@@ -443,7 +463,6 @@ fn setup_player(mut commands: Commands, asset_server: Res<AssetServer>) {
         // --- New animation system
         char_animation_state: CharAnimationState::new(initial_animation, Dir::E, Playback::Loop),
         motion: Motion::new(Vec2::ZERO),
-        animations_map: animations,
         // Initial gameplay state
         state_machine: PlayerStateMachine {
             current: PlayerState::Idle,
@@ -469,7 +488,6 @@ struct PlayerBundle {
 
     sprite_sheet: SpriteSheetBundle,
     char_animation_state: CharAnimationState,
-    animations_map: AnimationsMap,
 
     phys_transform: PhysTransform,
     phys_offset: PhysOffset,
@@ -484,8 +502,8 @@ struct PlayerBundle {
     motion: Motion,
 }
 
-#[derive(Component, Deref, DerefMut, Default)]
-pub struct AnimationsMap(HashMap<&'static str, Handle<CharAnimation>>);
+#[derive(Resource, Deref, DerefMut, Default)]
+pub struct AnimationsMap(HashMap<Ases, Handle<CharAnimation>>);
 
 type PlayerStateMachine = EntityStateMachine<PlayerState>;
 
