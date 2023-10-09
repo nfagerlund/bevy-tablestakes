@@ -1,10 +1,52 @@
+//! Systems and components for Actually Moving. This module disclaims responsibility for
+//! PLANNING your movement! Right now that stuff's all in main. Anyway, there are
+//! three implementations for movement at the moment, but the main one is
+//! move_continuous_ray_test; it gives much better stability and feel.
+
 use crate::{
-    space_lookup::RstarAccess, AbsBBox, Motion, MotionResult, PhysTransform, Solid, Walkbox,
+    collision::{AbsBBox, Solid, Walkbox},
+    phys_space::PhysTransform,
+    space_lookup::RstarAccess,
 };
 use bevy::prelude::*;
 
 type SolidsTree = RstarAccess<Solid>;
 const SOLID_SCANNING_DISTANCE: f32 = 64.0;
+
+/// Information about what the entity is doing, spatially speaking.
+#[derive(Component)]
+pub struct Motion {
+    /// The direction the entity is currently facing, in radians. Tracked
+    /// separately because it persists even when no motion is planned.
+    pub facing: f32,
+    /// The linear velocity for this frame, as determined by the entity's state and inputs.
+    pub velocity: Vec2,
+    pub remainder: Vec2,
+    pub result: Option<MotionResult>,
+}
+impl Motion {
+    pub fn new(motion: Vec2) -> Self {
+        let mut thing = Self {
+            facing: 0.0, // facing east on the unit circle
+            velocity: Vec2::ZERO,
+            remainder: Vec2::ZERO,
+            result: None,
+        };
+        thing.face(motion);
+        thing
+    }
+
+    pub fn face(&mut self, input: Vec2) {
+        if input.length() > 0.0 {
+            self.facing = Vec2::X.angle_between(input);
+        }
+    }
+}
+
+pub struct MotionResult {
+    pub collided: bool,
+    pub new_location: Vec2,
+}
 
 pub(crate) fn move_continuous_no_collision(
     mut mover_q: Query<(&mut PhysTransform, &mut Motion)>,

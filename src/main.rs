@@ -1,5 +1,6 @@
 #![allow(clippy::type_complexity)] // it's just impossible
 
+use crate::camera::*;
 use crate::char_animation::*;
 use crate::collision::*;
 use crate::compass::*;
@@ -24,6 +25,7 @@ use std::io::Write;
 mod junkbox;
 mod toolbox;
 
+mod camera;
 mod char_animation;
 mod collision;
 mod compass;
@@ -393,47 +395,6 @@ fn player_queue_wall_bonk(mut player_q: Query<(&mut PlayerStateMachine, &Motion)
     }
 }
 
-fn camera_lerp_system(
-    time: Res<Time>,
-    // time: Res<StaticTime>,
-    // time: Res<SmoothedTime>,
-    mut params: ParamSet<(
-        Query<&PhysTransform, With<Player>>,
-        Query<&mut PhysTransform, With<Camera>>,
-    )>,
-) {
-    let delta = time.delta_seconds();
-    let player_pos = params.p0().single().translation.truncate();
-    // let player_pos = player_tf.translation.truncate();
-    // let mut camera_tf = query.q1().get_single_mut().unwrap();
-    for mut camera_tf in params.p1().iter_mut() {
-        let camera_pos = camera_tf.translation.truncate();
-        let camera_distance = player_pos - camera_pos;
-        let follow_amount = if camera_distance.length() <= 1.0 {
-            camera_distance
-        } else {
-            (camera_distance * 4.0 * delta).round()
-        };
-        camera_tf.translation += follow_amount.extend(0.0);
-        // let camera_z = camera_tf.translation.z;
-        // camera_tf.translation = player_pos.extend(camera_z);
-        // ...and then you'd do room boundaries clamping, screenshake, etc.
-    }
-}
-
-fn camera_locked_system(
-    mut params: ParamSet<(
-        Query<&PhysTransform, With<Player>>,
-        Query<&mut PhysTransform, With<Camera>>,
-    )>,
-) {
-    let player_pos = params.p0().single().translation;
-    let mut camera_q = params.p1();
-    let mut camera_tf = camera_q.single_mut();
-    camera_tf.translation.x = player_pos.x;
-    camera_tf.translation.y = player_pos.y;
-}
-
 fn setup_level(mut commands: Commands, asset_server: Res<AssetServer>) {
     commands.spawn((
         LdtkWorld,
@@ -442,19 +403,6 @@ fn setup_level(mut commands: Commands, asset_server: Res<AssetServer>) {
             transform: Transform::from_scale(Vec3::splat(PIXEL_SCALE)),
             ..Default::default()
         },
-    ));
-}
-
-fn setup_camera(mut commands: Commands) {
-    let mut camera_bundle = Camera2dBundle::default();
-    camera_bundle.projection.scale = 1.0 / 3.0;
-    commands.spawn((
-        camera_bundle,
-        PhysOffset(Vec2::ZERO),
-        PhysTransform {
-            translation: Vec3::new(0.0, 0.0, 999.0),
-        },
-        // ^^ hack: I looked up the Z coord on new_2D and fudged it so we won't accidentally round it to 1000.
     ));
 }
 
@@ -638,46 +586,13 @@ pub struct LdtkWorld;
 #[derive(Component)]
 pub struct Player;
 
-/// Speed in pixels... per... second?
+/// Speed in pixels... per... second? This is used for _planning_ movement; once
+/// the entity knows what it's trying to do this frame, it gets reduced to an
+/// absolute velocity vector, in the Motion struct.
 #[derive(Component, Reflect)]
 pub struct Speed(f32);
 impl Speed {
     const RUN: f32 = 120.0;
     const ROLL: f32 = 180.0;
     const BONK: f32 = 60.0;
-}
-
-/// Information about what the entity is doing, spatially speaking.
-#[derive(Component)]
-pub struct Motion {
-    /// The direction the entity is currently facing, in radians. Tracked
-    /// separately because it persists even when no motion is planned.
-    pub facing: f32,
-    /// The linear velocity for this frame, as determined by the entity's state and inputs.
-    pub velocity: Vec2,
-    pub remainder: Vec2,
-    pub result: Option<MotionResult>,
-}
-impl Motion {
-    pub fn new(motion: Vec2) -> Self {
-        let mut thing = Self {
-            facing: 0.0, // facing east on the unit circle
-            velocity: Vec2::ZERO,
-            remainder: Vec2::ZERO,
-            result: None,
-        };
-        thing.face(motion);
-        thing
-    }
-
-    pub fn face(&mut self, input: Vec2) {
-        if input.length() > 0.0 {
-            self.facing = Vec2::X.angle_between(input);
-        }
-    }
-}
-
-pub struct MotionResult {
-    pub collided: bool,
-    pub new_location: Vec2,
 }
