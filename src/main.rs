@@ -418,6 +418,8 @@ pub enum Ases {
     TkHurt,
     TkRoll,
     TkSlash,
+    // Sl = Slime
+    SlIdle,
 }
 
 /// Sets up a shared hashmap resource of loaded animated sprite assets.
@@ -479,6 +481,45 @@ fn setup_player(mut commands: Commands, animations: Res<AnimationsMap>) {
 }
 
 // Structs and crap!
+
+/// Marker component for enemies
+#[derive(Component)]
+struct Enemy;
+
+type EnemyStateMachine = EntityStateMachine<EnemyState>;
+
+#[derive(Clone)]
+enum EnemyState {
+    Idle,
+    Patrol,
+    Chase,
+    Attack,
+    Hurt,
+    Dying,
+}
+
+#[derive(Bundle)]
+struct EnemyBundle {
+    identity: Enemy,
+    name: Name,
+    state_machine: EnemyStateMachine,
+
+    // .......oh nice, everything below here is same as player. Ripe for future consolidation!
+    sprite_sheet: SpriteSheetBundle,
+    char_animation_state: CharAnimationState,
+
+    phys_transform: PhysTransform,
+    phys_offset: PhysOffset,
+
+    walkbox: Walkbox,
+    hitbox: Hitbox,
+
+    shadow: HasShadow,
+    top_down_matter: TopDownMatter,
+
+    speed: Speed,
+    motion: Motion,
+}
 
 #[derive(Bundle)]
 struct PlayerBundle {
