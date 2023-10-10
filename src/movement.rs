@@ -14,7 +14,7 @@ type SolidsTree = RstarAccess<Solid>;
 const SOLID_SCANNING_DISTANCE: f32 = 64.0;
 
 /// Information about what the entity is doing, spatially speaking.
-#[derive(Component)]
+#[derive(Component, Reflect)]
 pub struct Motion {
     /// The direction the entity is currently facing, in radians. Tracked
     /// separately because it persists even when no motion is planned.
@@ -43,6 +43,7 @@ impl Motion {
     }
 }
 
+#[derive(Reflect)]
 pub struct MotionResult {
     pub collided: bool,
     pub new_location: Vec2,

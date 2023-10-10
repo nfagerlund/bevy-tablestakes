@@ -86,6 +86,7 @@ fn main() {
         .register_type::<Walkbox>()
         .register_type::<Hitbox>()
         .register_type::<TopDownMatter>()
+        .register_type::<Motion>()
         .add_plugins(ResourceInspectorPlugin::<DebugSettings>::new())
         .add_systems(Update, debug_walkboxes_system)
         // LDTK STUFF
