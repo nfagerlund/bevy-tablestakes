@@ -37,8 +37,6 @@ mod player_states;
 mod render;
 mod space_lookup;
 
-const PIXEL_SCALE: f32 = 1.0;
-
 fn main() {
     let configured_default_plugins = DefaultPlugins
         .set(WindowPlugin {
@@ -402,7 +400,7 @@ fn setup_level(mut commands: Commands, asset_server: Res<AssetServer>) {
         LdtkWorld,
         LdtkWorldBundle {
             ldtk_handle: asset_server.load("kittytown.ldtk"),
-            transform: Transform::from_scale(Vec3::splat(PIXEL_SCALE)),
+            transform: Transform::default(),
             ..Default::default()
         },
     ));
@@ -451,8 +449,7 @@ fn setup_player(mut commands: Commands, animations: Res<AnimationsMap>) {
         // Remember who u are
         identity: Player,
         sprite_sheet: SpriteSheetBundle {
-            transform: Transform::from_translation(Vec3::new(0.0, 0.0, 3.0))
-                .with_scale(Vec3::splat(PIXEL_SCALE)),
+            transform: Transform::from_translation(Vec3::new(0.0, 0.0, 3.0)),
             ..Default::default()
         },
         phys_transform: PhysTransform {
