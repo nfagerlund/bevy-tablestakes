@@ -107,6 +107,8 @@ fn main() {
         .add_systems(Startup, load_sprite_assets)
         // BODY STUFF
         .add_systems(Update, shadow_stitcher_system)
+        // ENEMY STUFF
+        .add_systems(Startup, temp_setup_enemy.after(load_sprite_assets))
         // PLAYER STUFF
         .add_systems(Startup, setup_player.after(load_sprite_assets))
         .configure_set(Update, Movers.after(CharAnimationSystems).after(MovePlanners))
@@ -416,12 +418,15 @@ pub enum Ases {
     TkHurt,
     TkRoll,
     TkSlash,
-    // Sl = Slime
-    SlIdle,
+    SlimeIdle,
+    SlimeAttack,
+    SlimeHurt,
+    SlimeDie,
 }
 
 /// Sets up a shared hashmap resource of loaded animated sprite assets.
 fn load_sprite_assets(asset_server: Res<AssetServer>, mut animations: ResMut<AnimationsMap>) {
+    // Tutorial Kitty
     animations.insert(
         Ases::TkRun,
         asset_server.load("sprites/sPlayerRun.aseprite"),
@@ -439,6 +444,52 @@ fn load_sprite_assets(asset_server: Res<AssetServer>, mut animations: ResMut<Ani
         Ases::TkSlash,
         asset_server.load("sprites/sPlayerAttackSlash.aseprite"),
     );
+
+    // Tutorial Slime
+    animations.insert(
+        Ases::SlimeIdle,
+        asset_server.load("sprites/sSlime.aseprite"),
+    );
+    animations.insert(
+        Ases::SlimeAttack,
+        asset_server.load("sprites/sSlimeAttack.aseprite"),
+    );
+    animations.insert(
+        Ases::SlimeHurt,
+        asset_server.load("sprites/sSlimeHurt.aseprite"),
+    );
+    animations.insert(
+        Ases::SlimeDie,
+        asset_server.load("sprites/sSlimeDie.aseprite"),
+    );
+}
+
+// Obviously this is wack, and we should be spawning from ldtk entities, but bear with me here.
+fn temp_setup_enemy(mut commands: Commands, animations: Res<AnimationsMap>) {
+    let initial_animation = animations.get(&Ases::SlimeIdle).unwrap().clone();
+    let whence = Vec3::new(220., 200., 0.); // empirically 🤷🏽
+
+    commands.spawn(EnemyBundle {
+        identity: Enemy,
+        name: Name::new("Sloom"),
+        state_machine: EnemyStateMachine {
+            current: EnemyState::Idle,
+            next: None,
+            just_changed: true,
+        },
+        sprite_sheet: SpriteSheetBundle::default(), // Oh huh wow, I took over all that stuff.
+        char_animation_state: CharAnimationState::new(initial_animation, Dir::E, Playback::Loop),
+        phys_transform: PhysTransform {
+            translation: whence,
+        },
+        phys_offset: PhysOffset(Vec2::ZERO),
+        walkbox: Walkbox(Rect::default()),
+        hitbox: Hitbox(None),
+        shadow: HasShadow,
+        top_down_matter: TopDownMatter::character(),
+        speed: Speed(Speed::RUN), // ???
+        motion: Motion::new(Vec2::ZERO),
+    });
 }
 
 fn setup_player(mut commands: Commands, animations: Res<AnimationsMap>) {
