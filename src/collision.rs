@@ -343,8 +343,7 @@ pub fn setup_debug_assets(
 /// Add debug mesh children to newly added collidable entities, so I can see
 /// where their boundaries are. (Toggle visibility with inspector).
 pub fn spawn_collider_debugs(
-    // vv Added<Player> is a hack, but rn that's the only mobile collider so shrug
-    new_collider_q: Query<Entity, Or<(Added<Solid>, Added<crate::Player>)>>,
+    new_collider_q: Query<Entity, Or<(Added<Solid>, Added<Walkbox>)>>,
     mut commands: Commands,
     debug_assets: Res<DebugAssets>,
 ) {
