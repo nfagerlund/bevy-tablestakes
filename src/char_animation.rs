@@ -422,9 +422,9 @@ pub struct CharAnimationState {
     pub frame: usize,
     // To start with, we'll just always loop.
     pub frame_timer: Option<CountupTimer>,
-    /// Optionally override the animation's frame timings, setting every frame
-    /// to the provided length in milliseconds. If you need frames to be
-    /// different lengths, that belongs in the animation data, not the
+    /// Optionally override the animation's frame timings. Can set all
+    /// frames to a uniform duration (in ms), split a given duration among all
+    /// frames, or scale all frames by some factor.
     pub frame_time_override: FrameTimeOverride,
 }
 
