@@ -22,6 +22,7 @@ use crate::Walkbox;
 #[uuid = "585e2e41-4a97-42ef-a13e-55761c854bb4"]
 pub struct CharAnimation {
     pub variants: VariantsMap,
+    pub directionality: Directionality,
     pub texture_atlas: Handle<TextureAtlas>,
 }
 
@@ -61,6 +62,19 @@ impl CharAnimationVariant {
 // the Dir type for easier refactors later??
 pub type VariantName = compass::Dir;
 type VariantsMap = HashMap<VariantName, CharAnimationVariant>;
+
+/// The known kinds of sprite variation for representing different directions.
+#[derive(Debug, Reflect)]
+pub enum Directionality {
+    Zero, // Neutral
+    OneE, // E (animal, flip for W)
+    // OneN,  // N (spaceship, flip for S)
+    // TwoH,  // E, W
+    // Three, // E, N, S (flip for W)
+    Four, // E, N, W, S
+          // Five,  // E, NE, N, S, SE (flip for W, NW, SW)
+          // Eight, // 💪🏽💪🏽💪🏽
+}
 
 /// Data for an individual animation frame. This struct contains coordinates for
 /// some points and rectangles. The points have some particular frame of
@@ -270,9 +284,25 @@ fn load_aseprite(bytes: &[u8], load_context: &mut LoadContext) -> anyhow::Result
         }
     }
 
+    // Determine directionality... maybe pull this out into a function someday
+    // Anyway, count em up... but, don't bother implementing directionalities I'm not using yet.
+    let directionality = if variants.len() >= 4
+        && variants.contains_key(&VariantName::E)
+        && variants.contains_key(&VariantName::N)
+        && variants.contains_key(&VariantName::W)
+        && variants.contains_key(&VariantName::S)
+    {
+        Directionality::Four
+    } else if variants.contains_key(&VariantName::E) {
+        Directionality::OneE
+    } else {
+        Directionality::Zero
+    };
+
     // The whole enchilada:
     let animation = CharAnimation {
         variants,
+        directionality,
         texture_atlas: atlas_handle,
     };
 
@@ -418,6 +448,10 @@ pub struct AnimateFinishedEvent(pub Entity);
 pub struct CharAnimationState {
     pub animation: Handle<CharAnimation>,
     pub variant: Option<VariantName>,
+    // Whether to flip the sprite. Set at same time as variant, bc it's tied
+    // to the directionality of the animation as a whole. Saved on state struct
+    // bc of where we need to use it (animate_system).
+    flip_x: bool,
     pub playback: Playback,
     pub frame: usize,
     // To start with, we'll just always loop.
@@ -450,6 +484,7 @@ impl CharAnimationState {
         CharAnimationState {
             animation,
             variant: Some(variant),
+            flip_x: false,
             playback,
             // in the future I might end up wanting to blend between animations
             // at a particular frame. Doesn't matter yet tho.
@@ -504,11 +539,26 @@ impl CharAnimationState {
     }
 }
 
-fn charanm_set_directions_system(mut query: Query<(&mut CharAnimationState, &Motion)>) {
+fn charanm_set_directions_system(
+    mut query: Query<(&mut CharAnimationState, &Motion)>,
+    animations: Res<Assets<CharAnimation>>,
+) {
     for (mut state, motion) in query.iter_mut() {
-        // just doing this unconditionally and letting change_variant sort it out.
-        let dir = Dir::cardinal_from_angle(motion.facing);
-        state.change_variant(dir);
+        if let Some(animation) = animations.get(&state.animation) {
+            // Combine facing + animation's directionality to decide.
+            let (dir, flip_x) = match animation.directionality {
+                Directionality::Zero => (Dir::Neutral, false),
+                Directionality::OneE => {
+                    // Variant always E, but flip sprite if angle _would_ indicate W.
+                    let flip = Dir::horizontal_from_angle(motion.facing) == Dir::W;
+                    (Dir::E, flip)
+                },
+                Directionality::Four => (Dir::cardinal_from_angle(motion.facing), false),
+            };
+            // set unconditionally, and let change_variant sort out whether to actually change anything.
+            state.change_variant(dir);
+            state.flip_x = flip_x;
+        }
     }
 }
 
@@ -584,6 +634,7 @@ pub fn charanm_animate_system(
             // texture index we oughtta use, and set it.
             let frame = &variant.frames[state.frame];
             sprite.index = frame.index;
+            sprite.flip_x = state.flip_x;
             // Also, set the origin:
             sprite.anchor = Anchor::Custom(frame.anchor);
             // But leave colliders to their own systems.
