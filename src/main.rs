@@ -301,8 +301,8 @@ fn player_state_changes(
                 }
             };
             match machine.current() {
-                PlayerState::Idle => set_anim(&Ases::TkIdle, Playback::Loop),
-                PlayerState::Run => set_anim(&Ases::TkRun, Playback::Loop),
+                PlayerState::Idle => set_anim(&Ases::SlimeIdle, Playback::Loop),
+                PlayerState::Run => set_anim(&Ases::SlimeAttack, Playback::Loop),
                 PlayerState::Roll { timer, .. } => {
                     // little extra on this one, sets animation parameters based on gameplay effect
                     set_anim(&Ases::TkRoll, Playback::Once);
