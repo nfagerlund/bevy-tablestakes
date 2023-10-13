@@ -90,12 +90,10 @@ impl Dir {
     /// Given an angle, return east or west. Bias towards east when
     /// given exactly north or south.
     pub fn horizontal_from_angle(angle: f32) -> Self {
-        if angle > FRAC_PI_2 {
-            Self::W
-        } else if angle < -FRAC_PI_2 {
-            Self::W
-        } else {
+        if (-FRAC_PI_2..=FRAC_PI_2).contains(&angle) {
             Self::E
+        } else {
+            Self::W
         }
     }
 
