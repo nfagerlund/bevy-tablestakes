@@ -150,17 +150,21 @@ impl CharAnimationState {
         }
     }
 
-    pub fn reset(&mut self) {
+    // Restart the animation and wipe any state left over from the previous one.
+    // An implementation detail of change_animation.
+    fn reset(&mut self) {
         self.frame = 0;
         self.frame_timer = None;
+        self.variant = None;
         self.frame_time_override = FrameTimeOverride::None;
     }
 
-    /// Change direction of animation, unless already facing the requested direction.
+    /// Change direction of animation, unless it's already set to the requested one.
+    /// Note that this DOESN'T restart the animation, it picks up right where the
+    /// previous variant left off.
     pub fn change_variant(&mut self, variant: VariantName) {
         if self.variant != Some(variant) {
             self.variant = Some(variant);
-            self.reset();
         }
     }
 
