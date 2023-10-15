@@ -33,7 +33,7 @@ impl CharAnimationVariant {
         frame_index: usize,
         override_type: FrameTimeOverride,
     ) -> Duration {
-        let frame_duration = self.frames[frame_index].duration;
+        let frame_duration = self.raw_frame_time(frame_index);
         match override_type {
             FrameTimeOverride::None => frame_duration,
             FrameTimeOverride::Ms(millis) => Duration::from_millis(millis),
@@ -46,6 +46,11 @@ impl CharAnimationVariant {
                 Duration::from_millis(millis)
             },
         }
+    }
+
+    #[inline]
+    pub fn raw_frame_time(&self, frame_index: usize) -> Duration {
+        self.frames[frame_index].duration
     }
 }
 
