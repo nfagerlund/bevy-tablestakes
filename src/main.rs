@@ -628,8 +628,7 @@ impl<T: Clone> EntityStateMachine<T> {
         self.just_changed = false;
     }
     fn finish_transition(&mut self) {
-        if self.next.is_some() {
-            let next = self.next.take().unwrap();
+        if let Some(next) = self.next.take() {
             self.current = next;
             self.just_changed = true;
         }
