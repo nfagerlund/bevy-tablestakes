@@ -645,7 +645,7 @@ pub enum PlayerState {
 }
 
 impl PlayerState {
-    const ROLL_DISTANCE: f32 = 152.0;
+    const ROLL_DISTANCE: f32 = 52.0;
     const BONK_FROM_ROLL_DISTANCE: f32 = 18.0;
     const BONK_HEIGHT: f32 = 8.0;
     const ROLL_SPEED: f32 = Speed::ROLL;

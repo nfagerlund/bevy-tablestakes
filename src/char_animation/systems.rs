@@ -122,9 +122,6 @@ pub fn charanm_animate_system(
                 // increment+loop frame, and replace the timer with the new frame's duration
                 state.frame = next_frame;
                 let duration = variant.resolved_frame_time(state.frame, state.frame_time_override);
-                if duration != variant.raw_frame_time(state.frame) {
-                    info!("frame duration: {:?}", &duration);
-                }
                 let mut new_timer = CountupTimer::new(duration);
                 new_timer.tick(excess_time);
                 state.frame_timer = Some(new_timer);
