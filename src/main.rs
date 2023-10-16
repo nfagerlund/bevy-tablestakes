@@ -164,6 +164,8 @@ fn main() {
 #[derive(Resource, Default, Reflect, PartialEq, Eq)]
 pub struct DebugSettings {
     debug_walkboxes: bool,
+    debug_origins: bool,
+    debug_hitboxes: bool,
     motion_kind: MotionKind,
     camera_kind: CameraKind,
 }

@@ -323,6 +323,12 @@ pub struct WalkboxDebugBundle {
 /// Marker component for walkbox debug mesh
 #[derive(Component, Default)]
 pub struct WalkboxDebug;
+/// Marker component for hitbox debug mesh
+#[derive(Component, Default)]
+pub struct HitboxDebug;
+/// Marker component for origin debug mesh
+#[derive(Component, Default)]
+pub struct OriginDebug;
 
 // TODO: Maybe just convert this to a local resource for the debug spawner and
 // use .entry().or() to do the initialization.
@@ -331,12 +337,22 @@ pub fn setup_debug_assets(
     mut materials: ResMut<Assets<ColorMaterial>>,
     mut debug_assets: ResMut<DebugAssets>,
 ) {
-    let walkbox_mesh = meshes.add(Mesh::from(shape::Quad::default()));
+    let debug_box_mesh = meshes.add(Mesh::from(shape::Quad::default()));
     let walkbox_material = materials.add(ColorMaterial::from(Color::rgba(0.5, 0.0, 0.5, 0.6)));
-    debug_assets.insert("walkbox_mesh".to_string(), walkbox_mesh.clone_untyped());
+    let hitbox_material = materials.add(ColorMaterial::from(Color::rgba(0.8, 0.0, 0.0, 0.6)));
+    let origin_material = materials.add(ColorMaterial::from(Color::rgba(1.0, 1.0, 1.0, 1.0)));
+    debug_assets.insert("debug_box_mesh".to_string(), debug_box_mesh.clone_untyped());
     debug_assets.insert(
         "walkbox_material".to_string(),
         walkbox_material.clone_untyped(),
+    );
+    debug_assets.insert(
+        "hitbox_material".to_string(),
+        hitbox_material.clone_untyped(),
+    );
+    debug_assets.insert(
+        "origin_material".to_string(),
+        origin_material.clone_untyped(),
     );
 }
 
@@ -347,29 +363,68 @@ pub fn spawn_collider_debugs(
     mut commands: Commands,
     debug_assets: Res<DebugAssets>,
 ) {
-    for collider in new_collider_q.iter() {
-        let (Some(mesh_untyped), Some(material_untyped)) = (
-            debug_assets.get("walkbox_mesh"),
-            debug_assets.get("walkbox_material"),
+    if !new_collider_q.is_empty() {
+        let (Some(mesh), Some(walkbox_material), Some(_hitbox_material), Some(origin_material)) = (
+            debug_assets
+                .get("debug_box_mesh")
+                .map(|x| Mesh2dHandle(x.clone().typed::<Mesh>())),
+            debug_assets
+                .get("walkbox_material")
+                .map(|x| x.clone().typed::<ColorMaterial>()),
+            debug_assets
+                .get("hitbox_material")
+                .map(|x| x.clone().typed::<ColorMaterial>()),
+            debug_assets
+                .get("origin_material")
+                .map(|x| x.clone().typed::<ColorMaterial>()),
         ) else {
             warn!("Hey!! I couldn't get ahold of the collider debug assets for some reason!!");
             return;
         };
-        let material = material_untyped.clone().typed::<ColorMaterial>();
-        let mesh = Mesh2dHandle(mesh_untyped.clone().typed::<Mesh>());
 
-        // info!("attaching debug mesh to {:?}", &collider);
-        commands.entity(collider).with_children(|parent| {
-            parent.spawn(WalkboxDebugBundle {
-                mesh_bundle: MaterialMesh2dBundle {
-                    mesh,
-                    material,
-                    visibility: Visibility::Inherited,
-                    ..default()
-                },
-                marker: WalkboxDebug,
+        for collider in new_collider_q.iter() {
+            commands.entity(collider).with_children(|parent| {
+                // Spawn walkbox debugs
+                parent.spawn(WalkboxDebugBundle {
+                    mesh_bundle: MaterialMesh2dBundle {
+                        mesh: mesh.clone(),
+                        material: walkbox_material.clone(),
+                        visibility: Visibility::Inherited,
+                        ..default()
+                    },
+                    marker: WalkboxDebug,
+                });
+
+                // Spawn hitbox debugs... eventually
+
+                // Spawn origin debugs: marker child with two mesh bundle grandkids forming a crosshair
+                parent
+                    .spawn((
+                        OriginDebug,
+                        SpatialBundle {
+                            visibility: Visibility::Inherited,
+                            transform: Transform::from_translation(Vec3::new(0.0, 0.0, 40.0)),
+                            ..default()
+                        },
+                    ))
+                    .with_children(|origin| {
+                        origin.spawn(MaterialMesh2dBundle {
+                            mesh: mesh.clone(),
+                            material: origin_material.clone(),
+                            visibility: Visibility::Inherited,
+                            transform: Transform::from_scale(Vec3::new(3.0, 1.0, 1.0)),
+                            ..default()
+                        });
+                        origin.spawn(MaterialMesh2dBundle {
+                            mesh: mesh.clone(),
+                            material: origin_material.clone(),
+                            visibility: Visibility::Inherited,
+                            transform: Transform::from_scale(Vec3::new(1.0, 3.0, 1.0)),
+                            ..default()
+                        });
+                    });
             });
-        });
+        }
     }
 }
 
