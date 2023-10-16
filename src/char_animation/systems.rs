@@ -55,8 +55,19 @@ fn charanm_set_directions_system(
             let (dir, flip_x) = match animation.directionality {
                 Directionality::Zero => (Dir::Neutral, false),
                 Directionality::OneE => {
-                    // Variant always E, but flip sprite if angle _would_ indicate W.
-                    let flip = Dir::horizontal_from_angle(motion.facing) == Dir::W;
+                    // Variant always E, but flip sprite if they turn west. Actually this is a bit
+                    // more subtle, bc if they didn't just TURN in a horizontal direction (i.e. they
+                    // were going W but then turned due north), we want to preserve PRIOR flip.
+                    // BTW, I can't decide yet whether Four directionality would also have this problem
+                    // when downgrading from an Eight sprite.
+                    let prior_flip = state.flip_x;
+                    let flip = match Dir::ordinal_from_angle(motion.facing) {
+                        Dir::E | Dir::NE | Dir::SE => false,
+                        Dir::W | Dir::NW | Dir::SW => true,
+                        _ => prior_flip,
+                    };
+                    // Alternately, you could match Dir::cardinal_from_angle and only react to E or W.
+                    // But I think this should give snappier results with analog input.
                     (Dir::E, flip)
                 },
                 Directionality::Four => (Dir::cardinal_from_angle(motion.facing), false),
