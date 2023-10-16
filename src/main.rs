@@ -88,7 +88,7 @@ fn main() {
         .register_type::<TopDownMatter>()
         .register_type::<Motion>()
         .add_plugins(ResourceInspectorPlugin::<DebugSettings>::new())
-        .add_systems(Update, debug_walkboxes_system)
+        .add_systems(Update, (debug_walkboxes_system, debug_origins_system))
         // LDTK STUFF
         .add_systems(Startup, setup_level)
         .insert_resource(LevelSelection::Index(1))

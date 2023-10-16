@@ -359,7 +359,7 @@ pub fn setup_debug_assets(
 /// Add debug mesh children to newly added collidable entities, so I can see
 /// where their boundaries are. (Toggle visibility with inspector).
 pub fn spawn_collider_debugs(
-    new_collider_q: Query<Entity, Or<(Added<Solid>, Added<Walkbox>)>>,
+    new_collider_q: Query<Entity, Or<(Added<Solid>, Added<Walkbox>, Added<Hitbox>)>>,
     mut commands: Commands,
     debug_assets: Res<DebugAssets>,
 ) {
@@ -403,7 +403,8 @@ pub fn spawn_collider_debugs(
                         OriginDebug,
                         SpatialBundle {
                             visibility: Visibility::Inherited,
-                            transform: Transform::from_translation(Vec3::new(0.0, 0.0, 40.0)),
+                            // z-stack: 1 below walkbox mesh
+                            transform: Transform::from_translation(Vec3::new(0.0, 0.0, 39.0)),
                             ..default()
                         },
                     ))
@@ -428,6 +429,23 @@ pub fn spawn_collider_debugs(
     }
 }
 
+/// This one gets to be much dumber than the others bc the size never
+/// changes and the transform propagation is free.
+pub fn debug_origins_system(
+    mut debug_mesh_q: Query<&mut Visibility, With<OriginDebug>>,
+    debug_settings: Res<DebugSettings>,
+) {
+    if debug_settings.debug_origins {
+        debug_mesh_q.iter_mut().for_each(|mut v| {
+            *v = Visibility::Visible;
+        });
+    } else {
+        debug_mesh_q.iter_mut().for_each(|mut v| {
+            *v = Visibility::Hidden;
+        });
+    }
+}
+
 /// Update size and position of collider debug meshes, since walkboxes can
 /// change frame-by-frame.
 pub fn debug_walkboxes_system(
@@ -436,11 +454,11 @@ pub fn debug_walkboxes_system(
     debug_settings: Res<DebugSettings>,
 ) {
     for (parent, mut transform, mut visibility) in debug_mesh_q.iter_mut() {
-        let Ok((_, walkbox)) = collider_q.get(parent.get()) else {
-            info!("?!?! tried to debug walkbox of some poor orphaned debug entity.");
-            continue;
-        };
         if debug_settings.debug_walkboxes {
+            let Ok((_, walkbox)) = collider_q.get(parent.get()) else {
+                info!("?!?! tried to debug walkbox of some poor orphaned debug entity.");
+                continue;
+            };
             // Unconditional, not inherited:
             *visibility = Visibility::Visible;
             // ok... need to set our scale to the size of the walkbox, and then
