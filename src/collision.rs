@@ -359,12 +359,22 @@ pub fn setup_debug_assets(
 /// Add debug mesh children to newly added collidable entities, so I can see
 /// where their boundaries are. (Toggle visibility with inspector).
 pub fn spawn_collider_debugs(
-    new_collider_q: Query<Entity, Or<(Added<Solid>, Added<Walkbox>, Added<Hitbox>)>>,
+    new_collider_q: Query<
+        (
+            Entity,
+            Option<&Children>,
+            Option<Ref<Solid>>,
+            Option<Ref<Walkbox>>,
+            Option<Ref<Hitbox>>,
+        ),
+        Or<(Added<Solid>, Added<Walkbox>, Added<Hitbox>)>,
+    >,
+    old_origins_q: Query<&OriginDebug>,
     mut commands: Commands,
     debug_assets: Res<DebugAssets>,
 ) {
     if !new_collider_q.is_empty() {
-        let (Some(mesh), Some(walkbox_material), Some(_hitbox_material), Some(origin_material)) = (
+        let (Some(mesh), Some(walkbox_material), Some(hitbox_material), Some(origin_material)) = (
             debug_assets
                 .get("debug_box_mesh")
                 .map(|x| Mesh2dHandle(x.clone().typed::<Mesh>())),
@@ -382,48 +392,76 @@ pub fn spawn_collider_debugs(
             return;
         };
 
-        for collider in new_collider_q.iter() {
+        for (collider, maybe_children, r_solid, r_walkbox, r_hitbox) in new_collider_q.iter() {
+            let solid_added = r_solid.map_or(false, |x| x.is_added());
+            let walkbox_added = r_walkbox.map_or(false, |x| x.is_added());
+            let hitbox_added = r_hitbox.map_or(false, |x| x.is_added());
+
             commands.entity(collider).with_children(|parent| {
-                // Spawn walkbox debugs
-                parent.spawn(WalkboxDebugBundle {
-                    mesh_bundle: MaterialMesh2dBundle {
-                        mesh: mesh.clone(),
-                        material: walkbox_material.clone(),
-                        visibility: Visibility::Inherited,
-                        ..default()
-                    },
-                    marker: WalkboxDebug,
-                });
-
-                // Spawn hitbox debugs... eventually
-
-                // Spawn origin debugs: marker child with two mesh bundle grandkids forming a crosshair
-                parent
-                    .spawn((
-                        OriginDebug,
-                        SpatialBundle {
+                // Maybe spawn walkbox debugs
+                if solid_added || walkbox_added {
+                    parent.spawn(WalkboxDebugBundle {
+                        mesh_bundle: MaterialMesh2dBundle {
+                            mesh: mesh.clone(),
+                            material: walkbox_material.clone(),
                             visibility: Visibility::Inherited,
-                            // z-stack: 1 below walkbox mesh
-                            transform: Transform::from_translation(Vec3::new(0.0, 0.0, 39.0)),
                             ..default()
                         },
-                    ))
-                    .with_children(|origin| {
-                        origin.spawn(MaterialMesh2dBundle {
-                            mesh: mesh.clone(),
-                            material: origin_material.clone(),
-                            visibility: Visibility::Inherited,
-                            transform: Transform::from_scale(Vec3::new(3.0, 1.0, 1.0)),
-                            ..default()
-                        });
-                        origin.spawn(MaterialMesh2dBundle {
-                            mesh: mesh.clone(),
-                            material: origin_material.clone(),
-                            visibility: Visibility::Inherited,
-                            transform: Transform::from_scale(Vec3::new(1.0, 3.0, 1.0)),
-                            ..default()
-                        });
+                        marker: WalkboxDebug,
                     });
+                }
+
+                // Maybe spawn hitbox debugs
+                if hitbox_added {
+                    parent.spawn((
+                        HitboxDebug,
+                        MaterialMesh2dBundle {
+                            mesh: mesh.clone(),
+                            material: hitbox_material.clone(),
+                            visibility: Visibility::Inherited,
+                            ..default()
+                        },
+                    ));
+                }
+
+                // Spawn origin debugs: marker child with two mesh bundle grandkids forming a crosshair
+                // Only want to do this once, even if this is the parent's second time through this system
+                // (e.g. Hitbox got added later, after walkbox)
+                let spawn_origin_debug = match maybe_children {
+                    Some(children) => {
+                        // No existing child has the OriginDebug component:
+                        !children.iter().any(|&ent| old_origins_q.get(ent).is_ok())
+                    },
+                    None => true,
+                };
+                if spawn_origin_debug {
+                    parent
+                        .spawn((
+                            OriginDebug,
+                            SpatialBundle {
+                                visibility: Visibility::Inherited,
+                                // z-stack: 1 below walkbox mesh
+                                transform: Transform::from_translation(Vec3::new(0.0, 0.0, 39.0)),
+                                ..default()
+                            },
+                        ))
+                        .with_children(|origin| {
+                            origin.spawn(MaterialMesh2dBundle {
+                                mesh: mesh.clone(),
+                                material: origin_material.clone(),
+                                visibility: Visibility::Inherited,
+                                transform: Transform::from_scale(Vec3::new(3.0, 1.0, 1.0)),
+                                ..default()
+                            });
+                            origin.spawn(MaterialMesh2dBundle {
+                                mesh: mesh.clone(),
+                                material: origin_material.clone(),
+                                visibility: Visibility::Inherited,
+                                transform: Transform::from_scale(Vec3::new(1.0, 3.0, 1.0)),
+                                ..default()
+                            });
+                        });
+                }
             });
         }
     }
@@ -475,6 +513,42 @@ pub fn debug_walkboxes_system(
             *visibility = Visibility::Hidden;
             // we're done
         }
+    }
+}
+
+/// Separate system bc many walkbox-havers lack hitboxen.
+pub fn debug_hitboxes_system(
+    collider_q: Query<(Entity, &Hitbox)>,
+    mut debug_mesh_q: Query<(&Parent, &mut Transform, &mut Visibility), With<HitboxDebug>>,
+    debug_settings: Res<DebugSettings>,
+) {
+    if debug_settings.debug_hitboxes {
+        debug_mesh_q
+            .iter_mut()
+            .for_each(|(parent, mut transform, mut visibility)| {
+                // Parent check + hitbox data retrieval
+                let Ok((_, hitbox)) = collider_q.get(parent.get()) else {
+                    info!("?!?! tried to debug hitbox of some poor orphaned debug entity.");
+                    return;
+                };
+                // We actually swinging rn?
+                if let Hitbox(Some(active_hitbox)) = hitbox {
+                    // yep!
+                    *visibility = Visibility::Visible;
+                    let size = active_hitbox.max - active_hitbox.min;
+                    let center = active_hitbox.min + size / 2.0;
+                    transform.scale = size.extend(1.0);
+                    // z-stack: above walkbox
+                    transform.translation = center.extend(41.0);
+                } else {
+                    // nope!
+                    *visibility = Visibility::Hidden;
+                }
+            });
+    } else {
+        debug_mesh_q.iter_mut().for_each(|(_, _, mut visibility)| {
+            *visibility = Visibility::Hidden;
+        });
     }
 }
 
