@@ -225,21 +225,10 @@ fn invert_vec2_y(v: Vec2) -> Vec2 {
 /// y) corners. When you create a rect within a top-down Y coordinate system,
 /// "min" is the top left, and "max" is the bottom right. But if you want to
 /// represent the same rectangle in a bottom-up Y coordinate system, "min" is
-/// the BOTTOM left, and "max" is the TOP right. So it's not just inverting the
-/// Y coordinate of each point, you also have to recombine them. If you don't,
-/// it ends up inside-out.
+/// the BOTTOM left, and "max" is the TOP right. But since those are still
+/// opposing corners (just not the "min" and "max"), Rect::from_corners can
+/// recombobulate the flipped rectangle.
 fn flip_rect_y(r: Rect) -> Rect {
-    let top_left = r.min;
-    let bottom_right = r.max;
-    let bottom_left = Vec2::new(top_left.x, bottom_right.y);
-    let top_right = Vec2::new(bottom_right.x, top_left.y);
-    Rect {
-        min: invert_vec2_y(bottom_left),
-        max: invert_vec2_y(top_right),
-    }
-}
-
-fn alt_flip_rect_y(r: Rect) -> Rect {
     Rect::from_corners(invert_vec2_y(r.min), invert_vec2_y(r.max))
 }
 
@@ -323,27 +312,5 @@ fn copy_texture_to_atlas(
         let texture_begin = texture_y * rect_width * format_size;
         let texture_end = texture_begin + rect_width * format_size;
         atlas_texture.data[begin..end].copy_from_slice(&texture.data[texture_begin..texture_end]);
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use crate::char_animation::assets::{alt_flip_rect_y, flip_rect_y};
-    use bevy::prelude::{Rect, Vec2};
-
-    #[test]
-    fn rect_corners() {
-        let stuff: Vec<((f32, f32), (f32, f32))> = vec![
-            ((-1.0, -2.5), (9.3, 4.1)),
-            ((1.2, 0.0), (3.3, 1.1)),
-            ((-3.3, -5.5), (-1.0, -1.0)),
-        ];
-        for &case in stuff.iter() {
-            let r = Rect {
-                min: Vec2::new(case.0 .0, case.0 .1),
-                max: Vec2::new(case.1 .0, case.1 .1),
-            };
-            assert_eq!(flip_rect_y(r), alt_flip_rect_y(r));
-        }
     }
 }
