@@ -3,6 +3,8 @@
 //! stuff in this module, so it's very nice to have it isolated.
 
 use super::components::*;
+use crate::toolbox::{flip_rect_y, move_rect_origin};
+
 use asefile::AsepriteFile;
 use bevy::asset::{AssetLoader, BoxedFuture, LoadContext, LoadedAsset};
 use bevy::math::{prelude::*, Affine2, Rect};
@@ -129,7 +131,9 @@ fn load_aseprite(bytes: &[u8], load_context: &mut LoadContext) -> anyhow::Result
                         None => Vec2::ZERO, // Origin's non-optional.
                     };
 
-                    // Get the walkbox, offset it relative to the origin, THEN flip the Y.
+                    // Get the walkbox, position it relative to the origin, THEN flip the Y.
+                    // (This is because source image coordinates go Y-down, but bevy spatial
+                    // coordinates go Y-up.)
                     let absolute_walkbox = rect_from_cel(&ase, "walkbox", i);
                     let walkbox =
                         absolute_walkbox.map(|r| flip_rect_y(move_rect_origin(r, origin)));
@@ -213,33 +217,6 @@ fn remux_image(img: RgbaImage) -> Image {
         img.into_raw(),
         TextureFormat::Rgba8UnormSrgb,
     )
-}
-
-/// Invert the Y coordinates of a Vec2, because source image coordinates go
-/// Y-down but bevy spatial coordinates go Y-up. Note that this is only valid to
-/// do if you're not also moving the origin point!
-fn invert_vec2_y(v: Vec2) -> Vec2 {
-    Vec2::new(v.x, -(v.y))
-}
-
-/// OK, rects have "min" (smallest x, smallest y) and "max" (largest x, largest
-/// y) corners. When you create a rect within a top-down Y coordinate system,
-/// "min" is the top left, and "max" is the bottom right. But if you want to
-/// represent the same rectangle in a bottom-up Y coordinate system, "min" is
-/// the BOTTOM left, and "max" is the TOP right. But since those are still
-/// opposing corners (just not the "min" and "max"), Rect::from_corners can
-/// recombobulate the flipped rectangle.
-fn flip_rect_y(r: Rect) -> Rect {
-    Rect::from_corners(invert_vec2_y(r.min), invert_vec2_y(r.max))
-}
-
-/// Translate a Rect so its corners are relative to a provided origin/anchor/pivot
-/// point.
-fn move_rect_origin(r: Rect, origin: Vec2) -> Rect {
-    Rect {
-        min: r.min - origin,
-        max: r.max - origin,
-    }
 }
 
 /// Get the bounding Rect for a cel's non-transparent pixels.
