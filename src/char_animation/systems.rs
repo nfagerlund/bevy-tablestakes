@@ -5,6 +5,7 @@ use super::assets::*;
 use super::components::*;
 use crate::compass::Dir;
 use crate::toolbox::countup_timer::CountupTimer;
+use crate::toolbox::{flip_rect_x, flip_vec2_x};
 use crate::Hitbox;
 use crate::Motion;
 use crate::Walkbox;
@@ -153,7 +154,15 @@ pub fn charanm_animate_system(
             sprite.index = frame.index;
             sprite.flip_x = state.flip_x;
             // Also, set the origin:
-            sprite.anchor = Anchor::Custom(frame.anchor);
+            let anchor = if state.flip_x {
+                // This is great: since the anchor format normalizes the texture space to
+                // 1.0 x 1.0 regardless of texture dimensions, AND sets 0.0 to the center
+                // of the texture, we can just... flip it.
+                flip_vec2_x(frame.anchor)
+            } else {
+                frame.anchor
+            };
+            sprite.anchor = Anchor::Custom(anchor);
             // But leave colliders to their own systems.
         }
     }
@@ -191,13 +200,22 @@ fn charanm_update_colliders_system(
 
         // If there's no walkbox in the frame, you get a 0-sized rectangle at your origin.
         let sprite_walkbox = frame.walkbox.unwrap_or_default();
-        walkbox.0 = sprite_walkbox;
+        walkbox.0 = maybe_mirrored(sprite_walkbox, state.flip_x);
 
         // Hitbox is both optional as a whole (entity does/doesn't ever attack), and has
         // an optional inner value (entity is/isn't dealing damage this frame).
         if let Some(mut hb) = hitbox {
-            hb.0 = frame.hitbox;
+            hb.0 = frame.hitbox.map(|r| maybe_mirrored(r, state.flip_x));
         }
+    }
+}
+
+// tiny util for maybe mirroring a rect.
+fn maybe_mirrored(r: Rect, flip_x: bool) -> Rect {
+    if flip_x {
+        flip_rect_x(r)
+    } else {
+        r
     }
 }
 
