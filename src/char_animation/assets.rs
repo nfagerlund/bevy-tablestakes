@@ -131,11 +131,12 @@ fn load_aseprite(bytes: &[u8], load_context: &mut LoadContext) -> anyhow::Result
 
                     // Get the walkbox, offset it relative to the origin, THEN flip the Y.
                     let absolute_walkbox = rect_from_cel(&ase, "walkbox", i);
-                    let walkbox = absolute_walkbox.map(|r| relative_to_origin(r, origin));
+                    let walkbox =
+                        absolute_walkbox.map(|r| flip_rect_y(move_rect_origin(r, origin)));
 
                     // Same deal for hitbox as walkbox.
                     let absolute_hitbox = rect_from_cel(&ase, "hitbox", i);
-                    let hitbox = absolute_hitbox.map(|r| relative_to_origin(r, origin));
+                    let hitbox = absolute_hitbox.map(|r| flip_rect_y(move_rect_origin(r, origin)));
 
                     let anchor = anchor_transform.transform_point2(origin);
 
@@ -233,13 +234,12 @@ fn flip_rect_y(r: Rect) -> Rect {
 }
 
 /// Translate a Rect so its corners are relative to a provided origin/anchor/pivot
-/// point, then flip the corners' Y coordinates.
-fn relative_to_origin(r: Rect, origin: Vec2) -> Rect {
-    let relative = Rect {
+/// point.
+fn move_rect_origin(r: Rect, origin: Vec2) -> Rect {
+    Rect {
         min: r.min - origin,
         max: r.max - origin,
-    };
-    flip_rect_y(relative)
+    }
 }
 
 /// Get the bounding Rect for a cel's non-transparent pixels.
