@@ -239,6 +239,10 @@ fn flip_rect_y(r: Rect) -> Rect {
     }
 }
 
+fn alt_flip_rect_y(r: Rect) -> Rect {
+    Rect::from_corners(invert_vec2_y(r.min), invert_vec2_y(r.max))
+}
+
 /// Translate a Rect so its corners are relative to a provided origin/anchor/pivot
 /// point, then flip the corners' Y coordinates.
 fn relative_to_origin(r: Rect, origin: Vec2) -> Rect {
@@ -319,5 +323,27 @@ fn copy_texture_to_atlas(
         let texture_begin = texture_y * rect_width * format_size;
         let texture_end = texture_begin + rect_width * format_size;
         atlas_texture.data[begin..end].copy_from_slice(&texture.data[texture_begin..texture_end]);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::char_animation::assets::{alt_flip_rect_y, flip_rect_y};
+    use bevy::prelude::{Rect, Vec2};
+
+    #[test]
+    fn rect_corners() {
+        let stuff: Vec<((f32, f32), (f32, f32))> = vec![
+            ((-1.0, -2.5), (9.3, 4.1)),
+            ((1.2, 0.0), (3.3, 1.1)),
+            ((-3.3, -5.5), (-1.0, -1.0)),
+        ];
+        for &case in stuff.iter() {
+            let r = Rect {
+                min: Vec2::new(case.0 .0, case.0 .1),
+                max: Vec2::new(case.1 .0, case.1 .1),
+            };
+            assert_eq!(flip_rect_y(r), alt_flip_rect_y(r));
+        }
     }
 }
