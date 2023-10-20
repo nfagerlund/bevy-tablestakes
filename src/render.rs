@@ -89,14 +89,15 @@ pub fn shadow_stitcher_system(
         *shadow_handle = Some(asset_server.load("sprites/sShadow.aseprite"));
     }
     // but, will still need to perform normal business that first run! At this
-    // point, .unwrap() is fine because we made sure there's something there,
-    // and if that goes wonky I want early warning anyway.
+    // point, we know there's something in there.
+    let Some(sh) = shadow_handle.as_ref() else {
+        warn!("shadow handle missing, this should be impossible??");
+        return;
+    };
     for shadow_owner in new_shadow_q.iter() {
         info!("stitching a shadow to {:?}", &shadow_owner);
         commands.entity(shadow_owner).with_children(|parent| {
-            parent.spawn(ShadowSpriteBundle::new(
-                shadow_handle.as_ref().unwrap().clone(),
-            ));
+            parent.spawn(ShadowSpriteBundle::new(sh.clone()));
         });
     }
 }
