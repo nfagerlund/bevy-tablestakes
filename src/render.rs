@@ -3,33 +3,40 @@ use bevy::prelude::*;
 use bevy::render::Extract;
 use bevy::sprite::ExtractedSprites;
 
-const DEPTH_DUDES: f32 = 4.0;
-const DEPTH_SHADOWS: f32 = DEPTH_DUDES - 0.1;
+const DEPTH_DUDES_MIN: f32 = 4.0;
+const DEPTH_DUDES_MAX: f32 = 50.0;
+const DEPTH_SHADOWS: f32 = DEPTH_DUDES_MIN - 0.1;
 
 /// Some spatial details about an entity.
 #[derive(Component, Reflect)]
 pub struct TopDownMatter {
-    /// For now, depth tracks the absolute, global draw-depth coordinate for
-    /// anything it's placed on. I'm not doing any Y-sorting yet. An extract
+    /// How the global draw depth should be determined. Depth is calculated
+    /// differently for differet kinds of stuff. An extract
     /// system uses this value to overwrite the entity's Z coordinate in the
     /// render world.
-    pub depth: f32,
+    pub depth_class: TopDownDepthClass,
     /// If false, the entity can rise into the air. If true, it remains fixed on
     /// the ground (like a shadow), and manipulating its main world Z coordinate
     /// (including in the transform_propagate_system) does nothing.
     pub ignore_height: bool,
 }
 
+#[derive(Reflect)]
+pub enum TopDownDepthClass {
+    Character,
+    Shadow,
+}
+
 impl TopDownMatter {
     pub fn character() -> Self {
         Self {
-            depth: DEPTH_DUDES,
+            depth_class: TopDownDepthClass::Character,
             ignore_height: false,
         }
     }
     pub fn shadow() -> Self {
         Self {
-            depth: DEPTH_SHADOWS,
+            depth_class: TopDownDepthClass::Shadow,
             ignore_height: true,
         }
     }
@@ -119,7 +126,11 @@ pub fn extract_and_flatten_space_system(
             if !matter.ignore_height {
                 translation.y += translation.z;
             }
-            translation.z = matter.depth;
+            let depth = match matter.depth_class {
+                TopDownDepthClass::Character => DEPTH_DUDES_MIN,
+                TopDownDepthClass::Shadow => DEPTH_SHADOWS,
+            };
+            translation.z = depth;
             ex_sprite.transform = Transform::from_translation(translation).into();
         }
     }
