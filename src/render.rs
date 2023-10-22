@@ -131,7 +131,7 @@ pub fn extract_and_flatten_space_system(
     //   in the Y band.
     // So, first, sort out the viewport.
     // I'm gonna be dumb and assume there's one camera, for now. call me once there's not.
-    let (Ok((projection, cam_transform))) = camera_query.get_single() else {
+    let Ok((projection, cam_transform)) = camera_query.get_single() else {
         warn!("no camera!?!? in extract_and_flatten_space");
         return;
     };
