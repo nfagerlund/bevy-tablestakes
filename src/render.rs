@@ -1,11 +1,18 @@
 use crate::char_animation::*;
+use crate::collision::AbsBBox;
 use bevy::prelude::*;
 use bevy::render::Extract;
 use bevy::sprite::ExtractedSprites;
 
 const DEPTH_DUDES_MIN: f32 = 4.0;
 const DEPTH_DUDES_MAX: f32 = 50.0;
+const DEPTH_DUDES_RANGE: f32 = DEPTH_DUDES_MAX - DEPTH_DUDES_MIN;
 const DEPTH_SHADOWS: f32 = DEPTH_DUDES_MIN - 0.1;
+const VIEW_SLOP: f32 = 64.0;
+
+fn lerp_dudes_z(t: f32) -> f32 {
+    DEPTH_DUDES_MIN + DEPTH_DUDES_RANGE * t
+}
 
 /// Some spatial details about an entity.
 #[derive(Component, Reflect)]
@@ -114,8 +121,26 @@ pub fn shadow_stitcher_system(
 /// do Y-sorting for drawing things in front of each other.
 pub fn extract_and_flatten_space_system(
     has_z_query: Extract<Query<&TopDownMatter>>,
+    camera_query: Extract<Query<(&OrthographicProjection, &GlobalTransform), With<Camera2d>>>,
     mut extracted_sprites: ResMut<ExtractedSprites>,
 ) {
+    // ok, my theory goes like this:
+    // - Figure out the range of visible global Y values
+    // - Decide ahead of time the range of usable Z values for characters
+    // - If a sprite is maybe visible, place it in the Z band proportional to its place
+    //   in the Y band.
+    // So, first, sort out the viewport.
+    // I'm gonna be dumb and assume there's one camera, for now. call me once there's not.
+    let (Ok((projection, cam_transform))) = camera_query.get_single() else {
+        warn!("no camera!?!? in extract_and_flatten_space");
+        return;
+    };
+    let viewport = AbsBBox::from_rect(projection.area, cam_transform.translation().truncate());
+    let min_y = viewport.min.y - VIEW_SLOP;
+    let max_y = viewport.max.y + VIEW_SLOP;
+    let y_size = max_y - min_y;
+    let y_frac = |y: f32| (y - min_y) / y_size;
+
     // Well it's deeply unfortunate, but because the extract sprites system
     // crams everything into a Vec stored as a resource, we've got to iterate
     // over that and correlate it with our query.
@@ -123,13 +148,17 @@ pub fn extract_and_flatten_space_system(
         if let Ok(matter) = has_z_query.get(ex_sprite.entity) {
             let mut translation = ex_sprite.transform.translation();
 
+            let depth = match matter.depth_class {
+                TopDownDepthClass::Character => {
+                    // OK, I think we can just yolo this without bounds-checking,
+                    // bc if you're outside the viewport it just.......... shouldn't matter
+                    lerp_dudes_z(y_frac(translation.y))
+                },
+                TopDownDepthClass::Shadow => DEPTH_SHADOWS,
+            };
             if !matter.ignore_height {
                 translation.y += translation.z;
             }
-            let depth = match matter.depth_class {
-                TopDownDepthClass::Character => DEPTH_DUDES_MIN,
-                TopDownDepthClass::Shadow => DEPTH_SHADOWS,
-            };
             translation.z = depth;
             ex_sprite.transform = Transform::from_translation(translation).into();
         }
