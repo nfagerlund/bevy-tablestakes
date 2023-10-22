@@ -1,6 +1,7 @@
 use bevy::prelude::*;
 
 use crate::compass::Dir;
+use crate::render::TopDownMatter;
 use crate::Motion;
 
 // Breaking stuff up for organization, but functionally this is just one thing from the outside.
@@ -27,8 +28,9 @@ fn charanm_test_setup_system(mut commands: Commands, asset_server: Res<AssetServ
     commands.spawn((
         Goofus,
         Name::new("Goofus"),
+        TopDownMatter::character(),
         SpriteSheetBundle {
-            transform: Transform::from_translation(Vec3::new(30.0, 60.0, 3.0)),
+            transform: Transform::from_translation(Vec3::new(30.0, 60.0, 0.0)),
             ..default()
         },
         crate::render::HasShadow,
