@@ -139,7 +139,7 @@ pub fn extract_and_flatten_space_system(
     let min_y = viewport.min.y - VIEW_SLOP;
     let max_y = viewport.max.y + VIEW_SLOP;
     let y_size = max_y - min_y;
-    let y_frac = |y: f32| (y - min_y) / y_size;
+    let y_frac = |y: f32| (max_y - y) / y_size;
 
     // Well it's deeply unfortunate, but because the extract sprites system
     // crams everything into a Vec stored as a resource, we've got to iterate
