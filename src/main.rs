@@ -705,7 +705,7 @@ pub struct Player;
 #[derive(Component, Reflect)]
 pub struct Speed(f32);
 impl Speed {
-    const RUN: f32 = 120.0;
+    const RUN: f32 = 60.0;
     const ROLL: f32 = 180.0;
     const BONK: f32 = 60.0;
 }
