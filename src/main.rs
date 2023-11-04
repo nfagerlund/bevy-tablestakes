@@ -69,11 +69,6 @@ fn main() {
         .add_plugins(TestCharAnimationPlugin)
         .add_plugins(LdtkPlugin)
         // DEBUG STUFF
-        // .add_plugin(FrameTimeDiagnosticsPlugin)
-        // .add_startup_system(junkbox::junk::setup_fps_debug)
-        // .add_system(junkbox::junk::update_fps_debug_system)
-        // .add_system(junkbox::junk::debug_z_system)
-        // .add_system(junkbox::junk::tile_info_barfing_system)
         .insert_resource(DebugAssets::default())
         .add_systems(Startup, setup_debug_assets.before(setup_player))
         .add_systems(Update, spawn_collider_debugs)
