@@ -24,6 +24,11 @@ bevy_ecs_tilemap = "0.11.0"
 bevy_ecs_ldtk = "0.8.0"
 # bevy_spatial = { version = "0.4.0", features = ["rstar"]}
 rstar = "0.9.3"
+# RNG stuff: these crates work together.
+bevy_rand = "0.3.0"
+bevy_prng = { version = "0.1.0", features = ["rand_xoshiro"] }
+rand = "0.8.5"
+rand_xoshiro = "0.6.0"
 
 # bevy_ecs_tilemap = { git = "https://github.com/StarArawn/bevy_ecs_tilemap", rev = "02b044b99" }
 # bevy_ecs_ldtk = { git = "https://github.com/nfagerlund/bevy_ecs_ldtk.git", rev = "1bfe05f" }

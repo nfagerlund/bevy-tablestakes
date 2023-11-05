@@ -19,6 +19,9 @@ use bevy::{
 };
 use bevy_ecs_ldtk::prelude::*;
 use bevy_inspector_egui::quick::{ResourceInspectorPlugin, WorldInspectorPlugin};
+use bevy_prng::Xoshiro256Plus;
+use bevy_rand::prelude::*;
+use rand::prelude::{IteratorRandom, Rng};
 use std::collections::HashMap;
 use std::io::Write;
 
@@ -36,6 +39,8 @@ mod phys_space;
 mod player_states;
 mod render;
 mod space_lookup;
+
+type GameRNG = GlobalEntropy<Xoshiro256Plus>;
 
 fn main() {
     let configured_default_plugins = DefaultPlugins
@@ -68,6 +73,7 @@ fn main() {
         .add_plugins(CharAnimationPlugin)
         .add_plugins(TestCharAnimationPlugin)
         .add_plugins(LdtkPlugin)
+        .add_plugins(EntropyPlugin::<Xoshiro256Plus>::default())
         // DEBUG STUFF
         .insert_resource(DebugAssets::default())
         .add_systems(Startup, setup_debug_assets.before(setup_player))
