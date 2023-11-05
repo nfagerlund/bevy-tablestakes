@@ -115,6 +115,7 @@ fn main() {
         .add_systems(Update, shadow_stitcher_system)
         // ENEMY STUFF
         .add_systems(Startup, temp_setup_enemy.after(load_sprite_assets))
+        .add_systems(Update, randoooooo)
         // PLAYER STUFF
         .add_systems(Startup, setup_player.after(load_sprite_assets))
         .configure_set(Update, Movers.after(CharAnimationSystems).after(MovePlanners))
@@ -206,6 +207,22 @@ pub struct Movers;
 
 #[derive(SystemSet, Clone, Debug, PartialEq, Eq, Hash)]
 struct CameraMovers;
+
+#[derive(Deref, DerefMut)]
+struct SpewTimer(Timer);
+impl Default for SpewTimer {
+    fn default() -> Self {
+        Self(Timer::from_seconds(6.0, TimerMode::Repeating))
+    }
+}
+
+fn randoooooo(mut timer: Local<SpewTimer>, time: Res<Time>, mut rng: ResMut<GameRNG>) {
+    timer.tick(time.delta());
+    if timer.just_finished() {
+        let stuff: u32 = rng.gen();
+        info!("Got the stuff! {}", stuff);
+    }
+}
 
 /// Hey, how much CAN I get away with processing at this point? I know I want to handle
 /// walk/idle transitions here, but..... action button?
