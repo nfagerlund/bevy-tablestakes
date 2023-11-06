@@ -115,6 +115,8 @@ fn main() {
         .add_systems(Update, shadow_stitcher_system)
         // ENEMY STUFF
         .add_systems(Startup, temp_setup_enemy.after(load_sprite_assets))
+        .add_systems(Update, enemy_state_changes.in_set(SpriteChangers))
+        .add_systems(Update, enemy_plan_move.in_set(MovePlanners))
         // PLAYER STUFF
         .add_systems(Startup, setup_player.after(load_sprite_assets))
         .configure_set(Update, Movers.after(CharAnimationSystems).after(MovePlanners))
@@ -472,32 +474,147 @@ fn load_sprite_assets(asset_server: Res<AssetServer>, mut animations: ResMut<Ani
     );
 }
 
+fn enemy_state_changes(
+    mut query: Query<(
+        &mut EnemyStateMachine,
+        &Speed,
+        &mut CharAnimationState,
+        &Patrol,
+        &PhysTransform,
+    )>,
+    time: Res<Time>,
+    mut rng: ResMut<GameRNG>,
+    animations_map: Res<AnimationsMap>,
+) {
+    // Going in serial, because I'm using a global RNG still (instead of forking it to each enemy)
+    for (mut machine, speed, mut anim, patrol, transform) in query.iter_mut() {
+        // ZEROTH: if a state spent its timer, queue a transition.
+        match machine.current() {
+            EnemyState::Idle { timer } => {
+                if timer.finished() {
+                    // Decide where we're patrolling to next
+                    if let Patrol::Patch { home, radius } = patrol {
+                        let angle: f32 =
+                            rng.gen_range(-(std::f32::consts::PI)..=std::f32::consts::PI);
+                        let distance: f32 = rng.gen_range(0.0..*radius);
+                        let dest = *home + Vec2::from_angle(angle) * distance;
+                        let displacement = dest - transform.translation.truncate();
+                        let input = displacement.normalize_or_zero();
+                        let duration_secs = displacement.length() / speed.0;
+                        machine.push_transition(EnemyState::Patrol {
+                            patrol_input: input,
+                            timer: Timer::from_seconds(duration_secs, TimerMode::Once),
+                        });
+                    }
+                }
+            },
+            EnemyState::Patrol { timer, .. } => {
+                if timer.finished() {
+                    machine.push_transition(EnemyState::Idle {
+                        timer: Timer::from_seconds(2.0, TimerMode::Once),
+                    });
+                }
+            },
+            EnemyState::Chase => todo!(),
+            EnemyState::Attack => todo!(),
+            EnemyState::Hurt => todo!(),
+            EnemyState::Dying => todo!(),
+        }
+
+        // FIRST: change states, if it's time to.
+        machine.finish_transition();
+
+        // SECOND: if we changed states, do all our setup housekeeping for the new state.
+        if machine.just_changed {
+            // Update sprite
+            let mut set_anim = |name: &Ases, play: Playback| {
+                if let Some(ani) = animations_map.get(name) {
+                    anim.change_animation(ani.clone(), play);
+                } else {
+                    info!("Whoa oops, tried to set animation {:?} on enemy", name);
+                }
+            };
+            match machine.current() {
+                EnemyState::Idle { .. } => set_anim(&Ases::SlimeIdle, Playback::Loop),
+                EnemyState::Patrol { .. } => set_anim(&Ases::SlimeAttack, Playback::Loop),
+                EnemyState::Chase => todo!(),
+                EnemyState::Attack => todo!(),
+                EnemyState::Hurt => todo!(),
+                EnemyState::Dying => todo!(),
+            }
+
+            // Mark state entry as completed
+            machine.state_entered();
+        }
+
+        // Finally: if the current state has a timer, tick it.
+        match machine.current_mut() {
+            EnemyState::Idle { timer } => {
+                timer.tick(time.delta());
+            },
+            EnemyState::Patrol { timer, .. } => {
+                timer.tick(time.delta());
+            },
+            EnemyState::Chase => (),
+            EnemyState::Attack => (),
+            EnemyState::Hurt => (),
+            EnemyState::Dying => (),
+        };
+    }
+}
+
+fn enemy_plan_move(mut query: Query<(&mut Motion, &Speed, &EnemyStateMachine)>) {
+    query.for_each_mut(|(mut motion, speed, machine)| {
+        let input = match machine.current() {
+            EnemyState::Idle { .. } => Vec2::ZERO,
+            EnemyState::Patrol { patrol_input, .. } => *patrol_input,
+            EnemyState::Chase => Vec2::ZERO,  // TODO
+            EnemyState::Attack => Vec2::ZERO, // TODO,
+            EnemyState::Hurt => Vec2::ZERO,   // TODO,
+            EnemyState::Dying => Vec2::ZERO,  // TODO,
+        };
+        let velocity = input * speed.0;
+        motion.velocity += velocity;
+        motion.face(input);
+    })
+}
+
 // Obviously this is wack, and we should be spawning from ldtk entities, but bear with me here.
 fn temp_setup_enemy(mut commands: Commands, animations: Res<AnimationsMap>) {
     let initial_animation = animations.get(&Ases::SlimeIdle).unwrap().clone();
     let whence = Vec3::new(220., 200., 0.); // empirically 🤷🏽
 
-    commands.spawn(EnemyBundle {
-        identity: Enemy,
-        name: Name::new("Sloom"),
-        state_machine: EnemyStateMachine {
-            current: EnemyState::Idle,
-            next: None,
-            just_changed: true,
+    commands.spawn((
+        EnemyBundle {
+            identity: Enemy,
+            name: Name::new("Sloom"),
+            state_machine: EnemyStateMachine {
+                current: EnemyState::default(),
+                next: None,
+                just_changed: true,
+            },
+            sprite_sheet: SpriteSheetBundle::default(), // Oh huh wow, I took over all that stuff.
+            char_animation_state: CharAnimationState::new(
+                initial_animation,
+                Dir::E,
+                Playback::Loop,
+            ),
+            phys_transform: PhysTransform {
+                translation: whence,
+            },
+            phys_offset: PhysOffset(Vec2::ZERO),
+            walkbox: Walkbox(Rect::default()),
+            hitbox: Hitbox(None),
+            shadow: HasShadow,
+            top_down_matter: TopDownMatter::character(),
+            speed: Speed(Speed::RUN), // ???
+            motion: Motion::new(Vec2::ZERO),
         },
-        sprite_sheet: SpriteSheetBundle::default(), // Oh huh wow, I took over all that stuff.
-        char_animation_state: CharAnimationState::new(initial_animation, Dir::E, Playback::Loop),
-        phys_transform: PhysTransform {
-            translation: whence,
+        Patrol::Patch {
+            home: whence.truncate(),
+            radius: 140.0,
         },
-        phys_offset: PhysOffset(Vec2::ZERO),
-        walkbox: Walkbox(Rect::default()),
-        hitbox: Hitbox(None),
-        shadow: HasShadow,
-        top_down_matter: TopDownMatter::character(),
-        speed: Speed(Speed::RUN), // ???
-        motion: Motion::new(Vec2::ZERO),
-    });
+    ));
 }
 
 fn setup_player(mut commands: Commands, animations: Res<AnimationsMap>) {
@@ -546,12 +663,26 @@ type EnemyStateMachine = EntityStateMachine<EnemyState>;
 
 #[derive(Clone)]
 enum EnemyState {
-    Idle,
-    Patrol,
+    Idle { timer: Timer },
+    Patrol { patrol_input: Vec2, timer: Timer },
     Chase,
     Attack,
     Hurt,
     Dying,
+}
+
+impl Default for EnemyState {
+    fn default() -> Self {
+        Self::Idle {
+            timer: Timer::from_seconds(3.0, TimerMode::Once),
+        }
+    }
+}
+
+#[derive(Component)]
+enum Patrol {
+    Patch { home: Vec2, radius: f32 },
+    Shush, // leave me alone about my irrefutable if lets, man
 }
 
 #[derive(Bundle)]
