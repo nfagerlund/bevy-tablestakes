@@ -261,38 +261,27 @@ fn player_state_read_inputs(
 /// states; if so, handle any setup and housekeeping to make the new state usable on the
 /// current frame.
 fn player_state_changes(
-    mut player_q: Query<(&mut PlayerStateMachine, &mut Speed, &mut CharAnimationState)>,
+    mut player_q: Query<(
+        &mut PlayerStateMachine,
+        &mut StateTimer,
+        &mut Speed,
+        &mut CharAnimationState,
+    )>,
     animations_map: Res<AnimationsMap>,
     time: Res<Time>,
 ) {
-    for (mut machine, mut speed, mut animation_state) in player_q.iter_mut() {
+    for (mut machine, mut state_timer, mut speed, mut animation_state) in player_q.iter_mut() {
         // ZEROTH: if a state used up its time allotment last frame (without being interrupted),
         // this is where we queue up a transition to the next state.
-        if machine.next.is_none() {
-            match machine.current() {
-                PlayerState::Idle => (), // not timed
-                PlayerState::Run => (),  // not timed
-                PlayerState::Roll {
-                    roll_input: _,
-                    timer,
-                } => {
-                    if timer.finished() {
-                        machine.push_transition(PlayerState::Idle);
-                    }
-                },
-                PlayerState::Bonk {
-                    bonk_input: _,
-                    timer,
-                } => {
-                    if timer.finished() {
-                        machine.push_transition(PlayerState::Idle);
-                    }
-                },
-                PlayerState::Attack { timer } => {
-                    if timer.finished() {
-                        machine.push_transition(PlayerState::Idle);
-                    }
-                },
+        if let Some(ref timer) = state_timer.0 {
+            if machine.next.is_none() && timer.finished() {
+                match machine.current() {
+                    PlayerState::Idle => (), // not timed
+                    PlayerState::Run => (),  // not timed
+                    PlayerState::Roll { .. } => machine.push_transition(PlayerState::Idle),
+                    PlayerState::Bonk { .. } => machine.push_transition(PlayerState::Idle),
+                    PlayerState::Attack => machine.push_transition(PlayerState::Idle),
+                }
             }
         }
 
@@ -301,6 +290,9 @@ fn player_state_changes(
 
         // SECOND: if we changed states, do all our setup housekeeping for the new state.
         if machine.just_changed {
+            // Set new Option<Timer>
+            state_timer.0 = machine.current().timer();
+
             // Update sprite
             let mut set_anim = |name: &Ases, play: Playback| {
                 if let Some(ani) = animations_map.get(name) {
@@ -312,17 +304,25 @@ fn player_state_changes(
             match machine.current() {
                 PlayerState::Idle => set_anim(&Ases::TkIdle, Playback::Loop),
                 PlayerState::Run => set_anim(&Ases::TkRun, Playback::Loop),
-                PlayerState::Roll { timer, .. } => {
+                PlayerState::Roll { .. } => {
                     // little extra on this one, sets animation parameters based on gameplay effect
                     set_anim(&Ases::TkRoll, Playback::Once);
-                    let roll_millis = timer.duration().as_millis() as u64;
-                    animation_state.set_total_run_time_to(roll_millis);
+                    if let Some(ref mut timer) = state_timer.0 {
+                        let roll_millis = timer.duration().as_millis() as u64;
+                        animation_state.set_total_run_time_to(roll_millis);
+                    } else {
+                        warn!("no timer for roll state??");
+                    }
                 },
                 PlayerState::Bonk { .. } => set_anim(&Ases::TkHurt, Playback::Once),
-                PlayerState::Attack { timer } => {
+                PlayerState::Attack => {
                     set_anim(&Ases::TkSlash, Playback::Once);
-                    let attack_millis = timer.duration().as_millis() as u64;
-                    animation_state.set_total_run_time_to(attack_millis);
+                    if let Some(ref mut timer) = state_timer.0 {
+                        let attack_millis = timer.duration().as_millis() as u64;
+                        animation_state.set_total_run_time_to(attack_millis);
+                    } else {
+                        warn!("no timer for attack state??");
+                    }
                 },
             };
 
@@ -340,19 +340,8 @@ fn player_state_changes(
         }
 
         // THIRD: If the current state has a timer, tick it forward.
-        // TODO: Could make this a method on &mut PlayerState :thonk:
-        match machine.current_mut() {
-            PlayerState::Idle => (),
-            PlayerState::Run => (),
-            PlayerState::Roll { timer, .. } => {
-                timer.tick(time.delta());
-            },
-            PlayerState::Bonk { timer, .. } => {
-                timer.tick(time.delta());
-            },
-            PlayerState::Attack { timer } => {
-                timer.tick(time.delta());
-            },
+        if let Some(ref mut timer) = state_timer.0 {
+            timer.tick(time.delta());
         }
     }
 }
@@ -361,10 +350,16 @@ fn player_state_changes(
 /// Primarily mutates Motion, but for bonk state I have an unfortunate mutation
 /// of PhysTransform.z.
 fn player_plan_move(
-    mut player_q: Query<(&PlayerStateMachine, &mut Motion, &Speed, &mut PhysTransform)>,
+    mut player_q: Query<(
+        &PlayerStateMachine,
+        &StateTimer,
+        &mut Motion,
+        &Speed,
+        &mut PhysTransform,
+    )>,
     inputs: Res<CurrentInputs>,
 ) {
-    for (machine, mut motion, speed, mut transform) in player_q.iter_mut() {
+    for (machine, state_timer, mut motion, speed, mut transform) in player_q.iter_mut() {
         // Contribute velocity
         let input = match machine.current() {
             PlayerState::Idle => Vec2::ZERO,
@@ -377,17 +372,21 @@ fn player_plan_move(
         motion.velocity += velocity;
 
         // do fucky z-height hack for bonk
-        if let PlayerState::Bonk { timer, .. } = machine.current() {
-            let progress = timer.percent();
-            // ^^ ok to go backwards bc sin is symmetric. btw this should probably
-            // be parabolic but shrug for now. Also BTW, progress will be exactly
-            // 1.0 (and thus height_frac 0.0) if the timer finished, so we shouldn't
-            // need a backstop against height drift here. *NARRATOR VOICE:* it was
-            // actually -0.0, and that never came back to bite them.
-            let height_frac = (progress * std::f32::consts::PI).sin();
-            // and...  we're just manipulating Z directly instead of going through
-            // the motion planning system. Sorry!! Maybe later.
-            transform.translation.z = height_frac * PlayerState::BONK_HEIGHT;
+        if let PlayerState::Bonk { .. } = machine.current() {
+            if let Some(ref timer) = state_timer.0 {
+                let progress = timer.percent();
+                // ^^ ok to go backwards bc sin is symmetric. btw this should probably
+                // be parabolic but shrug for now. Also BTW, progress will be exactly
+                // 1.0 (and thus height_frac 0.0) if the timer finished, so we shouldn't
+                // need a backstop against height drift here. *NARRATOR VOICE:* it was
+                // actually -0.0, and that never came back to bite them.
+                let height_frac = (progress * std::f32::consts::PI).sin();
+                // and...  we're just manipulating Z directly instead of going through
+                // the motion planning system. Sorry!! Maybe later.
+                transform.translation.z = height_frac * PlayerState::BONK_HEIGHT;
+            } else {
+                warn!("yo, no timer for bonk state??")
+            }
         }
     }
 }
@@ -644,6 +643,7 @@ fn setup_player(mut commands: Commands, animations: Res<AnimationsMap>) {
             next: None,
             just_changed: true,
         },
+        state_timer: StateTimer::default(),
         // Shadow marker
         shadow: HasShadow,
         // Draw-depth manager
@@ -713,6 +713,7 @@ struct PlayerBundle {
     identity: Player,
     name: Name,
     state_machine: PlayerStateMachine,
+    state_timer: StateTimer,
 
     sprite_sheet: SpriteSheetBundle,
     char_animation_state: CharAnimationState,
@@ -773,13 +774,16 @@ impl<T: Clone> EntityStateMachine<T> {
     }
 }
 
+#[derive(Component, Reflect, Default)]
+pub struct StateTimer(pub Option<Timer>);
+
 #[derive(Clone)]
 pub enum PlayerState {
     Idle,
     Run,
-    Roll { roll_input: Vec2, timer: Timer },
-    Bonk { bonk_input: Vec2, timer: Timer },
-    Attack { timer: Timer },
+    Roll { roll_input: Vec2 },
+    Bonk { bonk_input: Vec2, distance: f32 },
+    Attack,
 }
 
 impl PlayerState {
@@ -790,31 +794,42 @@ impl PlayerState {
     const BONK_SPEED: f32 = Speed::BONK;
     const ATTACK_DURATION_MS: u64 = 400;
 
+    fn timer(&self) -> Option<Timer> {
+        match self {
+            PlayerState::Idle => None,
+            PlayerState::Run => None,
+            PlayerState::Roll { .. } => {
+                let duration_secs = Self::ROLL_DISTANCE / Self::ROLL_SPEED;
+                Some(Timer::from_seconds(duration_secs, TimerMode::Once))
+            },
+            PlayerState::Bonk { distance, .. } => {
+                let duration_secs = distance / Self::BONK_SPEED;
+                Some(Timer::from_seconds(duration_secs, TimerMode::Once))
+            },
+            PlayerState::Attack => Some(Timer::new(
+                Duration::from_millis(Self::ATTACK_DURATION_MS),
+                TimerMode::Once,
+            )),
+        }
+    }
+
     // TODO: I'm scaling this one for now anyway, but, it'd be good to learn the length of a state
     // based on its sprite asset, so it can be *dictated* by the source file but not *managed*
     // by the animation system. ...Cache it with a startup system?
     fn attack() -> Self {
-        Self::Attack {
-            timer: Timer::new(
-                Duration::from_millis(Self::ATTACK_DURATION_MS),
-                TimerMode::Once,
-            ),
-        }
+        Self::Attack
     }
 
     fn roll(direction: f32) -> Self {
-        let duration_secs = Self::ROLL_DISTANCE / Self::ROLL_SPEED;
         Self::Roll {
             roll_input: Vec2::from_angle(direction),
-            timer: Timer::from_seconds(duration_secs, TimerMode::Once),
         }
     }
 
     fn bonk(direction: f32, distance: f32) -> Self {
-        let duration_secs = distance / Self::BONK_SPEED;
         Self::Bonk {
             bonk_input: Vec2::from_angle(direction),
-            timer: Timer::from_seconds(duration_secs, TimerMode::Once),
+            distance,
         }
     }
 
