@@ -285,11 +285,8 @@ fn player_state_changes(
             }
         }
 
-        // FIRST: change states, if it's time to.
-        machine.finish_transition();
-
-        // SECOND: if we changed states, do all our setup housekeeping for the new state.
-        if machine.just_changed {
+        // FIRST and SECOND: maybe change states, and do all our setup housekeeping for the new state.
+        machine.do_transition(|machine| {
             // Set new Option<Timer>
             state_timer.0 = machine.current().timer();
 
@@ -334,10 +331,7 @@ fn player_state_changes(
                 PlayerState::Bonk { .. } => Speed::BONK,
                 PlayerState::Attack { .. } => 0.0,
             };
-
-            // Mark state entry as completed
-            machine.state_entered();
-        }
+        });
 
         // THIRD: If the current state has a timer, tick it forward.
         if let Some(ref mut timer) = state_timer.0 {
@@ -520,11 +514,8 @@ fn enemy_state_changes(
             EnemyState::Dying => todo!(),
         }
 
-        // FIRST: change states, if it's time to.
-        machine.finish_transition();
-
-        // SECOND: if we changed states, do all our setup housekeeping for the new state.
-        if machine.just_changed {
+        // FIRST and SECOND: maybe change states, and do all our setup housekeeping for the new state.
+        machine.do_transition(|machine| {
             // Update sprite
             let mut set_anim = |name: &Ases, play: Playback| {
                 if let Some(ani) = animations_map.get(name) {
@@ -541,10 +532,7 @@ fn enemy_state_changes(
                 EnemyState::Hurt => todo!(),
                 EnemyState::Dying => todo!(),
             }
-
-            // Mark state entry as completed
-            machine.state_entered();
-        }
+        });
 
         // Finally: if the current state has a timer, tick it.
         match machine.current_mut() {
@@ -590,7 +578,6 @@ fn temp_setup_enemy(mut commands: Commands, animations: Res<AnimationsMap>) {
             state_machine: EnemyStateMachine {
                 current: EnemyState::default(),
                 next: None,
-                just_changed: true,
             },
             sprite_sheet: SpriteSheetBundle::default(), // Oh huh wow, I took over all that stuff.
             char_animation_state: CharAnimationState::new(
@@ -641,7 +628,6 @@ fn setup_player(mut commands: Commands, animations: Res<AnimationsMap>) {
         state_machine: PlayerStateMachine {
             current: PlayerState::Idle,
             next: None,
-            just_changed: true,
         },
         state_timer: StateTimer::default(),
         // Shadow marker
@@ -744,7 +730,6 @@ where
     // fields are private
     current: T,
     next: Option<T>,
-    just_changed: bool,
 }
 
 impl<T: Clone> EntityStateMachine<T> {
@@ -763,13 +748,14 @@ impl<T: Clone> EntityStateMachine<T> {
     fn current_mut(&mut self) -> &mut T {
         &mut self.current
     }
-    fn state_entered(&mut self) {
-        self.just_changed = false;
-    }
-    fn finish_transition(&mut self) {
+    /// If a transition is queued up, switch to the next state, then call the provided
+    /// closure, passing it a mutable reference to self. The closure will see the new
+    /// state when it checks current / current_mut. The closure only gets called
+    /// if there's a transition waiting to go.
+    fn do_transition(&mut self, f: impl FnOnce(&mut Self)) {
         if let Some(next) = self.next.take() {
             self.current = next;
-            self.just_changed = true;
+            f(self);
         }
     }
 }
