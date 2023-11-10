@@ -575,10 +575,7 @@ fn temp_setup_enemy(mut commands: Commands, animations: Res<AnimationsMap>) {
         EnemyBundle {
             identity: Enemy,
             name: Name::new("Sloom"),
-            state_machine: EnemyStateMachine {
-                current: EnemyState::default(),
-                next: None,
-            },
+            state_machine: EnemyStateMachine::new(EnemyState::default()),
             sprite_sheet: SpriteSheetBundle::default(), // Oh huh wow, I took over all that stuff.
             char_animation_state: CharAnimationState::new(
                 initial_animation,
@@ -625,10 +622,7 @@ fn setup_player(mut commands: Commands, animations: Res<AnimationsMap>) {
         char_animation_state: CharAnimationState::new(initial_animation, Dir::E, Playback::Loop),
         motion: Motion::new(Vec2::ZERO),
         // Initial gameplay state
-        state_machine: PlayerStateMachine {
-            current: PlayerState::Idle,
-            next: None,
-        },
+        state_machine: PlayerStateMachine::new(PlayerState::Idle),
         state_timer: StateTimer::default(),
         // Shadow marker
         shadow: HasShadow,
@@ -733,6 +727,12 @@ where
 }
 
 impl<T: Clone> EntityStateMachine<T> {
+    fn new(current: T) -> Self {
+        Self {
+            current,
+            next: None,
+        }
+    }
     fn push_transition(&mut self, next: T) {
         self.next = Some(next);
     }
