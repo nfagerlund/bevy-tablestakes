@@ -516,21 +516,16 @@ fn enemy_state_changes(
 
         // FIRST and SECOND: maybe change states, and do all our setup housekeeping for the new state.
         machine.do_transition(|machine| {
+            let current = machine.current();
             // Update sprite
-            let mut set_anim = |name: &Ases, play: Playback| {
-                if let Some(ani) = animations_map.get(name) {
-                    anim.change_animation(ani.clone(), play);
-                } else {
-                    info!("Whoa oops, tried to set animation {:?} on enemy", name);
-                }
-            };
-            match machine.current() {
-                EnemyState::Idle { .. } => set_anim(&Ases::SlimeIdle, Playback::Loop),
-                EnemyState::Patrol { .. } => set_anim(&Ases::SlimeAttack, Playback::Loop),
-                EnemyState::Chase => todo!(),
-                EnemyState::Attack => todo!(),
-                EnemyState::Hurt => todo!(),
-                EnemyState::Dying => todo!(),
+            let (name, play) = current.animation();
+            if let Some(ani) = animations_map.get(&name) {
+                anim.change_animation(ani.clone(), play);
+            } else {
+                warn!(
+                    "Whoa oops, tried to set animation {:?} on enemy and it whiffed",
+                    name
+                );
             }
         });
 
@@ -649,6 +644,19 @@ enum EnemyState {
     Attack,
     Hurt,
     Dying,
+}
+
+impl EnemyState {
+    fn animation(&self) -> (Ases, Playback) {
+        match self {
+            EnemyState::Idle { .. } => (Ases::SlimeIdle, Playback::Loop),
+            EnemyState::Patrol { .. } => (Ases::SlimeAttack, Playback::Loop),
+            EnemyState::Chase => (Ases::SlimeIdle, Playback::Loop),
+            EnemyState::Attack => (Ases::SlimeAttack, Playback::Loop),
+            EnemyState::Hurt => (Ases::SlimeHurt, Playback::Once),
+            EnemyState::Dying => (Ases::SlimeDie, Playback::Once),
+        }
+    }
 }
 
 impl Default for EnemyState {
