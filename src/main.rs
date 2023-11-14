@@ -98,6 +98,7 @@ fn main() {
         .add_systems(Startup, setup_level)
         .insert_resource(LevelSelection::Index(1))
         .register_ldtk_int_cell_for_layer::<Wall>("StructureKind", 1)
+        .register_ldtk_int_cell_for_layer::<Wall>("TerrainKind", 3)
         // SPATIAL PARTITIONING STUFF
         .add_plugins(RstarPlugin::<Solid>::new())
         // CAMERA
