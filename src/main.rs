@@ -473,7 +473,7 @@ fn enemy_state_changes(
         &mut EnemyStateMachine,
         &Speed,
         &mut CharAnimationState,
-        &Patrol,
+        &PatrolArea,
         &PhysTransform,
     )>,
     time: Res<Time>,
@@ -487,7 +487,7 @@ fn enemy_state_changes(
             EnemyState::Idle { timer } => {
                 if timer.finished() {
                     // Decide where we're patrolling to next
-                    if let Patrol::Patch { home, radius } = patrol {
+                    if let PatrolArea::Patch { home, radius } = patrol {
                         let angle: f32 =
                             rng.gen_range(-(std::f32::consts::PI)..=std::f32::consts::PI);
                         let distance: f32 = rng.gen_range(0.0..*radius);
@@ -589,7 +589,7 @@ fn temp_setup_enemy(mut commands: Commands, animations: Res<AnimationsMap>) {
             speed: Speed(Speed::RUN), // ???
             motion: Motion::new(Vec2::ZERO),
         },
-        Patrol::Patch {
+        PatrolArea::Patch {
             home: whence.truncate(),
             radius: 140.0,
         },
@@ -669,7 +669,7 @@ impl Default for EnemyState {
 }
 
 #[derive(Component)]
-enum Patrol {
+enum PatrolArea {
     Patch { home: Vec2, radius: f32 },
     Shush, // leave me alone about my irrefutable if lets, man
 }
