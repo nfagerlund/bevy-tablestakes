@@ -21,7 +21,9 @@ pub struct Motion {
     pub facing: f32,
     /// The linear velocity for this frame, as determined by the entity's state and inputs.
     pub velocity: Vec2,
+    /// ONLY used by the janky move_whole_pixel system, should probably go.
     pub remainder: Vec2,
+    /// What happened in the move.
     pub result: Option<MotionResult>,
 }
 impl Motion {
