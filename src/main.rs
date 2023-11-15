@@ -631,6 +631,51 @@ fn setup_player(mut commands: Commands, animations: Res<AnimationsMap>) {
 
 // Structs and crap!
 
+// Behavioral components and events for... all kinds of shit.
+
+/// Behavior: able to move around in response to inputs. Only players do this.
+#[derive(Component)]
+#[component(storage = "SparseSet")]
+struct MobileFree;
+
+/// Behavior: moving in a fixed direction, with a base input to be
+/// multiplied by a speed and delta.
+#[derive(Component)]
+#[component(storage = "SparseSet")]
+struct MobileFixed {
+    input: Vec2,
+}
+
+/// Behavior: moving according to an acceleration impulse? This is velocity per second.
+#[derive(Component)]
+#[component(storage = "SparseSet")]
+struct MobileImpulse {
+    acceleration: Vec3, // including z here
+}
+// Gonna need consts GRAVITY and FRICTION here  later
+
+/// Behavior: moving too fast, and will rebound on wall hit.
+#[derive(Component)]
+#[component(storage = "SparseSet")]
+struct Headlong;
+
+/// Behavior: experiencing hitstun.
+#[derive(Component)]
+#[component(storage = "SparseSet")]
+struct Hitstun;
+
+/// Behavior: experiencing knockback.
+#[derive(Component)]
+#[component(storage = "SparseSet")]
+struct Knockback;
+
+/// Event: got your ass bounced off something
+#[derive(Event)]
+struct Rebound {
+    entity: Entity,
+    vector: Vec2,
+}
+
 /// Marker component for enemies
 #[derive(Component)]
 struct Enemy;
