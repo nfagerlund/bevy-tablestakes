@@ -133,7 +133,7 @@ fn main() {
             ).in_set(Movers)
         )
         .add_systems(Update, player_state_read_inputs.before(player_state_changes))
-        .add_systems(Update, player_state_changes.in_set(SpriteChangers).before(MovePlanners))
+        .add_systems(Update, (player_state_changes, apply_deferred).chain().in_set(SpriteChangers).before(MovePlanners))
         .add_systems(Update, player_plan_move.in_set(MovePlanners))
         .add_systems(Update, player_queue_wall_bonk.after(Movers))
         .add_systems(
@@ -263,6 +263,7 @@ fn player_state_read_inputs(
 /// current frame.
 fn player_state_changes(
     mut player_q: Query<(
+        Entity,
         &mut PlayerStateMachine,
         &mut StateTimer,
         &mut Speed,
@@ -270,9 +271,12 @@ fn player_state_changes(
     )>,
     animations_map: Res<AnimationsMap>,
     time: Res<Time>,
+    mut commands: Commands,
 ) {
-    for (mut machine, mut state_timer, mut speed, mut animation_state) in player_q.iter_mut() {
-        // ZEROTH: if a state used up its time allotment last frame (without being interrupted),
+    for (entity, mut machine, mut state_timer, mut speed, mut animation_state) in
+        player_q.iter_mut()
+    {
+        // FIRST: if a state used up its time allotment last frame (without being interrupted),
         // this is where we queue up a transition to the next state.
         if let Some(ref timer) = state_timer.0 {
             if machine.next.is_none() && timer.finished() {
@@ -286,45 +290,23 @@ fn player_state_changes(
             }
         }
 
-        // FIRST and SECOND: maybe change states, and do all our setup housekeeping for the new state.
+        // SEVERAL-TH: maybe change states, and do setup housekeeping for the new state.
         machine.do_transition(|machine| {
-            // Set new Option<Timer>
+            // SECOND: Set new Option<Timer>
             state_timer.0 = machine.current().timer();
 
-            // Update sprite
-            let mut set_anim = |name: &Ases, play: Playback| {
-                if let Some(ani) = animations_map.get(name) {
-                    animation_state.change_animation(ani.clone(), play);
-                } else {
-                    info!("Whoa oops, tried to set animation {:?} on player", name);
+            // THIRD: Update sprite
+            let (name, play, time) = machine.current().animation_data();
+            if let Some(ani) = animations_map.get(&name) {
+                animation_state.change_animation(ani.clone(), play);
+                if let Some(run_ms) = time {
+                    animation_state.set_total_run_time_to(run_ms);
                 }
-            };
-            match machine.current() {
-                PlayerState::Idle => set_anim(&Ases::TkIdle, Playback::Loop),
-                PlayerState::Run => set_anim(&Ases::TkRun, Playback::Loop),
-                PlayerState::Roll { .. } => {
-                    // little extra on this one, sets animation parameters based on gameplay effect
-                    set_anim(&Ases::TkRoll, Playback::Once);
-                    if let Some(ref mut timer) = state_timer.0 {
-                        let roll_millis = timer.duration().as_millis() as u64;
-                        animation_state.set_total_run_time_to(roll_millis);
-                    } else {
-                        warn!("no timer for roll state??");
-                    }
-                },
-                PlayerState::Bonk { .. } => set_anim(&Ases::TkHurt, Playback::Once),
-                PlayerState::Attack => {
-                    set_anim(&Ases::TkSlash, Playback::Once);
-                    if let Some(ref mut timer) = state_timer.0 {
-                        let attack_millis = timer.duration().as_millis() as u64;
-                        animation_state.set_total_run_time_to(attack_millis);
-                    } else {
-                        warn!("no timer for attack state??");
-                    }
-                },
-            };
+            } else {
+                warn!("Tried to set missing animation {:?} on player", name);
+            }
 
-            // Update speed
+            // FOURTH: Update speed
             speed.0 = match machine.current() {
                 PlayerState::Idle => 0.0,
                 PlayerState::Run => Speed::RUN,
@@ -332,9 +314,46 @@ fn player_state_changes(
                 PlayerState::Bonk { .. } => Speed::BONK,
                 PlayerState::Attack { .. } => 0.0,
             };
+
+            // FIFTH: Add and remove behavioral components
+            // possible TODO: custom replace_behaviors(bundle) entity command
+            // wait, even sooner TODO: give states a .behaviors() method!!
+            match machine.current() {
+                PlayerState::Idle => {
+                    commands
+                        .entity(entity)
+                        .remove::<AllBehaviors>()
+                        .insert(MobileFree);
+                },
+                PlayerState::Run => {
+                    commands
+                        .entity(entity)
+                        .remove::<AllBehaviors>()
+                        .insert(MobileFree);
+                },
+                PlayerState::Roll { roll_input } => {
+                    commands
+                        .entity(entity)
+                        .remove::<AllBehaviors>()
+                        .insert((MobileFixed { input: *roll_input }, Headlong));
+                },
+                PlayerState::Bonk { bonk_input, .. } => {
+                    commands.entity(entity).remove::<AllBehaviors>().insert((
+                        MobileFixed { input: *bonk_input }, // TODO: impulse
+                        Hitstun,
+                        Knockback,
+                    ));
+                },
+                PlayerState::Attack => {
+                    commands
+                        .entity(entity)
+                        .remove::<AllBehaviors>()
+                        .insert((MobileFixed { input: Vec2::ZERO },));
+                },
+            }
         });
 
-        // THIRD: If the current state has a timer, tick it forward.
+        // SIXTH: If the current state has a timer, tick it forward.
         if let Some(ref mut timer) = state_timer.0 {
             timer.tick(time.delta());
         }
@@ -633,6 +652,15 @@ fn setup_player(mut commands: Commands, animations: Res<AnimationsMap>) {
 
 // Behavioral components and events for... all kinds of shit.
 
+type AllBehaviors = (
+    MobileFree,
+    MobileFixed,
+    MobileImpulse,
+    Headlong,
+    Hitstun,
+    Knockback,
+);
+
 /// Behavior: able to move around in response to inputs. Only players do this.
 #[derive(Component)]
 #[component(storage = "SparseSet")]
@@ -850,6 +878,23 @@ impl PlayerState {
                 Duration::from_millis(Self::ATTACK_DURATION_MS),
                 TimerMode::Once,
             )),
+        }
+    }
+
+    fn animation_data(&self) -> (Ases, Playback, Option<u64>) {
+        match self {
+            PlayerState::Idle => (Ases::TkIdle, Playback::Loop, None),
+            PlayerState::Run => (Ases::TkRun, Playback::Loop, None),
+            PlayerState::Roll { .. } => {
+                let duration = (Self::ROLL_DISTANCE / Self::ROLL_SPEED * 1000.0) as u64;
+                (Ases::TkRoll, Playback::Once, Some(duration))
+            },
+            PlayerState::Bonk { .. } => (Ases::TkHurt, Playback::Once, None), // one frame, so no duration :)
+            PlayerState::Attack => (
+                Ases::TkSlash,
+                Playback::Once,
+                Some(Self::ATTACK_DURATION_MS),
+            ),
         }
     }
 
