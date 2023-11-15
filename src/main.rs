@@ -119,6 +119,7 @@ fn main() {
         .add_systems(Startup, temp_setup_enemy.after(load_sprite_assets))
         .add_systems(Update, enemy_state_changes.in_set(SpriteChangers))
         // PLAYER STUFF
+        .add_event::<Rebound>()
         .add_systems(Startup, setup_player.after(load_sprite_assets))
         .configure_set(Update, Movers.after(CharAnimationSystems).after(MovePlanners))
         .configure_set(Update, MovePlanners.after(SpriteChangers))
@@ -132,8 +133,15 @@ fn main() {
                 move_continuous_ray_test.run_if(motion_is(MotionKind::RayTest)),
             ).in_set(Movers)
         )
-        .add_systems(Update, player_state_read_inputs.before(player_state_changes))
-        .add_systems(Update, (player_state_changes, apply_deferred).chain().in_set(SpriteChangers).before(MovePlanners))
+        .add_systems(
+            Update,
+            (
+                player_state_read_inputs,
+                player_state_read_events,
+                player_state_changes,
+                apply_deferred
+            ).chain().in_set(SpriteChangers).before(MovePlanners)
+        )
         .add_systems(
             Update,
             (
@@ -265,6 +273,17 @@ fn player_state_read_inputs(
     }
 }
 
+fn player_state_read_events(
+    mut rebound_events: EventReader<Rebound>,
+    mut player_q: Query<&mut PlayerStateMachine>,
+) {
+    for rb in rebound_events.iter() {
+        if let Ok(mut machine) = player_q.get_mut(rb.entity) {
+            machine.push_transition(PlayerState::bonk_from_vector(rb.vector));
+        }
+    }
+}
+
 /// Near the start of every frame, check whether the player state machine is switching
 /// states; if so, handle any setup and housekeeping to make the new state usable on the
 /// current frame.
@@ -376,15 +395,19 @@ fn mobile_fixed_velocity(mut fixed_q: Query<(&mut Motion, &Speed, &MobileFixed)>
 
 /// If player bonked into a wall, queue a state transition.
 /// TODO: Generalize knockback. why should this be player-specific? Or bonk-specific?
-fn player_queue_wall_bonk(mut player_q: Query<(&mut PlayerStateMachine, &Motion)>) {
-    for (mut machine, motion) in player_q.iter_mut() {
-        if let PlayerState::Roll { .. } = machine.current() {
-            if let Some(MotionResult { collided: true, .. }) = motion.result {
-                // We hit a wall, so bounce back:
-                let opposite_direction = flip_angle(motion.facing);
-                let next_state = PlayerState::bonk_from_roll(opposite_direction);
-                machine.push_transition(next_state);
-            }
+fn player_queue_wall_bonk(
+    player_q: Query<(Entity, &Motion), With<Headlong>>,
+    mut rebound_events: EventWriter<Rebound>,
+) {
+    for (entity, motion) in player_q.iter() {
+        if let Some(MotionResult { collided: true, .. }) = motion.result {
+            // We hit a wall, so bounce back:
+            let opposite_direction = flip_angle(motion.facing);
+            let distance = PlayerState::BONK_FROM_ROLL_DISTANCE;
+            rebound_events.send(Rebound {
+                entity,
+                vector: Vec2::from_angle(opposite_direction) * distance,
+            });
         }
     }
 }
@@ -946,6 +969,13 @@ impl PlayerState {
     fn roll(direction: f32) -> Self {
         Self::Roll {
             roll_input: Vec2::from_angle(direction),
+        }
+    }
+
+    fn bonk_from_vector(v: Vec2) -> Self {
+        Self::Bonk {
+            bonk_input: v.normalize_or_zero(),
+            distance: v.length(),
         }
     }
 
