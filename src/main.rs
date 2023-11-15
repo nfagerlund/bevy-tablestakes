@@ -134,7 +134,14 @@ fn main() {
         )
         .add_systems(Update, player_state_read_inputs.before(player_state_changes))
         .add_systems(Update, (player_state_changes, apply_deferred).chain().in_set(SpriteChangers).before(MovePlanners))
-        .add_systems(Update, player_plan_move.in_set(MovePlanners))
+        .add_systems(
+            Update,
+            (
+                player_bonk_height,
+                mobile_free_velocity,
+                mobile_fixed_velocity
+            ).in_set(MovePlanners),
+        )
         .add_systems(Update, player_queue_wall_bonk.after(Movers))
         .add_systems(
             Update,
@@ -360,31 +367,9 @@ fn player_state_changes(
     }
 }
 
-/// Compute player's velocity for the current frame.
-/// Primarily mutates Motion, but for bonk state I have an unfortunate mutation
-/// of PhysTransform.z.
-fn player_plan_move(
-    mut player_q: Query<(
-        &PlayerStateMachine,
-        &StateTimer,
-        &mut Motion,
-        &Speed,
-        &mut PhysTransform,
-    )>,
-    inputs: Res<CurrentInputs>,
-) {
-    for (machine, state_timer, mut motion, speed, mut transform) in player_q.iter_mut() {
-        // Contribute velocity
-        let input = match machine.current() {
-            PlayerState::Idle => Vec2::ZERO,
-            PlayerState::Run => inputs.movement,
-            PlayerState::Roll { roll_input, .. } => *roll_input,
-            PlayerState::Bonk { bonk_input, .. } => *bonk_input,
-            PlayerState::Attack { .. } => Vec2::ZERO,
-        };
-        let velocity = input * speed.0;
-        motion.velocity += velocity;
-
+/// Do an an unfortunate mutation of PhysTransform.z for bonk state
+fn player_bonk_height(mut player_q: Query<(&PlayerStateMachine, &StateTimer, &mut PhysTransform)>) {
+    for (machine, state_timer, mut transform) in player_q.iter_mut() {
         // do fucky z-height hack for bonk
         if let PlayerState::Bonk { .. } = machine.current() {
             if let Some(ref timer) = state_timer.0 {
@@ -403,6 +388,21 @@ fn player_plan_move(
             }
         }
     }
+}
+
+fn mobile_free_velocity(
+    mut free_q: Query<(&mut Motion, &Speed), With<MobileFree>>,
+    inputs: Res<CurrentInputs>,
+) {
+    free_q.for_each_mut(|(mut motion, speed)| {
+        motion.velocity += inputs.movement * speed.0;
+    });
+}
+
+fn mobile_fixed_velocity(mut fixed_q: Query<(&mut Motion, &Speed, &MobileFixed)>) {
+    fixed_q.for_each_mut(|(mut motion, speed, fixed)| {
+        motion.velocity += fixed.input * speed.0;
+    });
 }
 
 /// If player bonked into a wall, queue a state transition.
