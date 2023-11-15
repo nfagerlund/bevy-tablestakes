@@ -898,6 +898,14 @@ impl PlayerState {
         }
     }
 
+    // OH HEY, this one's actually tricky because I can't
+    // return tuples of varying length from the same function,
+    // AND I'll need to treat the components as trait objects if
+    // I'm returning a vec.
+    // fn behaviors(&self) -> Vec< {
+
+    // }
+
     // TODO: I'm scaling this one for now anyway, but, it'd be good to learn the length of a state
     // based on its sprite asset, so it can be *dictated* by the source file but not *managed*
     // by the animation system. ...Cache it with a startup system?
