@@ -472,19 +472,14 @@ fn enemy_state_changes(
             EnemyState::Idle { timer } => {
                 if timer.finished() {
                     // Decide where we're patrolling to next
-                    if let PatrolArea::Patch { home, radius } = patrol {
-                        let angle: f32 =
-                            rng.gen_range(-(std::f32::consts::PI)..=std::f32::consts::PI);
-                        let distance: f32 = rng.gen_range(0.0..*radius);
-                        let dest = *home + Vec2::from_angle(angle) * distance;
-                        let displacement = dest - transform.translation.truncate();
-                        let input = displacement.normalize_or_zero();
-                        let duration_secs = displacement.length() / speed.0;
-                        machine.push_transition(EnemyState::Patrol {
-                            patrol_input: input,
-                            timer: Timer::from_seconds(duration_secs, TimerMode::Once),
-                        });
-                    }
+                    let dest = patrol.random_destination(&mut *rng);
+                    let displacement = dest - transform.translation.truncate();
+                    let input = displacement.normalize_or_zero();
+                    let duration_secs = displacement.length() / speed.0;
+                    machine.push_transition(EnemyState::Patrol {
+                        patrol_input: input,
+                        timer: Timer::from_seconds(duration_secs, TimerMode::Once),
+                    });
                 }
             },
             EnemyState::Patrol { timer, .. } => {
@@ -504,7 +499,7 @@ fn enemy_state_changes(
         machine.do_transition(|machine| {
             let current = machine.current();
             // Update sprite
-            let (name, play) = current.animation();
+            let (name, play) = current.animation_data();
             if let Some(ani) = animations_map.get(&name) {
                 anim.change_animation(ani.clone(), play);
             } else {
@@ -687,7 +682,7 @@ enum EnemyState {
 }
 
 impl EnemyState {
-    fn animation(&self) -> (Ases, Playback) {
+    fn animation_data(&self) -> (Ases, Playback) {
         match self {
             EnemyState::Idle { .. } => (Ases::SlimeIdle, Playback::Loop),
             EnemyState::Patrol { .. } => (Ases::SlimeAttack, Playback::Loop),
@@ -695,6 +690,20 @@ impl EnemyState {
             EnemyState::Attack => (Ases::SlimeAttack, Playback::Loop),
             EnemyState::Hurt => (Ases::SlimeHurt, Playback::Once),
             EnemyState::Dying => (Ases::SlimeDie, Playback::Once),
+        }
+    }
+
+    fn timer(&self) -> Option<Timer> {
+        match self {
+            EnemyState::Idle { timer } => todo!(),
+            EnemyState::Patrol {
+                patrol_input,
+                timer,
+            } => todo!(),
+            EnemyState::Chase => todo!(),
+            EnemyState::Attack => todo!(),
+            EnemyState::Hurt => todo!(),
+            EnemyState::Dying => todo!(),
         }
     }
 }
@@ -711,6 +720,19 @@ impl Default for EnemyState {
 enum PatrolArea {
     Patch { home: Vec2, radius: f32 },
     Shush, // leave me alone about my irrefutable if lets, man
+}
+
+impl PatrolArea {
+    fn random_destination(&self, rng: &mut impl Rng) -> Vec2 {
+        match self {
+            PatrolArea::Patch { home, radius } => {
+                let angle: f32 = rng.gen_range(-(std::f32::consts::PI)..=std::f32::consts::PI);
+                let distance: f32 = rng.gen_range(0.0..*radius);
+                *home + Vec2::from_angle(angle) * distance
+            },
+            PatrolArea::Shush => todo!(),
+        }
+    }
 }
 
 #[derive(Bundle)]
