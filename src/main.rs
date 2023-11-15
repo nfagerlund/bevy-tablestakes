@@ -456,6 +456,7 @@ fn load_sprite_assets(asset_server: Res<AssetServer>, mut animations: ResMut<Ani
 fn enemy_state_changes(
     mut query: Query<(
         &mut EnemyStateMachine,
+        &mut StateTimer,
         &Speed,
         &mut CharAnimationState,
         &PatrolArea,
@@ -466,38 +467,40 @@ fn enemy_state_changes(
     animations_map: Res<AnimationsMap>,
 ) {
     // Going in serial, because I'm using a global RNG still (instead of forking it to each enemy)
-    for (mut machine, speed, mut anim, patrol, transform) in query.iter_mut() {
+    for (mut machine, mut state_timer, speed, mut anim, patrol, transform) in query.iter_mut() {
         // ZEROTH: if a state spent its timer, queue a transition.
-        match machine.current() {
-            EnemyState::Idle { timer } => {
-                if timer.finished() {
-                    // Decide where we're patrolling to next
-                    let dest = patrol.random_destination(&mut *rng);
-                    let displacement = dest - transform.translation.truncate();
-                    let input = displacement.normalize_or_zero();
-                    let duration_secs = displacement.length() / speed.0;
-                    machine.push_transition(EnemyState::Patrol {
-                        patrol_input: input,
-                        timer: Timer::from_seconds(duration_secs, TimerMode::Once),
-                    });
+        if let Some(ref timer) = state_timer.0 {
+            if machine.next.is_none() && timer.finished() {
+                match machine.current() {
+                    EnemyState::Idle => {
+                        // Decide where we're patrolling to next
+                        let dest = patrol.random_destination(&mut *rng);
+                        let displacement = dest - transform.translation.truncate();
+                        let input = displacement.normalize_or_zero();
+                        let duration_secs = displacement.length() / speed.0;
+                        machine.push_transition(EnemyState::Patrol {
+                            displacement,
+                            patrol_input: input,
+                        });
+                    },
+                    EnemyState::Patrol { .. } => {
+                        machine.push_transition(EnemyState::Idle);
+                    },
+                    EnemyState::Chase => todo!(),
+                    EnemyState::Attack => todo!(),
+                    EnemyState::Hurt => todo!(),
+                    EnemyState::Dying => todo!(),
                 }
-            },
-            EnemyState::Patrol { timer, .. } => {
-                if timer.finished() {
-                    machine.push_transition(EnemyState::Idle {
-                        timer: Timer::from_seconds(2.0, TimerMode::Once),
-                    });
-                }
-            },
-            EnemyState::Chase => todo!(),
-            EnemyState::Attack => todo!(),
-            EnemyState::Hurt => todo!(),
-            EnemyState::Dying => todo!(),
+            }
         }
 
         // FIRST and SECOND: maybe change states, and do all our setup housekeeping for the new state.
         machine.do_transition(|machine| {
             let current = machine.current();
+
+            // Set new Option<Timer>
+            state_timer.0 = current.timer();
+
             // Update sprite
             let (name, play) = current.animation_data();
             if let Some(ani) = animations_map.get(&name) {
@@ -511,18 +514,9 @@ fn enemy_state_changes(
         });
 
         // Finally: if the current state has a timer, tick it.
-        match machine.current_mut() {
-            EnemyState::Idle { timer } => {
-                timer.tick(time.delta());
-            },
-            EnemyState::Patrol { timer, .. } => {
-                timer.tick(time.delta());
-            },
-            EnemyState::Chase => (),
-            EnemyState::Attack => (),
-            EnemyState::Hurt => (),
-            EnemyState::Dying => (),
-        };
+        if let Some(ref mut timer) = state_timer.0 {
+            timer.tick(time.delta());
+        }
     }
 }
 
@@ -552,6 +546,7 @@ fn temp_setup_enemy(mut commands: Commands, animations: Res<AnimationsMap>) {
             identity: Enemy,
             name: Name::new("Sloom"),
             state_machine: EnemyStateMachine::new(EnemyState::default()),
+            state_timer: StateTimer::default(),
             sprite_sheet: SpriteSheetBundle::default(), // Oh huh wow, I took over all that stuff.
             char_animation_state: CharAnimationState::new(
                 initial_animation,
@@ -566,7 +561,7 @@ fn temp_setup_enemy(mut commands: Commands, animations: Res<AnimationsMap>) {
             hitbox: Hitbox(None),
             shadow: HasShadow,
             top_down_matter: TopDownMatter::character(),
-            speed: Speed(Speed::RUN), // ???
+            speed: Speed(Speed::ENEMY_RUN), // ???
             motion: Motion::new(Vec2::ZERO),
         },
         PatrolArea::Patch {
@@ -673,8 +668,11 @@ type EnemyStateMachine = EntityStateMachine<EnemyState>;
 
 #[derive(Clone)]
 enum EnemyState {
-    Idle { timer: Timer },
-    Patrol { patrol_input: Vec2, timer: Timer },
+    Idle,
+    Patrol {
+        displacement: Vec2,
+        patrol_input: Vec2,
+    },
     Chase,
     Attack,
     Hurt,
@@ -695,11 +693,11 @@ impl EnemyState {
 
     fn timer(&self) -> Option<Timer> {
         match self {
-            EnemyState::Idle { timer } => todo!(),
-            EnemyState::Patrol {
-                patrol_input,
-                timer,
-            } => todo!(),
+            EnemyState::Idle => Some(Timer::from_seconds(2.0, TimerMode::Once)),
+            EnemyState::Patrol { displacement, .. } => {
+                let duration_secs = displacement.length() / Speed::ENEMY_RUN;
+                Some(Timer::from_seconds(duration_secs, TimerMode::Once))
+            },
             EnemyState::Chase => todo!(),
             EnemyState::Attack => todo!(),
             EnemyState::Hurt => todo!(),
@@ -710,9 +708,7 @@ impl EnemyState {
 
 impl Default for EnemyState {
     fn default() -> Self {
-        Self::Idle {
-            timer: Timer::from_seconds(3.0, TimerMode::Once),
-        }
+        Self::Idle
     }
 }
 
@@ -740,6 +736,7 @@ struct EnemyBundle {
     identity: Enemy,
     name: Name,
     state_machine: EnemyStateMachine,
+    state_timer: StateTimer,
 
     // .......oh nice, everything below here is same as player. Ripe for future consolidation!
     sprite_sheet: SpriteSheetBundle,
@@ -799,8 +796,9 @@ where
 impl<T: Clone> EntityStateMachine<T> {
     fn new(current: T) -> Self {
         Self {
-            current,
-            next: None,
+            current: current.clone(),
+            // Make sure we run sprite/behavior/timer setup on first tick!
+            next: Some(current),
         }
     }
     fn push_transition(&mut self, next: T) {
@@ -815,7 +813,7 @@ impl<T: Clone> EntityStateMachine<T> {
     fn current(&self) -> &T {
         &self.current
     }
-    fn current_mut(&mut self) -> &mut T {
+    fn _current_mut(&mut self) -> &mut T {
         &mut self.current
     }
     /// If a transition is queued up, switch to the next state, then call the provided
@@ -957,4 +955,5 @@ impl Speed {
     const RUN: f32 = 60.0;
     const ROLL: f32 = 180.0;
     const BONK: f32 = 60.0;
+    const ENEMY_RUN: f32 = Speed::RUN;
 }
