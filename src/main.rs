@@ -21,7 +21,7 @@ use bevy_ecs_ldtk::prelude::*;
 use bevy_inspector_egui::quick::{ResourceInspectorPlugin, WorldInspectorPlugin};
 use bevy_prng::Xoshiro256Plus;
 use bevy_rand::prelude::*;
-use rand::prelude::{IteratorRandom, Rng};
+use rand::prelude::Rng;
 use std::collections::HashMap;
 use std::io::Write;
 
@@ -477,7 +477,6 @@ fn enemy_state_changes(
                         let dest = patrol.random_destination(&mut *rng);
                         let displacement = dest - transform.translation.truncate();
                         let input = displacement.normalize_or_zero();
-                        let duration_secs = displacement.length() / speed.0;
                         machine.push_transition(EnemyState::Patrol {
                             displacement,
                             patrol_input: input,
@@ -715,7 +714,7 @@ impl Default for EnemyState {
 #[derive(Component)]
 enum PatrolArea {
     Patch { home: Vec2, radius: f32 },
-    Shush, // leave me alone about my irrefutable if lets, man
+    _Shush, // leave me alone about my irrefutable if lets, man
 }
 
 impl PatrolArea {
@@ -726,7 +725,7 @@ impl PatrolArea {
                 let distance: f32 = rng.gen_range(0.0..*radius);
                 *home + Vec2::from_angle(angle) * distance
             },
-            PatrolArea::Shush => todo!(),
+            PatrolArea::_Shush => todo!(),
         }
     }
 }
