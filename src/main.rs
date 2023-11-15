@@ -9,6 +9,7 @@ use crate::movement::*;
 use crate::phys_space::*;
 use crate::render::*;
 use crate::space_lookup::RstarPlugin;
+use bevy::ecs::system::EntityCommands;
 use bevy::{
     input::InputSystem,
     log::LogPlugin,
@@ -117,7 +118,6 @@ fn main() {
         // ENEMY STUFF
         .add_systems(Startup, temp_setup_enemy.after(load_sprite_assets))
         .add_systems(Update, enemy_state_changes.in_set(SpriteChangers))
-        .add_systems(Update, enemy_plan_move.in_set(MovePlanners))
         // PLAYER STUFF
         .add_systems(Startup, setup_player.after(load_sprite_assets))
         .configure_set(Update, Movers.after(CharAnimationSystems).after(MovePlanners))
@@ -368,6 +368,9 @@ fn mobile_free_velocity(
 fn mobile_fixed_velocity(mut fixed_q: Query<(&mut Motion, &Speed, &MobileFixed)>) {
     fixed_q.for_each_mut(|(mut motion, speed, fixed)| {
         motion.velocity += fixed.input * speed.0;
+        if fixed.face {
+            motion.face(fixed.input);
+        }
     });
 }
 
@@ -455,6 +458,7 @@ fn load_sprite_assets(asset_server: Res<AssetServer>, mut animations: ResMut<Ani
 
 fn enemy_state_changes(
     mut query: Query<(
+        Entity,
         &mut EnemyStateMachine,
         &mut StateTimer,
         &Speed,
@@ -465,9 +469,12 @@ fn enemy_state_changes(
     time: Res<Time>,
     mut rng: ResMut<GameRNG>,
     animations_map: Res<AnimationsMap>,
+    mut commands: Commands,
 ) {
     // Going in serial, because I'm using a global RNG still (instead of forking it to each enemy)
-    for (mut machine, mut state_timer, speed, mut anim, patrol, transform) in query.iter_mut() {
+    for (entity, mut machine, mut state_timer, speed, mut anim, patrol, transform) in
+        query.iter_mut()
+    {
         // ZEROTH: if a state spent its timer, queue a transition.
         if let Some(ref timer) = state_timer.0 {
             if machine.next.is_none() && timer.finished() {
@@ -510,6 +517,9 @@ fn enemy_state_changes(
                     name
                 );
             }
+
+            // THIRD??: add and remove behaviors
+            current.set_behaviors(commands.entity(entity));
         });
 
         // Finally: if the current state has a timer, tick it.
@@ -517,22 +527,6 @@ fn enemy_state_changes(
             timer.tick(time.delta());
         }
     }
-}
-
-fn enemy_plan_move(mut query: Query<(&mut Motion, &Speed, &EnemyStateMachine)>) {
-    query.for_each_mut(|(mut motion, speed, machine)| {
-        let input = match machine.current() {
-            EnemyState::Idle { .. } => Vec2::ZERO,
-            EnemyState::Patrol { patrol_input, .. } => *patrol_input,
-            EnemyState::Chase => Vec2::ZERO,  // TODO
-            EnemyState::Attack => Vec2::ZERO, // TODO,
-            EnemyState::Hurt => Vec2::ZERO,   // TODO,
-            EnemyState::Dying => Vec2::ZERO,  // TODO,
-        };
-        let velocity = input * speed.0;
-        motion.velocity += velocity;
-        motion.face(input);
-    })
 }
 
 // Obviously this is wack, and we should be spawning from ldtk entities, but bear with me here.
@@ -627,6 +621,7 @@ struct MobileFree;
 #[component(storage = "SparseSet")]
 struct MobileFixed {
     input: Vec2,
+    face: bool,
 }
 
 /// Behavior: moving according to an acceleration impulse? This is velocity per second.
@@ -696,6 +691,23 @@ impl EnemyState {
             EnemyState::Patrol { displacement, .. } => {
                 let duration_secs = displacement.length() / Speed::ENEMY_RUN;
                 Some(Timer::from_seconds(duration_secs, TimerMode::Once))
+            },
+            EnemyState::Chase => todo!(),
+            EnemyState::Attack => todo!(),
+            EnemyState::Hurt => todo!(),
+            EnemyState::Dying => todo!(),
+        }
+    }
+
+    fn set_behaviors(&self, mut cmds: EntityCommands) {
+        cmds.remove::<AllBehaviors>();
+        match self {
+            EnemyState::Idle => (), // ...I think you can just sit there and do nothing 🤔
+            EnemyState::Patrol { displacement, .. } => {
+                cmds.insert((MobileFixed {
+                    input: displacement.normalize_or_zero(),
+                    face: true,
+                },));
             },
             EnemyState::Chase => todo!(),
             EnemyState::Attack => todo!(),
@@ -887,7 +899,7 @@ impl PlayerState {
     /// behavioral components on that entity. TBH I'd rather "just" return
     /// a set of behaviors, but actually that's fiendishly complicated
     /// because those types are all different, so we do it the easy way.
-    fn set_behaviors(&self, mut cmds: bevy::ecs::system::EntityCommands) {
+    fn set_behaviors(&self, mut cmds: EntityCommands) {
         cmds.remove::<AllBehaviors>();
         match self {
             PlayerState::Idle => {
@@ -897,17 +909,29 @@ impl PlayerState {
                 cmds.insert(MobileFree);
             },
             PlayerState::Roll { roll_input } => {
-                cmds.insert((MobileFixed { input: *roll_input }, Headlong));
+                cmds.insert((
+                    MobileFixed {
+                        input: *roll_input,
+                        face: true,
+                    },
+                    Headlong,
+                ));
             },
             PlayerState::Bonk { bonk_input, .. } => {
                 cmds.insert((
-                    MobileFixed { input: *bonk_input }, // TODO: impulse
+                    MobileFixed {
+                        input: *bonk_input,
+                        face: false,
+                    }, // TODO: impulse
                     Hitstun,
                     Knockback,
                 ));
             },
             PlayerState::Attack => {
-                cmds.insert((MobileFixed { input: Vec2::ZERO },));
+                cmds.insert((MobileFixed {
+                    input: Vec2::ZERO,
+                    face: false,
+                },));
             },
         }
     }
