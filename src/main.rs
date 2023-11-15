@@ -323,41 +323,7 @@ fn player_state_changes(
             };
 
             // FIFTH: Add and remove behavioral components
-            // possible TODO: custom replace_behaviors(bundle) entity command
-            // wait, even sooner TODO: give states a .behaviors() method!!
-            match machine.current() {
-                PlayerState::Idle => {
-                    commands
-                        .entity(entity)
-                        .remove::<AllBehaviors>()
-                        .insert(MobileFree);
-                },
-                PlayerState::Run => {
-                    commands
-                        .entity(entity)
-                        .remove::<AllBehaviors>()
-                        .insert(MobileFree);
-                },
-                PlayerState::Roll { roll_input } => {
-                    commands
-                        .entity(entity)
-                        .remove::<AllBehaviors>()
-                        .insert((MobileFixed { input: *roll_input }, Headlong));
-                },
-                PlayerState::Bonk { bonk_input, .. } => {
-                    commands.entity(entity).remove::<AllBehaviors>().insert((
-                        MobileFixed { input: *bonk_input }, // TODO: impulse
-                        Hitstun,
-                        Knockback,
-                    ));
-                },
-                PlayerState::Attack => {
-                    commands
-                        .entity(entity)
-                        .remove::<AllBehaviors>()
-                        .insert((MobileFixed { input: Vec2::ZERO },));
-                },
-            }
+            machine.current().set_behaviors(commands.entity(entity));
         });
 
         // SIXTH: If the current state has a timer, tick it forward.
@@ -898,13 +864,34 @@ impl PlayerState {
         }
     }
 
-    // OH HEY, this one's actually tricky because I can't
-    // return tuples of varying length from the same function,
-    // AND I'll need to treat the components as trait objects if
-    // I'm returning a vec.
-    // fn behaviors(&self) -> Vec< {
-
-    // }
+    /// Given an EntityCommands instance, add and remove the appropriate
+    /// behavioral components on that entity. TBH I'd rather "just" return
+    /// a set of behaviors, but actually that's fiendishly complicated
+    /// because those types are all different, so we do it the easy way.
+    fn set_behaviors(&self, mut cmds: bevy::ecs::system::EntityCommands) {
+        cmds.remove::<AllBehaviors>();
+        match self {
+            PlayerState::Idle => {
+                cmds.insert(MobileFree);
+            },
+            PlayerState::Run => {
+                cmds.insert(MobileFree);
+            },
+            PlayerState::Roll { roll_input } => {
+                cmds.insert((MobileFixed { input: *roll_input }, Headlong));
+            },
+            PlayerState::Bonk { bonk_input, .. } => {
+                cmds.insert((
+                    MobileFixed { input: *bonk_input }, // TODO: impulse
+                    Hitstun,
+                    Knockback,
+                ));
+            },
+            PlayerState::Attack => {
+                cmds.insert((MobileFixed { input: Vec2::ZERO },));
+            },
+        }
+    }
 
     // TODO: I'm scaling this one for now anyway, but, it'd be good to learn the length of a state
     // based on its sprite asset, so it can be *dictated* by the source file but not *managed*
