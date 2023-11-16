@@ -131,8 +131,9 @@ fn main() {
                 move_continuous_no_collision.run_if(motion_is(MotionKind::NoCollision)),
                 move_continuous_faceplant.run_if(motion_is(MotionKind::Faceplant)),
                 move_continuous_ray_test.run_if(motion_is(MotionKind::RayTest)),
-            ).in_set(Movers)
+            ).in_set(Movers).before(move_z_axis)
         )
+        .add_systems(Update, move_z_axis.in_set(Movers))
         .add_systems(
             Update,
             (

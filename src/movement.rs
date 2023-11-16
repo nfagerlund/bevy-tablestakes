@@ -21,6 +21,9 @@ pub struct Motion {
     pub facing: f32,
     /// The linear velocity for this frame, as determined by the entity's state and inputs.
     pub velocity: Vec2,
+    /// Linear velocity on the Z axis... very few things use this, so I'm keeping it out of
+    /// the main velocity field.
+    pub z_velocity: f32,
     /// ONLY used by the janky move_whole_pixel system, should probably go.
     pub remainder: Vec2,
     /// What happened in the move.
@@ -31,6 +34,7 @@ impl Motion {
         let mut thing = Self {
             facing: 0.0, // facing east on the unit circle
             velocity: Vec2::ZERO,
+            z_velocity: 0.0,
             remainder: Vec2::ZERO,
             result: None,
         };
@@ -49,6 +53,17 @@ impl Motion {
 pub struct MotionResult {
     pub collided: bool,
     pub new_location: Vec2,
+}
+
+/// Handle height motion... once I remove the other move systems, it should just get rolled into the remaining one.
+pub(crate) fn move_z_axis(mut mover_q: Query<(&mut PhysTransform, &mut Motion)>, time: Res<Time>) {
+    mover_q.for_each_mut(|(mut transform, mut motion)| {
+        // No collisions or anything, just move em.
+        // Also, cap Z at the floor?? or nah? It should have a stable resting place there. yeah, cap for now.
+        transform.translation.z += motion.z_velocity * time.delta_seconds();
+        transform.translation.z = transform.translation.z.max(0.0);
+        motion.z_velocity = 0.0;
+    });
 }
 
 pub(crate) fn move_continuous_no_collision(
