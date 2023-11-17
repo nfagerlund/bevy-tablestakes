@@ -147,9 +147,10 @@ fn main() {
         .add_systems(
             Update,
             (
-                player_bonk_height,
+                // player_bonk_height,
                 mobile_free_velocity,
-                mobile_fixed_velocity
+                mobile_fixed_velocity,
+                launch_and_fall,
             ).in_set(MovePlanners),
         )
         .add_systems(Update, player_queue_wall_bonk.after(Movers))
@@ -277,11 +278,17 @@ fn player_state_read_inputs(
 
 fn player_state_read_events(
     mut rebound_events: EventReader<Rebound>,
+    mut landing_events: EventReader<Landed>,
     mut player_q: Query<&mut PlayerStateMachine>,
 ) {
     for rb in rebound_events.iter() {
         if let Ok(mut machine) = player_q.get_mut(rb.entity) {
             machine.push_transition(PlayerState::bonk_from_vector(rb.vector));
+        }
+    }
+    for ld in landing_events.iter() {
+        if let Ok(mut machine) = player_q.get_mut(ld.0) {
+            machine.push_transition(PlayerState::Idle);
         }
     }
 }
@@ -895,6 +902,7 @@ impl PlayerState {
     const ROLL_DISTANCE: f32 = 52.0;
     const BONK_FROM_ROLL_DISTANCE: f32 = 18.0;
     const BONK_HEIGHT: f32 = 8.0;
+    const BONK_Z_VELOCITY: f32 = 16.0;
     const ROLL_SPEED: f32 = Speed::ROLL;
     const BONK_SPEED: f32 = Speed::BONK;
     const ATTACK_DURATION_MS: u64 = 400;
@@ -907,10 +915,11 @@ impl PlayerState {
                 let duration_secs = Self::ROLL_DISTANCE / Self::ROLL_SPEED;
                 Some(Timer::from_seconds(duration_secs, TimerMode::Once))
             },
-            PlayerState::Bonk { distance, .. } => {
-                let duration_secs = distance / Self::BONK_SPEED;
-                Some(Timer::from_seconds(duration_secs, TimerMode::Once))
-            },
+            // PlayerState::Bonk { distance, .. } => {
+            //     let duration_secs = distance / Self::BONK_SPEED;
+            //     Some(Timer::from_seconds(duration_secs, TimerMode::Once))
+            // },
+            PlayerState::Bonk { .. } => None,
             PlayerState::Attack => Some(Timer::new(
                 Duration::from_millis(Self::ATTACK_DURATION_MS),
                 TimerMode::Once,
@@ -962,9 +971,12 @@ impl PlayerState {
                     MobileFixed {
                         input: *bonk_input,
                         face: false,
-                    }, // TODO: impulse
+                    },
                     Hitstun,
                     Knockback,
+                    Launch {
+                        z_velocity: Self::BONK_Z_VELOCITY,
+                    },
                 ));
             },
             PlayerState::Attack => {
