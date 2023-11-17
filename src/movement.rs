@@ -56,7 +56,7 @@ pub struct MotionResult {
 }
 
 #[derive(Event)]
-pub struct Landed(Entity);
+pub struct Landed(pub Entity);
 
 /// Handle height motion... once I remove the other move systems, it should just get rolled into the remaining one.
 pub(crate) fn move_z_axis(
