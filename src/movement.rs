@@ -55,14 +55,28 @@ pub struct MotionResult {
     pub new_location: Vec2,
 }
 
+#[derive(Event)]
+pub struct Landed(Entity);
+
 /// Handle height motion... once I remove the other move systems, it should just get rolled into the remaining one.
-pub(crate) fn move_z_axis(mut mover_q: Query<(&mut PhysTransform, &mut Motion)>, time: Res<Time>) {
-    mover_q.for_each_mut(|(mut transform, mut motion)| {
+pub(crate) fn move_z_axis(
+    mut mover_q: Query<(Entity, &mut PhysTransform, &mut Motion)>,
+    time: Res<Time>,
+    mut landings: EventWriter<Landed>,
+) {
+    mover_q.for_each_mut(|(entity, mut transform, mut motion)| {
         // No collisions or anything, just move em.
-        // Also, cap Z at the floor?? or nah? It should have a stable resting place there. yeah, cap for now.
-        transform.translation.z += motion.z_velocity * time.delta_seconds();
-        transform.translation.z = transform.translation.z.max(0.0);
-        motion.z_velocity = 0.0;
+        if motion.z_velocity != 0.0 {
+            let mut new_z = transform.translation.z + motion.z_velocity * time.delta_seconds();
+            motion.z_velocity = 0.0;
+            if new_z <= 0.0 && transform.translation.z > 0.0 {
+                // 1. Don't sink below the floor
+                new_z = 0.0;
+                // 2. Announce we're coming in hot
+                landings.send(Landed(entity));
+            }
+            transform.translation.z = new_z;
+        }
     });
 }
 

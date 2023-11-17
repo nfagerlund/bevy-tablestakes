@@ -120,6 +120,7 @@ fn main() {
         .add_systems(Update, enemy_state_changes.in_set(SpriteChangers))
         // PLAYER STUFF
         .add_event::<Rebound>()
+        .add_event::<Landed>()
         .add_systems(Startup, setup_player.after(load_sprite_assets))
         .configure_set(Update, Movers.after(CharAnimationSystems).after(MovePlanners))
         .configure_set(Update, MovePlanners.after(SpriteChangers))
@@ -394,6 +395,14 @@ fn mobile_fixed_velocity(mut fixed_q: Query<(&mut Motion, &Speed, &MobileFixed)>
     });
 }
 
+const LAUNCH_GRAVITY: f32 = 5.0; // Reduce z-velocity by X per second. idk!
+fn launch_and_fall(mut launched_q: Query<(&mut Motion, &mut Launch)>, time: Res<Time>) {
+    launched_q.for_each_mut(|(mut motion, mut launch)| {
+        motion.z_velocity += launch.z_velocity;
+        launch.z_velocity -= LAUNCH_GRAVITY * time.delta_seconds();
+    });
+}
+
 /// If player bonked into a wall, queue a state transition.
 /// TODO: Generalize knockback. why should this be player-specific? Or bonk-specific?
 fn player_queue_wall_bonk(
@@ -629,6 +638,7 @@ type AllBehaviors = (
     MobileFree,
     MobileFixed,
     MobileImpulse,
+    Launch,
     Headlong,
     Hitstun,
     Knockback,
@@ -654,7 +664,13 @@ struct MobileFixed {
 struct MobileImpulse {
     acceleration: Vec3, // including z here
 }
-// Gonna need consts GRAVITY and FRICTION here  later
+
+/// Behavior: launched into the air but subject to gravity, not flying
+#[derive(Component)]
+#[component(storage = "SparseSet")]
+struct Launch {
+    z_velocity: f32,
+}
 
 /// Behavior: moving too fast, and will rebound on wall hit.
 #[derive(Component)]
