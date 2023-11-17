@@ -288,7 +288,9 @@ fn player_state_read_events(
     }
     for ld in landing_events.iter() {
         if let Ok(mut machine) = player_q.get_mut(ld.0) {
-            machine.push_transition(PlayerState::Idle);
+            if let PlayerState::Bonk { .. } = machine.current() {
+                machine.push_transition(PlayerState::Idle);
+            }
         }
     }
 }
