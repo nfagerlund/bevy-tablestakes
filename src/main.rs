@@ -149,7 +149,6 @@ fn main() {
         .add_systems(
             Update,
             (
-                // player_bonk_height,
                 mobile_free_velocity,
                 mobile_fixed_velocity,
                 launch_and_fall,
@@ -383,29 +382,7 @@ fn player_state_changes(
     }
 }
 
-/// Do an an unfortunate mutation of PhysTransform.z for bonk state
-fn player_bonk_height(mut player_q: Query<(&PlayerStateMachine, &StateTimer, &mut PhysTransform)>) {
-    for (machine, state_timer, mut transform) in player_q.iter_mut() {
-        // do fucky z-height hack for bonk
-        if let PlayerState::Bonk { .. } = machine.current() {
-            if let Some(ref timer) = state_timer.0 {
-                let progress = timer.percent();
-                // ^^ ok to go backwards bc sin is symmetric. btw this should probably
-                // be parabolic but shrug for now. Also BTW, progress will be exactly
-                // 1.0 (and thus height_frac 0.0) if the timer finished, so we shouldn't
-                // need a backstop against height drift here. *NARRATOR VOICE:* it was
-                // actually -0.0, and that never came back to bite them.
-                let height_frac = (progress * std::f32::consts::PI).sin();
-                // and...  we're just manipulating Z directly instead of going through
-                // the motion planning system. Sorry!! Maybe later.
-                transform.translation.z = height_frac * PlayerState::BONK_HEIGHT;
-            } else {
-                warn!("yo, no timer for bonk state??")
-            }
-        }
-    }
-}
-
+/// Plan motion for player when moving freely per inputs.
 fn mobile_free_velocity(
     mut free_q: Query<(&mut Motion, &Speed), With<MobileFree>>,
     inputs: Res<CurrentInputs>,
@@ -415,6 +392,7 @@ fn mobile_free_velocity(
     });
 }
 
+/// Plan motion for entities moving on a fixed vector.
 fn mobile_fixed_velocity(mut fixed_q: Query<(&mut Motion, &Speed, &MobileFixed)>) {
     fixed_q.for_each_mut(|(mut motion, speed, fixed)| {
         motion.velocity += fixed.input * speed.0;
@@ -425,6 +403,8 @@ fn mobile_fixed_velocity(mut fixed_q: Query<(&mut Motion, &Speed, &MobileFixed)>
 }
 
 const LAUNCH_GRAVITY: f32 = 255.0; // Reduce z-velocity by X per second. idk!
+
+/// Plan vertical motion for entities that are launched (distinct from flying)
 fn launch_and_fall(
     mut launched_q: Query<(&mut Motion, &mut Launch)>,
     time: Res<Time>,
@@ -528,7 +508,6 @@ fn enemy_state_changes(
         Entity,
         &mut EnemyStateMachine,
         &mut StateTimer,
-        &Speed,
         &mut CharAnimationState,
         &PatrolArea,
         &PhysTransform,
@@ -539,9 +518,7 @@ fn enemy_state_changes(
     mut commands: Commands,
 ) {
     // Going in serial, because I'm using a global RNG still (instead of forking it to each enemy)
-    for (entity, mut machine, mut state_timer, speed, mut anim, patrol, transform) in
-        query.iter_mut()
-    {
+    for (entity, mut machine, mut state_timer, mut anim, patrol, transform) in query.iter_mut() {
         // ZEROTH: if a state spent its timer, queue a transition.
         if let Some(ref timer) = state_timer.0 {
             if machine.next.is_none() && timer.finished() {
@@ -550,11 +527,7 @@ fn enemy_state_changes(
                         // Decide where we're patrolling to next
                         let dest = patrol.random_destination(&mut *rng);
                         let displacement = dest - transform.translation.truncate();
-                        let input = displacement.normalize_or_zero();
-                        machine.push_transition(EnemyState::Patrol {
-                            displacement,
-                            patrol_input: input,
-                        });
+                        machine.push_transition(EnemyState::Patrol { displacement });
                     },
                     EnemyState::Patrol { .. } => {
                         machine.push_transition(EnemyState::Idle);
@@ -671,7 +644,6 @@ fn setup_player(mut commands: Commands, animations: Res<AnimationsMap>) {
 type AllBehaviors = (
     MobileFree,
     MobileFixed,
-    MobileImpulse,
     Launch,
     Headlong,
     Hitstun,
@@ -690,13 +662,6 @@ struct MobileFree;
 struct MobileFixed {
     input: Vec2,
     face: bool,
-}
-
-/// Behavior: moving according to an acceleration impulse? This is velocity per second.
-#[derive(Component)]
-#[component(storage = "SparseSet")]
-struct MobileImpulse {
-    acceleration: Vec3, // including z here
 }
 
 /// Behavior: launched into the air but subject to gravity, not flying
@@ -737,10 +702,7 @@ type EnemyStateMachine = EntityStateMachine<EnemyState>;
 #[derive(Clone)]
 enum EnemyState {
     Idle,
-    Patrol {
-        displacement: Vec2,
-        patrol_input: Vec2,
-    },
+    Patrol { displacement: Vec2 },
     Chase,
     Attack,
     Hurt,
@@ -928,10 +890,8 @@ pub enum PlayerState {
 impl PlayerState {
     const ROLL_DISTANCE: f32 = 52.0;
     const BONK_FROM_ROLL_DISTANCE: f32 = 18.0;
-    const BONK_HEIGHT: f32 = 8.0;
     const BONK_Z_VELOCITY: f32 = 65.0;
     const ROLL_SPEED: f32 = Speed::ROLL;
-    const BONK_SPEED: f32 = Speed::BONK;
     const ATTACK_DURATION_MS: u64 = 400;
 
     fn timer(&self) -> Option<Timer> {
@@ -942,10 +902,6 @@ impl PlayerState {
                 let duration_secs = Self::ROLL_DISTANCE / Self::ROLL_SPEED;
                 Some(Timer::from_seconds(duration_secs, TimerMode::Once))
             },
-            // PlayerState::Bonk { distance, .. } => {
-            //     let duration_secs = distance / Self::BONK_SPEED;
-            //     Some(Timer::from_seconds(duration_secs, TimerMode::Once))
-            // },
             PlayerState::Bonk { .. } => None,
             PlayerState::Attack => Some(Timer::new(
                 Duration::from_millis(Self::ATTACK_DURATION_MS),
@@ -1033,17 +989,6 @@ impl PlayerState {
             bonk_input: v.normalize_or_zero(),
             distance: v.length(),
         }
-    }
-
-    fn bonk(direction: f32, distance: f32) -> Self {
-        Self::Bonk {
-            bonk_input: Vec2::from_angle(direction),
-            distance,
-        }
-    }
-
-    fn bonk_from_roll(direction: f32) -> Self {
-        Self::bonk(direction, Self::BONK_FROM_ROLL_DISTANCE)
     }
 }
 
