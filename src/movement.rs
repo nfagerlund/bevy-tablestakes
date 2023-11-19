@@ -13,6 +13,18 @@ use bevy::prelude::*;
 type SolidsTree = RstarAccess<Solid>;
 const SOLID_SCANNING_DISTANCE: f32 = 64.0;
 
+/// Speed in pixels per second. This is used for _planning_ movement; once
+/// the entity knows what it's trying to do this frame, it gets reduced to an
+/// absolute velocity vector, in the Motion struct.
+#[derive(Component, Reflect)]
+pub struct Speed(pub f32);
+impl Speed {
+    pub const RUN: f32 = 60.0;
+    pub const ROLL: f32 = 180.0;
+    pub const BONK: f32 = 60.0;
+    pub const ENEMY_RUN: f32 = Speed::RUN;
+}
+
 /// Information about what the entity is doing, spatially speaking.
 #[derive(Component, Reflect)]
 pub struct Motion {

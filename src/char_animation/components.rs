@@ -127,6 +127,7 @@ pub enum Playback {
 /// Allow programmatically overriding the frame times from the animation source
 /// data, for things like stretching out a motion to fit it to a particular
 /// total duration.
+#[allow(dead_code)]
 #[derive(Debug, Clone, Copy)]
 pub enum FrameTimeOverride {
     None,
