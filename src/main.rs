@@ -424,7 +424,7 @@ fn mobile_fixed_velocity(mut fixed_q: Query<(&mut Motion, &Speed, &MobileFixed)>
     });
 }
 
-const LAUNCH_GRAVITY: f32 = 5.0; // Reduce z-velocity by X per second. idk!
+const LAUNCH_GRAVITY: f32 = 255.0; // Reduce z-velocity by X per second. idk!
 fn launch_and_fall(
     mut launched_q: Query<(&mut Motion, &mut Launch)>,
     time: Res<Time>,
@@ -929,7 +929,7 @@ impl PlayerState {
     const ROLL_DISTANCE: f32 = 52.0;
     const BONK_FROM_ROLL_DISTANCE: f32 = 18.0;
     const BONK_HEIGHT: f32 = 8.0;
-    const BONK_Z_VELOCITY: f32 = 16.0;
+    const BONK_Z_VELOCITY: f32 = 65.0;
     const ROLL_SPEED: f32 = Speed::ROLL;
     const BONK_SPEED: f32 = Speed::BONK;
     const ATTACK_DURATION_MS: u64 = 400;
