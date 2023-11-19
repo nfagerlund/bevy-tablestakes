@@ -80,6 +80,7 @@ fn main() {
         .add_systems(Startup, setup_debug_assets.before(setup_player))
         .add_systems(Update, spawn_collider_debugs)
         .insert_resource(DebugSettings::default())
+        .insert_resource(NumbersSettings::default())
         // INSPECTOR STUFF
         .add_plugins(WorldInspectorPlugin::new())
         .register_type::<PhysTransform>()
@@ -90,6 +91,7 @@ fn main() {
         .register_type::<TopDownMatter>()
         .register_type::<Motion>()
         .add_plugins(ResourceInspectorPlugin::<DebugSettings>::new())
+        .add_plugins(ResourceInspectorPlugin::<NumbersSettings>::new())
         .add_systems(Update, (
             debug_walkboxes_system,
             debug_hitboxes_system,
@@ -194,6 +196,21 @@ pub struct DebugSettings {
     debug_hitboxes: bool,
     motion_kind: MotionKind,
     camera_kind: CameraKind,
+}
+
+#[derive(Resource, Reflect, PartialEq)]
+pub struct NumbersSettings {
+    pub launch_gravity: f32,
+    pub player_bonk_z_velocity: f32,
+}
+
+impl Default for NumbersSettings {
+    fn default() -> Self {
+        Self {
+            launch_gravity: LAUNCH_GRAVITY,
+            player_bonk_z_velocity: PlayerState::BONK_Z_VELOCITY,
+        }
+    }
 }
 
 #[derive(Resource, Reflect, Default, PartialEq, Eq)]
@@ -308,6 +325,7 @@ fn player_state_changes(
     )>,
     animations_map: Res<AnimationsMap>,
     time: Res<Time>,
+    numbers: Res<NumbersSettings>,
     mut commands: Commands,
 ) {
     for (entity, mut machine, mut state_timer, mut speed, mut animation_state) in
@@ -353,7 +371,9 @@ fn player_state_changes(
             };
 
             // FIFTH: Add and remove behavioral components
-            machine.current().set_behaviors(commands.entity(entity));
+            machine
+                .current()
+                .set_behaviors(commands.entity(entity), &numbers);
         });
 
         // SIXTH: If the current state has a timer, tick it forward.
@@ -405,10 +425,15 @@ fn mobile_fixed_velocity(mut fixed_q: Query<(&mut Motion, &Speed, &MobileFixed)>
 }
 
 const LAUNCH_GRAVITY: f32 = 5.0; // Reduce z-velocity by X per second. idk!
-fn launch_and_fall(mut launched_q: Query<(&mut Motion, &mut Launch)>, time: Res<Time>) {
+fn launch_and_fall(
+    mut launched_q: Query<(&mut Motion, &mut Launch)>,
+    time: Res<Time>,
+    numbers: Res<NumbersSettings>,
+) {
+    let gravity = numbers.launch_gravity;
     launched_q.for_each_mut(|(mut motion, mut launch)| {
         motion.z_velocity += launch.z_velocity;
-        launch.z_velocity -= LAUNCH_GRAVITY * time.delta_seconds();
+        launch.z_velocity -= gravity * time.delta_seconds();
     });
 }
 
@@ -950,7 +975,7 @@ impl PlayerState {
     /// behavioral components on that entity. TBH I'd rather "just" return
     /// a set of behaviors, but actually that's fiendishly complicated
     /// because those types are all different, so we do it the easy way.
-    fn set_behaviors(&self, mut cmds: EntityCommands) {
+    fn set_behaviors(&self, mut cmds: EntityCommands, numbers: &NumbersSettings) {
         cmds.remove::<AllBehaviors>();
         match self {
             PlayerState::Idle => {
@@ -977,7 +1002,7 @@ impl PlayerState {
                     Hitstun,
                     Knockback,
                     Launch {
-                        z_velocity: Self::BONK_Z_VELOCITY,
+                        z_velocity: numbers.player_bonk_z_velocity,
                     },
                 ));
             },
