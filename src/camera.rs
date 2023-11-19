@@ -10,7 +10,7 @@ use bevy::prelude::*;
 
 pub fn setup_camera(mut commands: Commands) {
     let mut camera_bundle = Camera2dBundle::default();
-    camera_bundle.projection.scale = 1.0 / 5.0;
+    camera_bundle.projection.scale = 1.0 / 4.0;
     commands.spawn((
         camera_bundle,
         PhysOffset(Vec2::ZERO),
