@@ -3,7 +3,7 @@
 use crate::{
     assets_setup::*, behaviors::*, camera::*, char_animation::*, collision::*, compass::*,
     debug_settings::*, entity_states::*, input::*, movement::*, phys_space::*, render::*,
-    space_lookup::RstarPlugin,
+    sounds::*, space_lookup::RstarPlugin,
 };
 use bevy::{
     input::InputSystem,
@@ -33,6 +33,7 @@ mod junkbox;
 mod movement;
 mod phys_space;
 mod render;
+mod sounds;
 mod space_lookup;
 mod toolbox;
 
@@ -108,6 +109,9 @@ fn main() {
         // SPRITE ASSET STUFF
         .insert_resource(AnimationsMap::default())
         .add_systems(Startup, load_sprite_assets)
+        // SOUND STUFF
+        .add_systems(Startup, load_sound_effects)
+        .add_systems(Update, sounds_thumps)
         // BODY STUFF
         .add_systems(Update, shadow_stitcher_system)
         // ENEMY STUFF

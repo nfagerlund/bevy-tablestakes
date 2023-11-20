@@ -60,3 +60,15 @@ pub fn load_sprite_assets(asset_server: Res<AssetServer>, mut animations: ResMut
         asset_server.load("sprites/sSlimeDie.aseprite"),
     );
 }
+
+#[derive(Resource)]
+pub struct SoundEffects {
+    pub thump: Handle<AudioSource>,
+}
+
+pub fn load_sound_effects(mut commands: Commands, asset_server: Res<AssetServer>) {
+    let thump: Handle<AudioSource> = asset_server.load("sfx/thump.mp3");
+
+    let sfx = SoundEffects { thump };
+    commands.insert_resource(sfx);
+}
