@@ -181,7 +181,7 @@ impl PlayerState {
 pub enum EnemyState {
     Idle,
     Patrol { displacement: Vec2 },
-    Chase,
+    Chase { target: Entity },
     Attack,
     Hurt,
     Dying,
@@ -191,8 +191,8 @@ impl EnemyState {
     pub fn animation_data(&self) -> (Ases, Playback) {
         match self {
             EnemyState::Idle { .. } => (Ases::SlimeIdle, Playback::Loop),
-            EnemyState::Patrol { .. } => (Ases::SlimeAttack, Playback::Loop),
-            EnemyState::Chase => (Ases::SlimeIdle, Playback::Loop),
+            EnemyState::Patrol { .. } => (Ases::SlimeIdle, Playback::Loop),
+            EnemyState::Chase { .. } => (Ases::SlimeIdle, Playback::Loop),
             EnemyState::Attack => (Ases::SlimeAttack, Playback::Loop),
             EnemyState::Hurt => (Ases::SlimeHurt, Playback::Once),
             EnemyState::Dying => (Ases::SlimeDie, Playback::Once),
@@ -206,24 +206,38 @@ impl EnemyState {
                 let duration_secs = displacement.length() / Speed::ENEMY_RUN;
                 Some(Timer::from_seconds(duration_secs, TimerMode::Once))
             },
-            EnemyState::Chase => todo!(),
+            // TBH I don't think this is correct, but it'll get things moving until I sort out
+            // how to wire a limit though to set_behaviors():
+            EnemyState::Chase { .. } => Some(Timer::from_seconds(10.0, TimerMode::Once)),
             EnemyState::Attack => todo!(),
             EnemyState::Hurt => todo!(),
             EnemyState::Dying => todo!(),
         }
     }
 
+    const SLIME_AGGRO_RANGE: f32 = 50.0;
+
     pub fn set_behaviors(&self, mut cmds: EntityCommands) {
         cmds.remove::<AllBehaviors>();
         match self {
-            EnemyState::Idle => (), // ...I think you can just sit there and do nothing 🤔
-            EnemyState::Patrol { displacement, .. } => {
-                cmds.insert((MobileFixed {
-                    input: displacement.normalize_or_zero(),
-                    face: true,
-                },));
+            EnemyState::Idle => {
+                cmds.insert(AggroRange(Self::SLIME_AGGRO_RANGE));
             },
-            EnemyState::Chase => todo!(),
+            EnemyState::Patrol { displacement, .. } => {
+                cmds.insert((
+                    MobileFixed {
+                        input: displacement.normalize_or_zero(),
+                        face: true,
+                    },
+                    AggroRange(Self::SLIME_AGGRO_RANGE),
+                ));
+            },
+            EnemyState::Chase { target } => {
+                cmds.insert(Aggro {
+                    target: *target,
+                    limit: None,
+                });
+            },
             EnemyState::Attack => todo!(),
             EnemyState::Hurt => todo!(),
             EnemyState::Dying => todo!(),
@@ -396,6 +410,19 @@ pub fn player_state_changes(
     }
 }
 
+pub fn enemy_state_read_events(
+    mut aggroing: EventReader<AggroActivate>,
+    mut query: Query<&mut EnemyStateMachine>,
+) {
+    for aggro in aggroing.iter() {
+        if let Ok(mut machine) = query.get_mut(aggro.subject) {
+            machine.push_transition(EnemyState::Chase {
+                target: aggro.target,
+            });
+        }
+    }
+}
+
 pub fn enemy_state_changes(
     mut query: Query<(
         Entity,
@@ -425,7 +452,9 @@ pub fn enemy_state_changes(
                     EnemyState::Patrol { .. } => {
                         machine.push_transition(EnemyState::Idle);
                     },
-                    EnemyState::Chase => todo!(),
+                    EnemyState::Chase { .. } => {
+                        machine.push_transition(EnemyState::Idle);
+                    },
                     EnemyState::Attack => todo!(),
                     EnemyState::Hurt => todo!(),
                     EnemyState::Dying => todo!(),

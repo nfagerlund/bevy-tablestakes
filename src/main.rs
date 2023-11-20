@@ -114,11 +114,18 @@ fn main() {
         .add_systems(Update, sounds_thumps)
         // BODY STUFF
         .add_systems(Update, shadow_stitcher_system)
+        // BEHAVIOR STUFF
+        .add_plugins(BehaviorEventsPlugin)
         // ENEMY STUFF
         .add_systems(Startup, temp_setup_enemy.after(load_sprite_assets))
-        .add_systems(Update, enemy_state_changes.in_set(SpriteChangers))
+        .add_systems(
+            Update,
+            (
+                enemy_state_read_events,
+                enemy_state_changes
+            ).chain().in_set(SpriteChangers))
+        .add_systems(Update, acquire_aggro.after(Movers))
         // PLAYER STUFF
-        .add_event::<Rebound>()
         .add_event::<Landed>()
         .add_systems(Startup, setup_player.after(load_sprite_assets))
         .configure_set(Update, Movers.after(CharAnimationSystems).after(MovePlanners))
@@ -149,6 +156,7 @@ fn main() {
                 mobile_free_velocity,
                 mobile_fixed_velocity,
                 launch_and_fall,
+                mobile_chase_entity,
             ).in_set(MovePlanners),
         )
         .add_systems(Update, player_queue_wall_bonk.after(Movers))

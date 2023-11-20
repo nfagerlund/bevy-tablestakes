@@ -22,7 +22,7 @@ impl Speed {
     pub const RUN: f32 = 60.0;
     pub const ROLL: f32 = 180.0;
     pub const BONK: f32 = 60.0;
-    pub const ENEMY_RUN: f32 = Speed::RUN;
+    pub const ENEMY_RUN: f32 = 40.0;
 }
 
 /// Information about what the entity is doing, spatially speaking.
