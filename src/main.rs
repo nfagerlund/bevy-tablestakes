@@ -210,34 +210,29 @@ fn temp_setup_enemy(mut commands: Commands, animations: Res<AnimationsMap>) {
     let initial_animation = animations.get(&Ases::SlimeIdle).unwrap().clone();
     let whence = Vec3::new(220., 200., 0.); // empirically 🤷🏽
 
-    commands.spawn((
-        EnemyBundle {
-            identity: Enemy,
-            name: Name::new("Sloom"),
-            state_machine: EnemyStateMachine::new(EnemyState::default()),
-            state_timer: StateTimer::default(),
-            sprite_sheet: SpriteSheetBundle::default(), // Oh huh wow, I took over all that stuff.
-            char_animation_state: CharAnimationState::new(
-                initial_animation,
-                Dir::E,
-                Playback::Loop,
-            ),
-            phys_transform: PhysTransform {
-                translation: whence,
-            },
-            phys_offset: PhysOffset(Vec2::ZERO),
-            walkbox: Walkbox(Rect::default()),
-            hitbox: Hitbox(None),
-            shadow: HasShadow,
-            top_down_matter: TopDownMatter::character(),
-            speed: Speed(Speed::ENEMY_RUN), // ???
-            motion: Motion::new(Vec2::ZERO),
+    commands.spawn((EnemyBundle {
+        identity: Enemy,
+        name: Name::new("Sloom"),
+        state_machine: EnemyStateMachine::new(EnemyState::default()),
+        state_timer: StateTimer::default(),
+        sprite_sheet: SpriteSheetBundle::default(), // Oh huh wow, I took over all that stuff.
+        char_animation_state: CharAnimationState::new(initial_animation, Dir::E, Playback::Loop),
+        phys_transform: PhysTransform {
+            translation: whence,
         },
-        PatrolArea::Patch {
+        phys_offset: PhysOffset(Vec2::ZERO),
+        walkbox: Walkbox(Rect::default()),
+        hitbox: Hitbox(None),
+        shadow: HasShadow,
+        top_down_matter: TopDownMatter::character(),
+        speed: Speed(Speed::ENEMY_RUN), // ???
+        motion: Motion::new(Vec2::ZERO),
+
+        patrol: PatrolArea::Patch {
             home: whence.truncate(),
             radius: 140.0,
         },
-    ));
+    },));
 }
 
 fn setup_player(mut commands: Commands, animations: Res<AnimationsMap>) {
@@ -301,6 +296,8 @@ struct EnemyBundle {
 
     speed: Speed,
     motion: Motion,
+
+    patrol: PatrolArea,
 }
 
 #[derive(Bundle)]
