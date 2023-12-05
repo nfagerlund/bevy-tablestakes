@@ -6,6 +6,7 @@ use crate::{
     sounds::*, space_lookup::RstarPlugin,
 };
 use bevy::{
+    // ecs::schedule::{LogLevel, ScheduleBuildSettings},
     input::InputSystem,
     log::LogPlugin,
     math::Rect,
@@ -65,6 +66,14 @@ fn main() {
     let mut app = App::new();
     app
         .add_plugins(configured_default_plugins)
+        // Ambiguity detection: gotta do this for each schedule of interest
+        // But: I can't really do it until 0.12 gets the SceneSpawnerSystem out of my way!
+        // .edit_schedule(Update, |schedule| {
+        //     schedule.set_build_settings(ScheduleBuildSettings {
+        //         ambiguity_detection: LogLevel::Warn,
+        //         ..default()
+        //     });
+        // })
         .add_plugins(CharAnimationPlugin)
         .add_plugins(TestCharAnimationPlugin)
         .add_plugins(LdtkPlugin)
@@ -124,7 +133,7 @@ fn main() {
                 enemy_state_read_events,
                 enemy_state_changes
             ).chain().in_set(SpriteChangers))
-        .add_systems(Update, acquire_aggro.after(Movers))
+        .add_systems(Update, acquire_aggro.after(Movers).after(CameraMovers))
         // PLAYER STUFF
         .add_event::<Landed>()
         .add_systems(Startup, setup_player.after(load_sprite_assets))
@@ -138,7 +147,7 @@ fn main() {
                 move_continuous_no_collision.run_if(motion_is(MotionKind::NoCollision)),
                 move_continuous_faceplant.run_if(motion_is(MotionKind::Faceplant)),
                 move_continuous_ray_test.run_if(motion_is(MotionKind::RayTest)),
-            ).in_set(Movers).before(move_z_axis)
+            ).in_set(Movers).ambiguous_with(Movers).before(move_z_axis)
         )
         .add_systems(Update, move_z_axis.in_set(Movers))
         .add_systems(
@@ -165,7 +174,7 @@ fn main() {
             (
                 camera_locked_system.run_if(camera_is(CameraKind::Locked)),
                 camera_lerp_system.run_if(camera_is(CameraKind::Lerp)),
-            ).in_set(CameraMovers)
+            ).in_set(CameraMovers).ambiguous_with(CameraMovers)
         )
         // PHYSICS SPACE STUFF
         .add_systems(Update, add_new_phys_transforms.before(MovePlanners))
