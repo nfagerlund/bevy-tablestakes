@@ -75,6 +75,7 @@ impl TryFrom<&str> for Dir {
 impl Dir {
     /// Given a Vec2, return east, west, or neutral. Bias towards east when
     /// given exactly north or south.
+    #[allow(dead_code)]
     pub fn horizontal(motion: Vec2) -> Self {
         // Deal with any tricksy infinite or NaN vectors:
         let motion = motion.normalize_or_zero();
@@ -89,6 +90,7 @@ impl Dir {
 
     /// Given an angle, return east or west. Bias towards east when
     /// given exactly north or south.
+    #[allow(dead_code)]
     pub fn horizontal_from_angle(angle: f32) -> Self {
         if (-FRAC_PI_2..=FRAC_PI_2).contains(&angle) {
             Self::E
@@ -99,6 +101,7 @@ impl Dir {
 
     /// Given a Vec2, return north, south, or neutral. Bias towards south when
     /// given exactly east or west.
+    #[allow(dead_code)]
     pub fn vertical(motion: Vec2) -> Self {
         // Deal with any tricksy infinite or NaN vectors:
         let motion = motion.normalize_or_zero();
@@ -113,6 +116,7 @@ impl Dir {
 
     /// Given a Vec2, return one of the four cardinal directions or neutral.
     /// Bias towards horizontal when given an exact diagonal.
+    #[allow(dead_code)]
     pub fn cardinal(motion: Vec2) -> Self {
         // Deal with any tricksy infinite or NaN vectors:
         let motion = motion.normalize_or_zero();
@@ -152,6 +156,7 @@ impl Dir {
     /// Given a Vec2, return one of eight directions, or neutral. Bias when
     /// given an exact inter-intercardinal direction is ~whatever,~ bc you can't
     /// get your analog inputs exact enough to notice it.
+    #[allow(dead_code)]
     pub fn ordinal(motion: Vec2) -> Self {
         // Deal with any tricksy infinite or NaN vectors:
         let motion = motion.normalize_or_zero();

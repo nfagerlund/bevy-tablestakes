@@ -13,6 +13,18 @@ use bevy::prelude::*;
 type SolidsTree = RstarAccess<Solid>;
 const SOLID_SCANNING_DISTANCE: f32 = 64.0;
 
+/// Speed in pixels per second. This is used for _planning_ movement; once
+/// the entity knows what it's trying to do this frame, it gets reduced to an
+/// absolute velocity vector, in the Motion struct.
+#[derive(Component, Reflect)]
+pub struct Speed(pub f32);
+impl Speed {
+    pub const RUN: f32 = 60.0;
+    pub const ROLL: f32 = 180.0;
+    pub const BONK: f32 = 60.0;
+    pub const ENEMY_RUN: f32 = 40.0;
+}
+
 /// Information about what the entity is doing, spatially speaking.
 #[derive(Component, Reflect)]
 pub struct Motion {
@@ -21,6 +33,9 @@ pub struct Motion {
     pub facing: f32,
     /// The linear velocity for this frame, as determined by the entity's state and inputs.
     pub velocity: Vec2,
+    /// Linear velocity on the Z axis... very few things use this, so I'm keeping it out of
+    /// the main velocity field.
+    pub z_velocity: f32,
     /// ONLY used by the janky move_whole_pixel system, should probably go.
     pub remainder: Vec2,
     /// What happened in the move.
@@ -31,6 +46,7 @@ impl Motion {
         let mut thing = Self {
             facing: 0.0, // facing east on the unit circle
             velocity: Vec2::ZERO,
+            z_velocity: 0.0,
             remainder: Vec2::ZERO,
             result: None,
         };
@@ -49,6 +65,31 @@ impl Motion {
 pub struct MotionResult {
     pub collided: bool,
     pub new_location: Vec2,
+}
+
+#[derive(Event)]
+pub struct Landed(pub Entity);
+
+/// Handle height motion... once I remove the other move systems, it should just get rolled into the remaining one.
+pub(crate) fn move_z_axis(
+    mut mover_q: Query<(Entity, &mut PhysTransform, &mut Motion)>,
+    time: Res<Time>,
+    mut landings: EventWriter<Landed>,
+) {
+    mover_q.for_each_mut(|(entity, mut transform, mut motion)| {
+        // No collisions or anything, just move em.
+        if motion.z_velocity != 0.0 {
+            let mut new_z = transform.translation.z + motion.z_velocity * time.delta_seconds();
+            motion.z_velocity = 0.0;
+            if new_z <= 0.0 && transform.translation.z > 0.0 {
+                // 1. Don't sink below the floor
+                new_z = 0.0;
+                // 2. Announce we're coming in hot
+                landings.send(Landed(entity));
+            }
+            transform.translation.z = new_z;
+        }
+    });
 }
 
 pub(crate) fn move_continuous_no_collision(

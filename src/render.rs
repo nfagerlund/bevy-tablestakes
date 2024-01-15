@@ -117,8 +117,8 @@ pub fn shadow_stitcher_system(
 }
 
 /// Extract system to translate the in-game x/y/z-height coordinates to the
-/// draw-relevant x/y/z-depth coordiantes. Offsets Y by Z, and will eventually
-/// do Y-sorting for drawing things in front of each other.
+/// draw-relevant x/y/z-depth coordiantes. Offsets Y by Z, and does Y-sorting
+/// for drawing things in front of each other.
 pub fn extract_and_flatten_space_system(
     has_z_query: Extract<Query<&TopDownMatter>>,
     camera_query: Extract<Query<(&OrthographicProjection, &GlobalTransform), With<Camera2d>>>,

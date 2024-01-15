@@ -13,6 +13,7 @@ asefile = "0.3.5"
 image = "0.23.14" # match asefile's dep
 bevy = { version = "0.11.2", features = [
     "dynamic_linking",
+    "mp3",
     # Tracy breaks protocol versions in patch releases, so check Cargo.lock.
     # - table @ https://lib.rs/crates/tracing-tracy
     # Bevy 0.8.1: Tracy 0.8.1 (coincidince)
