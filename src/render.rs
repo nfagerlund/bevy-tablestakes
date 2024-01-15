@@ -1,35 +1,49 @@
 use crate::char_animation::*;
+use crate::collision::AbsBBox;
 use bevy::prelude::*;
 use bevy::render::Extract;
 use bevy::sprite::ExtractedSprites;
 
-const DEPTH_DUDES: f32 = 4.0;
-const DEPTH_SHADOWS: f32 = DEPTH_DUDES - 0.1;
+const DEPTH_DUDES_MIN: f32 = 4.0;
+const DEPTH_DUDES_MAX: f32 = 50.0;
+const DEPTH_DUDES_RANGE: f32 = DEPTH_DUDES_MAX - DEPTH_DUDES_MIN;
+const DEPTH_SHADOWS: f32 = DEPTH_DUDES_MIN - 0.1;
+const VIEW_SLOP: f32 = 64.0;
+
+fn lerp_dudes_z(t: f32) -> f32 {
+    DEPTH_DUDES_MIN + DEPTH_DUDES_RANGE * t
+}
 
 /// Some spatial details about an entity.
 #[derive(Component, Reflect)]
 pub struct TopDownMatter {
-    /// For now, depth tracks the absolute, global draw-depth coordinate for
-    /// anything it's placed on. I'm not doing any Y-sorting yet. An extract
+    /// How the global draw depth should be determined. Depth is calculated
+    /// differently for differet kinds of stuff. An extract
     /// system uses this value to overwrite the entity's Z coordinate in the
     /// render world.
-    pub depth: f32,
+    pub depth_class: TopDownDepthClass,
     /// If false, the entity can rise into the air. If true, it remains fixed on
     /// the ground (like a shadow), and manipulating its main world Z coordinate
     /// (including in the transform_propagate_system) does nothing.
     pub ignore_height: bool,
 }
 
+#[derive(Reflect)]
+pub enum TopDownDepthClass {
+    Character,
+    Shadow,
+}
+
 impl TopDownMatter {
     pub fn character() -> Self {
         Self {
-            depth: DEPTH_DUDES,
+            depth_class: TopDownDepthClass::Character,
             ignore_height: false,
         }
     }
     pub fn shadow() -> Self {
         Self {
-            depth: DEPTH_SHADOWS,
+            depth_class: TopDownDepthClass::Shadow,
             ignore_height: true,
         }
     }
@@ -89,14 +103,15 @@ pub fn shadow_stitcher_system(
         *shadow_handle = Some(asset_server.load("sprites/sShadow.aseprite"));
     }
     // but, will still need to perform normal business that first run! At this
-    // point, .unwrap() is fine because we made sure there's something there,
-    // and if that goes wonky I want early warning anyway.
+    // point, we know there's something in there.
+    let Some(sh) = shadow_handle.as_ref() else {
+        warn!("shadow handle missing, this should be impossible??");
+        return;
+    };
     for shadow_owner in new_shadow_q.iter() {
         info!("stitching a shadow to {:?}", &shadow_owner);
         commands.entity(shadow_owner).with_children(|parent| {
-            parent.spawn(ShadowSpriteBundle::new(
-                shadow_handle.as_ref().unwrap().clone(),
-            ));
+            parent.spawn(ShadowSpriteBundle::new(sh.clone()));
         });
     }
 }
@@ -106,8 +121,29 @@ pub fn shadow_stitcher_system(
 /// do Y-sorting for drawing things in front of each other.
 pub fn extract_and_flatten_space_system(
     has_z_query: Extract<Query<&TopDownMatter>>,
+    camera_query: Extract<Query<(&OrthographicProjection, &GlobalTransform), With<Camera2d>>>,
     mut extracted_sprites: ResMut<ExtractedSprites>,
 ) {
+    // ok, my theory goes like this:
+    // - Figure out the range of visible global Y values
+    // - Decide ahead of time the range of usable Z values for characters
+    // - If a sprite is maybe visible, place it in the Z band proportional to its place
+    //   in the Y band.
+    // So, first, sort out the viewport.
+    // I'm gonna be dumb and assume there's one camera, for now. call me once there's not.
+    let (projection, cam_transform) = match camera_query.get_single() {
+        Ok(stuff) => stuff,
+        Err(e) => {
+            warn!("{}!?!? in extract_and_flatten_space", e);
+            return;
+        },
+    };
+    let viewport = AbsBBox::from_rect(projection.area, cam_transform.translation().truncate());
+    let min_y = viewport.min.y - VIEW_SLOP;
+    let max_y = viewport.max.y + VIEW_SLOP;
+    let y_size = max_y - min_y;
+    let y_frac = |y: f32| (max_y - y) / y_size;
+
     // Well it's deeply unfortunate, but because the extract sprites system
     // crams everything into a Vec stored as a resource, we've got to iterate
     // over that and correlate it with our query.
@@ -115,10 +151,18 @@ pub fn extract_and_flatten_space_system(
         if let Ok(matter) = has_z_query.get(ex_sprite.entity) {
             let mut translation = ex_sprite.transform.translation();
 
+            let depth = match matter.depth_class {
+                TopDownDepthClass::Character => {
+                    // OK, I think we can just yolo this without bounds-checking,
+                    // bc if you're outside the viewport it just.......... shouldn't matter
+                    lerp_dudes_z(y_frac(translation.y))
+                },
+                TopDownDepthClass::Shadow => DEPTH_SHADOWS,
+            };
             if !matter.ignore_height {
                 translation.y += translation.z;
             }
-            translation.z = matter.depth;
+            translation.z = depth;
             ex_sprite.transform = Transform::from_translation(translation).into();
         }
     }

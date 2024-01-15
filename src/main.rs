@@ -1,5 +1,6 @@
 #![allow(clippy::type_complexity)] // it's just impossible
 
+use crate::camera::*;
 use crate::char_animation::*;
 use crate::collision::*;
 use crate::compass::*;
@@ -18,12 +19,16 @@ use bevy::{
 };
 use bevy_ecs_ldtk::prelude::*;
 use bevy_inspector_egui::quick::{ResourceInspectorPlugin, WorldInspectorPlugin};
+use bevy_prng::Xoshiro256Plus;
+use bevy_rand::prelude::*;
+use rand::prelude::{IteratorRandom, Rng};
 use std::collections::HashMap;
 use std::io::Write;
 
 mod junkbox;
 mod toolbox;
 
+mod camera;
 mod char_animation;
 mod collision;
 mod compass;
@@ -35,7 +40,7 @@ mod player_states;
 mod render;
 mod space_lookup;
 
-const PIXEL_SCALE: f32 = 1.0;
+type GameRNG = GlobalEntropy<Xoshiro256Plus>;
 
 fn main() {
     let configured_default_plugins = DefaultPlugins
@@ -68,12 +73,8 @@ fn main() {
         .add_plugins(CharAnimationPlugin)
         .add_plugins(TestCharAnimationPlugin)
         .add_plugins(LdtkPlugin)
+        .add_plugins(EntropyPlugin::<Xoshiro256Plus>::default())
         // DEBUG STUFF
-        // .add_plugin(FrameTimeDiagnosticsPlugin)
-        // .add_startup_system(junkbox::junk::setup_fps_debug)
-        // .add_system(junkbox::junk::update_fps_debug_system)
-        // .add_system(junkbox::junk::debug_z_system)
-        // .add_system(junkbox::junk::tile_info_barfing_system)
         .insert_resource(DebugAssets::default())
         .add_systems(Startup, setup_debug_assets.before(setup_player))
         .add_systems(Update, spawn_collider_debugs)
@@ -86,12 +87,18 @@ fn main() {
         .register_type::<Walkbox>()
         .register_type::<Hitbox>()
         .register_type::<TopDownMatter>()
+        .register_type::<Motion>()
         .add_plugins(ResourceInspectorPlugin::<DebugSettings>::new())
-        .add_systems(Update, debug_walkboxes_system)
+        .add_systems(Update, (
+            debug_walkboxes_system,
+            debug_hitboxes_system,
+            debug_origins_system,
+        ))
         // LDTK STUFF
         .add_systems(Startup, setup_level)
         .insert_resource(LevelSelection::Index(1))
         .register_ldtk_int_cell_for_layer::<Wall>("StructureKind", 1)
+        .register_ldtk_int_cell_for_layer::<Wall>("TerrainKind", 3)
         // SPATIAL PARTITIONING STUFF
         .add_plugins(RstarPlugin::<Solid>::new())
         // CAMERA
@@ -102,10 +109,17 @@ fn main() {
         .add_systems(PreUpdate, accept_input_system
             .after(InputSystem)
         )
+        // SPRITE ASSET STUFF
+        .insert_resource(AnimationsMap::default())
+        .add_systems(Startup, load_sprite_assets)
         // BODY STUFF
         .add_systems(Update, shadow_stitcher_system)
+        // ENEMY STUFF
+        .add_systems(Startup, temp_setup_enemy.after(load_sprite_assets))
+        .add_systems(Update, enemy_state_changes.in_set(SpriteChangers))
+        .add_systems(Update, enemy_plan_move.in_set(MovePlanners))
         // PLAYER STUFF
-        .add_systems(Startup, setup_player)
+        .add_systems(Startup, setup_player.after(load_sprite_assets))
         .configure_set(Update, Movers.after(CharAnimationSystems).after(MovePlanners))
         .configure_set(Update, MovePlanners.after(SpriteChangers))
         .configure_set(Update, CameraMovers.after(Movers))
@@ -118,11 +132,10 @@ fn main() {
                 move_continuous_ray_test.run_if(motion_is(MotionKind::RayTest)),
             ).in_set(Movers)
         )
-        .add_systems(Update, propagate_inputs_to_player_state.before(handle_player_state_exits))
-        .add_systems(Update, handle_player_state_exits.before(handle_player_state_entry))
-        .add_systems(Update, handle_player_state_entry.in_set(SpriteChangers).before(MovePlanners))
-        .add_systems(Update, plan_move.in_set(MovePlanners))
-        .add_systems(Update, wall_collisions.after(Movers))
+        .add_systems(Update, player_state_read_inputs.before(player_state_changes))
+        .add_systems(Update, player_state_changes.in_set(SpriteChangers).before(MovePlanners))
+        .add_systems(Update, player_plan_move.in_set(MovePlanners))
+        .add_systems(Update, player_queue_wall_bonk.after(Movers))
         .add_systems(
             Update,
             (
@@ -159,6 +172,8 @@ fn main() {
 #[derive(Resource, Default, Reflect, PartialEq, Eq)]
 pub struct DebugSettings {
     debug_walkboxes: bool,
+    debug_origins: bool,
+    debug_hitboxes: bool,
     motion_kind: MotionKind,
     camera_kind: CameraKind,
 }
@@ -197,7 +212,7 @@ struct CameraMovers;
 
 /// Hey, how much CAN I get away with processing at this point? I know I want to handle
 /// walk/idle transitions here, but..... action button?
-fn propagate_inputs_to_player_state(
+fn player_state_read_inputs(
     inputs: Res<CurrentInputs>,
     mut player_q: Query<(&mut PlayerStateMachine, &mut Motion)>,
 ) {
@@ -230,72 +245,83 @@ fn propagate_inputs_to_player_state(
                 _ => (),
             }
         }
+
+        // Attack button
+        if inputs.attacking {
+            match machine.current() {
+                PlayerState::Idle | PlayerState::Run => {
+                    machine.push_transition(PlayerState::attack());
+                },
+                _ => (),
+            }
+        }
     }
 }
 
-/// Case 1: interrupted states (something got requested as "next"). Case 2:
-/// states coming to their natural conclusions (timers ran out). Either way,
-/// two jobs: switch to the new state, and handle any state entry setup.
-fn handle_player_state_exits(mut player_q: Query<&mut PlayerStateMachine>) {
-    for mut machine in player_q.iter_mut() {
-        // First, natural endings -- only queue these up if not pre-empted.
-        if machine.next.is_none() {
-            match machine.current() {
-                PlayerState::Idle => (), // not timed
-                PlayerState::Run => (),  // not timed
-                PlayerState::Roll {
-                    roll_input: _,
-                    timer,
-                } => {
-                    if timer.finished() {
-                        machine.push_transition(PlayerState::Idle);
-                    }
-                },
-                PlayerState::Bonk {
-                    bonk_input: _,
-                    timer,
-                } => {
-                    if timer.finished() {
-                        machine.push_transition(PlayerState::Idle);
-                    }
-                },
+/// Near the start of every frame, check whether the player state machine is switching
+/// states; if so, handle any setup and housekeeping to make the new state usable on the
+/// current frame.
+fn player_state_changes(
+    mut player_q: Query<(
+        &mut PlayerStateMachine,
+        &mut StateTimer,
+        &mut Speed,
+        &mut CharAnimationState,
+    )>,
+    animations_map: Res<AnimationsMap>,
+    time: Res<Time>,
+) {
+    for (mut machine, mut state_timer, mut speed, mut animation_state) in player_q.iter_mut() {
+        // ZEROTH: if a state used up its time allotment last frame (without being interrupted),
+        // this is where we queue up a transition to the next state.
+        if let Some(ref timer) = state_timer.0 {
+            if machine.next.is_none() && timer.finished() {
+                match machine.current() {
+                    PlayerState::Idle => (), // not timed
+                    PlayerState::Run => (),  // not timed
+                    PlayerState::Roll { .. } => machine.push_transition(PlayerState::Idle),
+                    PlayerState::Bonk { .. } => machine.push_transition(PlayerState::Idle),
+                    PlayerState::Attack => machine.push_transition(PlayerState::Idle),
+                }
             }
         }
 
-        // Then, move to next state, if any.
-        machine.finish_transition();
-    }
-}
+        // FIRST and SECOND: maybe change states, and do all our setup housekeeping for the new state.
+        machine.do_transition(|machine| {
+            // Set new Option<Timer>
+            state_timer.0 = machine.current().timer();
 
-fn handle_player_state_entry(
-    mut player_q: Query<(
-        &mut PlayerStateMachine,
-        &mut Speed,
-        &mut CharAnimationState,
-        &AnimationsMap,
-        &mut Motion,
-    )>,
-) {
-    for (mut machine, mut speed, mut animation_state, animations_map, mut motion) in
-        player_q.iter_mut()
-    {
-        // only:
-        if machine.just_changed {
             // Update sprite
-            let mut set_anim = |name: &str, play: Playback| {
-                let ani = animations_map.get(name).unwrap().clone();
-                animation_state.change_animation(ani, play);
+            let mut set_anim = |name: &Ases, play: Playback| {
+                if let Some(ani) = animations_map.get(name) {
+                    animation_state.change_animation(ani.clone(), play);
+                } else {
+                    info!("Whoa oops, tried to set animation {:?} on player", name);
+                }
             };
             match machine.current() {
-                PlayerState::Idle => set_anim("idle", Playback::Loop),
-                PlayerState::Run => set_anim("run", Playback::Loop),
-                PlayerState::Roll { timer, .. } => {
+                PlayerState::Idle => set_anim(&Ases::TkIdle, Playback::Loop),
+                PlayerState::Run => set_anim(&Ases::TkRun, Playback::Loop),
+                PlayerState::Roll { .. } => {
                     // little extra on this one, sets animation parameters based on gameplay effect
-                    set_anim("roll", Playback::Once);
-                    let roll_millis = timer.duration().as_millis() as u64;
-                    animation_state.set_total_run_time_to(roll_millis);
+                    set_anim(&Ases::TkRoll, Playback::Once);
+                    if let Some(ref mut timer) = state_timer.0 {
+                        let roll_millis = timer.duration().as_millis() as u64;
+                        animation_state.set_total_run_time_to(roll_millis);
+                    } else {
+                        warn!("no timer for roll state??");
+                    }
                 },
-                PlayerState::Bonk { .. } => set_anim("hurt", Playback::Once),
+                PlayerState::Bonk { .. } => set_anim(&Ases::TkHurt, Playback::Once),
+                PlayerState::Attack => {
+                    set_anim(&Ases::TkSlash, Playback::Once);
+                    if let Some(ref mut timer) = state_timer.0 {
+                        let attack_millis = timer.duration().as_millis() as u64;
+                        animation_state.set_total_run_time_to(attack_millis);
+                    } else {
+                        warn!("no timer for attack state??");
+                    }
+                },
             };
 
             // Update speed
@@ -304,51 +330,45 @@ fn handle_player_state_entry(
                 PlayerState::Run => Speed::RUN,
                 PlayerState::Roll { .. } => Speed::ROLL,
                 PlayerState::Bonk { .. } => Speed::BONK,
+                PlayerState::Attack { .. } => 0.0,
             };
+        });
 
-            // Re-set motion remainder (not actually sure about this; also only applies to by-pixels move)
-            motion.remainder = Vec2::ZERO;
-
-            // Mark state entry as completed
-            machine.state_entered();
+        // THIRD: If the current state has a timer, tick it forward.
+        if let Some(ref mut timer) = state_timer.0 {
+            timer.tick(time.delta());
         }
     }
 }
 
+/// Compute player's velocity for the current frame.
 /// Primarily mutates Motion, but for bonk state I have an unfortunate mutation
-/// of SubTransform.z. Also, this is currently where I'm ticking state timers,
-/// so that's mutable too. hmm.
-fn plan_move(
+/// of PhysTransform.z.
+fn player_plan_move(
     mut player_q: Query<(
-        &mut PlayerStateMachine,
+        &PlayerStateMachine,
+        &StateTimer,
         &mut Motion,
         &Speed,
         &mut PhysTransform,
     )>,
-    time: Res<Time>,
     inputs: Res<CurrentInputs>,
 ) {
-    for (mut machine, mut motion, speed, mut transform) in player_q.iter_mut() {
+    for (machine, state_timer, mut motion, speed, mut transform) in player_q.iter_mut() {
         // Contribute velocity
         let input = match machine.current() {
             PlayerState::Idle => Vec2::ZERO,
             PlayerState::Run => inputs.movement,
             PlayerState::Roll { roll_input, .. } => *roll_input,
             PlayerState::Bonk { bonk_input, .. } => *bonk_input,
+            PlayerState::Attack { .. } => Vec2::ZERO,
         };
         let velocity = input * speed.0;
         motion.velocity += velocity;
 
-        // Spend state duration (TODO: put this elsewhere)
-        // also: do fucky z-height hack for bonk
-        match machine.current_mut() {
-            PlayerState::Idle => (),
-            PlayerState::Run => (),
-            PlayerState::Roll { timer, .. } => {
-                timer.tick(time.delta());
-            },
-            PlayerState::Bonk { timer, .. } => {
-                timer.tick(time.delta());
+        // do fucky z-height hack for bonk
+        if let PlayerState::Bonk { .. } = machine.current() {
+            if let Some(ref timer) = state_timer.0 {
                 let progress = timer.percent();
                 // ^^ ok to go backwards bc sin is symmetric. btw this should probably
                 // be parabolic but shrug for now. Also BTW, progress will be exactly
@@ -359,12 +379,16 @@ fn plan_move(
                 // and...  we're just manipulating Z directly instead of going through
                 // the motion planning system. Sorry!! Maybe later.
                 transform.translation.z = height_frac * PlayerState::BONK_HEIGHT;
-            },
+            } else {
+                warn!("yo, no timer for bonk state??")
+            }
         }
     }
 }
 
-fn wall_collisions(mut player_q: Query<(&mut PlayerStateMachine, &Motion)>) {
+/// If player bonked into a wall, queue a state transition.
+/// TODO: Generalize knockback. why should this be player-specific? Or bonk-specific?
+fn player_queue_wall_bonk(mut player_q: Query<(&mut PlayerStateMachine, &Motion)>) {
     for (mut machine, motion) in player_q.iter_mut() {
         if let PlayerState::Roll { .. } = machine.current() {
             if let Some(MotionResult { collided: true, .. }) = motion.result {
@@ -377,157 +401,348 @@ fn wall_collisions(mut player_q: Query<(&mut PlayerStateMachine, &Motion)>) {
     }
 }
 
-fn camera_lerp_system(
-    time: Res<Time>,
-    // time: Res<StaticTime>,
-    // time: Res<SmoothedTime>,
-    mut params: ParamSet<(
-        Query<&PhysTransform, With<Player>>,
-        Query<&mut PhysTransform, With<Camera>>,
-    )>,
-) {
-    let delta = time.delta_seconds();
-    let player_pos = params.p0().single().translation.truncate();
-    // let player_pos = player_tf.translation.truncate();
-    // let mut camera_tf = query.q1().get_single_mut().unwrap();
-    for mut camera_tf in params.p1().iter_mut() {
-        let camera_pos = camera_tf.translation.truncate();
-        let camera_distance = player_pos - camera_pos;
-        let follow_amount = if camera_distance.length() <= 1.0 {
-            camera_distance
-        } else {
-            (camera_distance * 4.0 * delta).round()
-        };
-        camera_tf.translation += follow_amount.extend(0.0);
-        // let camera_z = camera_tf.translation.z;
-        // camera_tf.translation = player_pos.extend(camera_z);
-        // ...and then you'd do room boundaries clamping, screenshake, etc.
-    }
-}
-
-fn camera_locked_system(
-    mut params: ParamSet<(
-        Query<&PhysTransform, With<Player>>,
-        Query<&mut PhysTransform, With<Camera>>,
-    )>,
-) {
-    let player_pos = params.p0().single().translation;
-    let mut camera_q = params.p1();
-    let mut camera_tf = camera_q.single_mut();
-    camera_tf.translation.x = player_pos.x;
-    camera_tf.translation.y = player_pos.y;
-}
-
 fn setup_level(mut commands: Commands, asset_server: Res<AssetServer>) {
     commands.spawn((
         LdtkWorld,
         LdtkWorldBundle {
             ldtk_handle: asset_server.load("kittytown.ldtk"),
-            transform: Transform::from_scale(Vec3::splat(PIXEL_SCALE)),
+            transform: Transform::default(),
             ..Default::default()
         },
     ));
 }
 
-fn setup_camera(mut commands: Commands) {
-    let mut camera_bundle = Camera2dBundle::default();
-    camera_bundle.projection.scale = 1.0 / 3.0;
-    commands.spawn((
-        camera_bundle,
-        PhysOffset(Vec2::ZERO),
-        PhysTransform {
-            translation: Vec3::new(0.0, 0.0, 999.0),
-        },
-        // ^^ hack: I looked up the Z coord on new_2D and fudged it so we won't accidentally round it to 1000.
-    ));
+/// Name enum for ALL the sprites I'm using. 😵‍💫😽 I just want something type-checked instead
+/// of a hashmap of strings, that's all. Keep it dumb.
+#[derive(PartialEq, Eq, Hash, Clone, Copy, Debug)]
+pub enum Ases {
+    // Tk = Tutorial Kitty
+    TkIdle,
+    TkRun,
+    TkHurt,
+    TkRoll,
+    TkSlash,
+    SlimeIdle,
+    SlimeAttack,
+    SlimeHurt,
+    SlimeDie,
 }
 
-fn setup_player(mut commands: Commands, asset_server: Res<AssetServer>) {
-    let run: Handle<CharAnimation> = asset_server.load("sprites/sPlayerRun.aseprite");
-    let idle: Handle<CharAnimation> = asset_server.load("sprites/sPlayer.aseprite");
-    let hurt: Handle<CharAnimation> = asset_server.load("sprites/sPlayerHurt.aseprite");
-    let roll: Handle<CharAnimation> = asset_server.load("sprites/sPlayerRoll.aseprite");
+/// Sets up a shared hashmap resource of loaded animated sprite assets.
+fn load_sprite_assets(asset_server: Res<AssetServer>, mut animations: ResMut<AnimationsMap>) {
+    // Tutorial Kitty
+    animations.insert(
+        Ases::TkRun,
+        asset_server.load("sprites/sPlayerRun.aseprite"),
+    );
+    animations.insert(Ases::TkIdle, asset_server.load("sprites/sPlayer.aseprite"));
+    animations.insert(
+        Ases::TkHurt,
+        asset_server.load("sprites/sPlayerHurt.aseprite"),
+    );
+    animations.insert(
+        Ases::TkRoll,
+        asset_server.load("sprites/sPlayerRoll.aseprite"),
+    );
+    animations.insert(
+        Ases::TkSlash,
+        asset_server.load("sprites/sPlayerAttackSlash.aseprite"),
+    );
 
-    let initial_animation = idle.clone();
+    // Tutorial Slime
+    animations.insert(
+        Ases::SlimeIdle,
+        asset_server.load("sprites/sSlime.aseprite"),
+    );
+    animations.insert(
+        Ases::SlimeAttack,
+        asset_server.load("sprites/sSlimeAttack.aseprite"),
+    );
+    animations.insert(
+        Ases::SlimeHurt,
+        asset_server.load("sprites/sSlimeHurt.aseprite"),
+    );
+    animations.insert(
+        Ases::SlimeDie,
+        asset_server.load("sprites/sSlimeDie.aseprite"),
+    );
+}
 
-    // Okay, I'm going to be lazy here: hashmap w/ string literals. SORRY. I'll
-    // come back to it later.
-    let mut animations = AnimationsMap::default();
-    animations.insert("run", run);
-    animations.insert("idle", idle);
-    animations.insert("hurt", hurt);
-    animations.insert("roll", roll);
+fn enemy_state_changes(
+    mut query: Query<(
+        &mut EnemyStateMachine,
+        &Speed,
+        &mut CharAnimationState,
+        &PatrolArea,
+        &PhysTransform,
+    )>,
+    time: Res<Time>,
+    mut rng: ResMut<GameRNG>,
+    animations_map: Res<AnimationsMap>,
+) {
+    // Going in serial, because I'm using a global RNG still (instead of forking it to each enemy)
+    for (mut machine, speed, mut anim, patrol, transform) in query.iter_mut() {
+        // ZEROTH: if a state spent its timer, queue a transition.
+        match machine.current() {
+            EnemyState::Idle { timer } => {
+                if timer.finished() {
+                    // Decide where we're patrolling to next
+                    if let PatrolArea::Patch { home, radius } = patrol {
+                        let angle: f32 =
+                            rng.gen_range(-(std::f32::consts::PI)..=std::f32::consts::PI);
+                        let distance: f32 = rng.gen_range(0.0..*radius);
+                        let dest = *home + Vec2::from_angle(angle) * distance;
+                        let displacement = dest - transform.translation.truncate();
+                        let input = displacement.normalize_or_zero();
+                        let duration_secs = displacement.length() / speed.0;
+                        machine.push_transition(EnemyState::Patrol {
+                            patrol_input: input,
+                            timer: Timer::from_seconds(duration_secs, TimerMode::Once),
+                        });
+                    }
+                }
+            },
+            EnemyState::Patrol { timer, .. } => {
+                if timer.finished() {
+                    machine.push_transition(EnemyState::Idle {
+                        timer: Timer::from_seconds(2.0, TimerMode::Once),
+                    });
+                }
+            },
+            EnemyState::Chase => todo!(),
+            EnemyState::Attack => todo!(),
+            EnemyState::Hurt => todo!(),
+            EnemyState::Dying => todo!(),
+        }
 
-    // IT'S THE PLAYER, GIVE IT UP!!
+        // FIRST and SECOND: maybe change states, and do all our setup housekeeping for the new state.
+        machine.do_transition(|machine| {
+            let current = machine.current();
+            // Update sprite
+            let (name, play) = current.animation();
+            if let Some(ani) = animations_map.get(&name) {
+                anim.change_animation(ani.clone(), play);
+            } else {
+                warn!(
+                    "Whoa oops, tried to set animation {:?} on enemy and it whiffed",
+                    name
+                );
+            }
+        });
+
+        // Finally: if the current state has a timer, tick it.
+        match machine.current_mut() {
+            EnemyState::Idle { timer } => {
+                timer.tick(time.delta());
+            },
+            EnemyState::Patrol { timer, .. } => {
+                timer.tick(time.delta());
+            },
+            EnemyState::Chase => (),
+            EnemyState::Attack => (),
+            EnemyState::Hurt => (),
+            EnemyState::Dying => (),
+        };
+    }
+}
+
+fn enemy_plan_move(mut query: Query<(&mut Motion, &Speed, &EnemyStateMachine)>) {
+    query.for_each_mut(|(mut motion, speed, machine)| {
+        let input = match machine.current() {
+            EnemyState::Idle { .. } => Vec2::ZERO,
+            EnemyState::Patrol { patrol_input, .. } => *patrol_input,
+            EnemyState::Chase => Vec2::ZERO,  // TODO
+            EnemyState::Attack => Vec2::ZERO, // TODO,
+            EnemyState::Hurt => Vec2::ZERO,   // TODO,
+            EnemyState::Dying => Vec2::ZERO,  // TODO,
+        };
+        let velocity = input * speed.0;
+        motion.velocity += velocity;
+        motion.face(input);
+    })
+}
+
+// Obviously this is wack, and we should be spawning from ldtk entities, but bear with me here.
+fn temp_setup_enemy(mut commands: Commands, animations: Res<AnimationsMap>) {
+    let initial_animation = animations.get(&Ases::SlimeIdle).unwrap().clone();
+    let whence = Vec3::new(220., 200., 0.); // empirically 🤷🏽
+
     commands.spawn((
-        PlayerBundle {
-            // Remember who u are
-            identity: Player,
-            sprite_sheet: SpriteSheetBundle {
-                transform: Transform::from_translation(Vec3::new(0.0, 0.0, 3.0))
-                    .with_scale(Vec3::splat(PIXEL_SCALE)),
-                ..Default::default()
-            },
-            phys_transform: PhysTransform {
-                translation: Vec3::ZERO,
-            },
-            phys_offset: PhysOffset(Vec2::ZERO),
-            speed: Speed(Speed::RUN),
-            walkbox: Walkbox(Rect::default()),
-            // --- New animation system
+        EnemyBundle {
+            identity: Enemy,
+            name: Name::new("Sloom"),
+            state_machine: EnemyStateMachine::new(EnemyState::default()),
+            sprite_sheet: SpriteSheetBundle::default(), // Oh huh wow, I took over all that stuff.
             char_animation_state: CharAnimationState::new(
                 initial_animation,
                 Dir::E,
                 Playback::Loop,
             ),
+            phys_transform: PhysTransform {
+                translation: whence,
+            },
+            phys_offset: PhysOffset(Vec2::ZERO),
+            walkbox: Walkbox(Rect::default()),
+            hitbox: Hitbox(None),
+            shadow: HasShadow,
+            top_down_matter: TopDownMatter::character(),
+            speed: Speed(Speed::RUN), // ???
             motion: Motion::new(Vec2::ZERO),
-            animations_map: animations,
         },
-        // Initial gameplay state
-        PlayerStateMachine {
-            current: PlayerState::Idle,
-            next: None,
-            just_changed: true,
+        PatrolArea::Patch {
+            home: whence.truncate(),
+            radius: 140.0,
         },
-        // Shadow marker
-        HasShadow,
-        // Draw-depth manager
-        TopDownMatter::character(),
-        // Inspector?
-        Name::new("Kittybuddy"),
     ));
+}
+
+fn setup_player(mut commands: Commands, animations: Res<AnimationsMap>) {
+    let initial_animation = animations.get(&Ases::TkIdle).unwrap().clone();
+
+    // IT'S THE PLAYER, GIVE IT UP!!
+    commands.spawn((PlayerBundle {
+        // Remember who u are
+        identity: Player,
+        sprite_sheet: SpriteSheetBundle {
+            transform: Transform::from_translation(Vec3::new(0.0, 0.0, 3.0)),
+            ..Default::default()
+        },
+        phys_transform: PhysTransform {
+            translation: Vec3::ZERO,
+        },
+        phys_offset: PhysOffset(Vec2::ZERO),
+        speed: Speed(Speed::RUN),
+        walkbox: Walkbox(Rect::default()),
+        hitbox: Hitbox(None),
+        // --- New animation system
+        char_animation_state: CharAnimationState::new(initial_animation, Dir::E, Playback::Loop),
+        motion: Motion::new(Vec2::ZERO),
+        // Initial gameplay state
+        state_machine: PlayerStateMachine::new(PlayerState::Idle),
+        state_timer: StateTimer::default(),
+        // Shadow marker
+        shadow: HasShadow,
+        // Draw-depth manager
+        top_down_matter: TopDownMatter::character(),
+        // Inspector?
+        name: Name::new("Kittybuddy"),
+    },));
 }
 
 // Structs and crap!
 
+/// Marker component for enemies
+#[derive(Component)]
+struct Enemy;
+
+type EnemyStateMachine = EntityStateMachine<EnemyState>;
+
+#[derive(Clone)]
+enum EnemyState {
+    Idle { timer: Timer },
+    Patrol { patrol_input: Vec2, timer: Timer },
+    Chase,
+    Attack,
+    Hurt,
+    Dying,
+}
+
+impl EnemyState {
+    fn animation(&self) -> (Ases, Playback) {
+        match self {
+            EnemyState::Idle { .. } => (Ases::SlimeIdle, Playback::Loop),
+            EnemyState::Patrol { .. } => (Ases::SlimeAttack, Playback::Loop),
+            EnemyState::Chase => (Ases::SlimeIdle, Playback::Loop),
+            EnemyState::Attack => (Ases::SlimeAttack, Playback::Loop),
+            EnemyState::Hurt => (Ases::SlimeHurt, Playback::Once),
+            EnemyState::Dying => (Ases::SlimeDie, Playback::Once),
+        }
+    }
+}
+
+impl Default for EnemyState {
+    fn default() -> Self {
+        Self::Idle {
+            timer: Timer::from_seconds(3.0, TimerMode::Once),
+        }
+    }
+}
+
+#[derive(Component)]
+enum PatrolArea {
+    Patch { home: Vec2, radius: f32 },
+    Shush, // leave me alone about my irrefutable if lets, man
+}
+
 #[derive(Bundle)]
-struct PlayerBundle {
-    identity: Player,
+struct EnemyBundle {
+    identity: Enemy,
+    name: Name,
+    state_machine: EnemyStateMachine,
+
+    // .......oh nice, everything below here is same as player. Ripe for future consolidation!
     sprite_sheet: SpriteSheetBundle,
+    char_animation_state: CharAnimationState,
 
     phys_transform: PhysTransform,
     phys_offset: PhysOffset,
-    speed: Speed,
-    walkbox: Walkbox,
 
-    char_animation_state: CharAnimationState,
+    walkbox: Walkbox,
+    hitbox: Hitbox,
+
+    shadow: HasShadow,
+    top_down_matter: TopDownMatter,
+
+    speed: Speed,
     motion: Motion,
-    animations_map: AnimationsMap,
 }
 
-#[derive(Component, Deref, DerefMut, Default)]
-pub struct AnimationsMap(HashMap<&'static str, Handle<CharAnimation>>);
+#[derive(Bundle)]
+struct PlayerBundle {
+    identity: Player,
+    name: Name,
+    state_machine: PlayerStateMachine,
+    state_timer: StateTimer,
+
+    sprite_sheet: SpriteSheetBundle,
+    char_animation_state: CharAnimationState,
+
+    phys_transform: PhysTransform,
+    phys_offset: PhysOffset,
+
+    walkbox: Walkbox,
+    hitbox: Hitbox,
+
+    shadow: HasShadow,
+    top_down_matter: TopDownMatter,
+
+    speed: Speed,
+    motion: Motion,
+}
+
+#[derive(Resource, Deref, DerefMut, Default)]
+pub struct AnimationsMap(HashMap<Ases, Handle<CharAnimation>>);
+
+type PlayerStateMachine = EntityStateMachine<PlayerState>;
 
 #[derive(Component)]
-pub struct PlayerStateMachine {
+pub struct EntityStateMachine<T>
+where
+    T: Clone,
+{
     // fields are private
-    current: PlayerState,
-    next: Option<PlayerState>,
-    just_changed: bool,
+    current: T,
+    next: Option<T>,
 }
 
-impl PlayerStateMachine {
-    fn push_transition(&mut self, next: PlayerState) {
+impl<T: Clone> EntityStateMachine<T> {
+    fn new(current: T) -> Self {
+        Self {
+            current,
+            next: None,
+        }
+    }
+    fn push_transition(&mut self, next: T) {
         self.next = Some(next);
     }
     // fn has_transition(&self) -> bool {
@@ -536,30 +751,34 @@ impl PlayerStateMachine {
     // fn peek_next(&self) -> Option<&PlayerState> {
     //     self.next.as_ref()
     // }
-    fn current(&self) -> &PlayerState {
+    fn current(&self) -> &T {
         &self.current
     }
-    fn current_mut(&mut self) -> &mut PlayerState {
+    fn current_mut(&mut self) -> &mut T {
         &mut self.current
     }
-    fn state_entered(&mut self) {
-        self.just_changed = false;
-    }
-    fn finish_transition(&mut self) {
-        if self.next.is_some() {
-            let next = self.next.take().unwrap();
+    /// If a transition is queued up, switch to the next state, then call the provided
+    /// closure, passing it a mutable reference to self. The closure will see the new
+    /// state when it checks current / current_mut. The closure only gets called
+    /// if there's a transition waiting to go.
+    fn do_transition(&mut self, f: impl FnOnce(&mut Self)) {
+        if let Some(next) = self.next.take() {
             self.current = next;
-            self.just_changed = true;
+            f(self);
         }
     }
 }
+
+#[derive(Component, Reflect, Default)]
+pub struct StateTimer(pub Option<Timer>);
 
 #[derive(Clone)]
 pub enum PlayerState {
     Idle,
     Run,
-    Roll { roll_input: Vec2, timer: Timer },
-    Bonk { bonk_input: Vec2, timer: Timer },
+    Roll { roll_input: Vec2 },
+    Bonk { bonk_input: Vec2, distance: f32 },
+    Attack,
 }
 
 impl PlayerState {
@@ -568,20 +787,44 @@ impl PlayerState {
     const BONK_HEIGHT: f32 = 8.0;
     const ROLL_SPEED: f32 = Speed::ROLL;
     const BONK_SPEED: f32 = Speed::BONK;
+    const ATTACK_DURATION_MS: u64 = 400;
+
+    fn timer(&self) -> Option<Timer> {
+        match self {
+            PlayerState::Idle => None,
+            PlayerState::Run => None,
+            PlayerState::Roll { .. } => {
+                let duration_secs = Self::ROLL_DISTANCE / Self::ROLL_SPEED;
+                Some(Timer::from_seconds(duration_secs, TimerMode::Once))
+            },
+            PlayerState::Bonk { distance, .. } => {
+                let duration_secs = distance / Self::BONK_SPEED;
+                Some(Timer::from_seconds(duration_secs, TimerMode::Once))
+            },
+            PlayerState::Attack => Some(Timer::new(
+                Duration::from_millis(Self::ATTACK_DURATION_MS),
+                TimerMode::Once,
+            )),
+        }
+    }
+
+    // TODO: I'm scaling this one for now anyway, but, it'd be good to learn the length of a state
+    // based on its sprite asset, so it can be *dictated* by the source file but not *managed*
+    // by the animation system. ...Cache it with a startup system?
+    fn attack() -> Self {
+        Self::Attack
+    }
 
     fn roll(direction: f32) -> Self {
-        let duration_secs = Self::ROLL_DISTANCE / Self::ROLL_SPEED;
         Self::Roll {
             roll_input: Vec2::from_angle(direction),
-            timer: Timer::from_seconds(duration_secs, TimerMode::Once),
         }
     }
 
     fn bonk(direction: f32, distance: f32) -> Self {
-        let duration_secs = distance / Self::BONK_SPEED;
         Self::Bonk {
             bonk_input: Vec2::from_angle(direction),
-            timer: Timer::from_seconds(duration_secs, TimerMode::Once),
+            distance,
         }
     }
 
@@ -598,46 +841,13 @@ pub struct LdtkWorld;
 #[derive(Component)]
 pub struct Player;
 
-/// Speed in pixels... per... second?
+/// Speed in pixels... per... second? This is used for _planning_ movement; once
+/// the entity knows what it's trying to do this frame, it gets reduced to an
+/// absolute velocity vector, in the Motion struct.
 #[derive(Component, Reflect)]
 pub struct Speed(f32);
 impl Speed {
-    const RUN: f32 = 120.0;
+    const RUN: f32 = 60.0;
     const ROLL: f32 = 180.0;
     const BONK: f32 = 60.0;
-}
-
-/// Information about what the entity is doing, spatially speaking.
-#[derive(Component)]
-pub struct Motion {
-    /// The direction the entity is currently facing, in radians. Tracked
-    /// separately because it persists even when no motion is planned.
-    pub facing: f32,
-    /// The linear velocity for this frame, as determined by the entity's state and inputs.
-    pub velocity: Vec2,
-    pub remainder: Vec2,
-    pub result: Option<MotionResult>,
-}
-impl Motion {
-    pub fn new(motion: Vec2) -> Self {
-        let mut thing = Self {
-            facing: 0.0, // facing east on the unit circle
-            velocity: Vec2::ZERO,
-            remainder: Vec2::ZERO,
-            result: None,
-        };
-        thing.face(motion);
-        thing
-    }
-
-    pub fn face(&mut self, input: Vec2) {
-        if input.length() > 0.0 {
-            self.facing = Vec2::X.angle_between(input);
-        }
-    }
-}
-
-pub struct MotionResult {
-    pub collided: bool,
-    pub new_location: Vec2,
 }

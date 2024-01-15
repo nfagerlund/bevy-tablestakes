@@ -2,11 +2,15 @@ use bevy::reflect::prelude::*;
 use bevy::time::Stopwatch;
 use bevy::utils::Duration;
 
-/// CountupTimer is basically a new TimerMode for Bevy's Timer struct. I
-/// originally implemented it as such, but carrying a patch on Bevy is gonna be
-/// a pain so I'm pulling it out into a duplicate implementation. I'll throw
-/// this away if we ever resolve the set_duration/set_elapsed expectations such
-/// that I feel safe PRing a new TimerMode.
+// CountupTimer is basically a new TimerMode for Bevy's Timer struct. I
+// originally implemented it as such, but carrying a patch on Bevy is gonna be
+// a pain so I'm pulling it out into a duplicate implementation. I'll throw
+// this away if we ever resolve the set_duration/set_elapsed expectations such
+// that I feel safe PRing a new TimerMode.
+
+/// CountupTimer acts a lot like Bevy's Timer, except it tracks elapsed time
+/// after the timer finishes (`.countup_elapsed` / `..._secs`). Like a kitchen timer.
+/// I use it for non-uniform animation frames, to preserve remainders.
 #[derive(Clone, Debug, Default, Reflect)]
 #[cfg_attr(feature = "serialize", derive(serde::Deserialize, serde::Serialize))]
 #[reflect(Default)]

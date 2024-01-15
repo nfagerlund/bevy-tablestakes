@@ -11,12 +11,9 @@ use bevy_ecs_ldtk::prelude::*;
 #[derive(Component, Reflect, Default)]
 pub struct Walkbox(pub Rect);
 
-/// BBox defining the space where an entity can be hit by attacks.
+/// BBox defining the space where an entity can deal damage to others.
 #[derive(Component, Reflect, Default)]
-pub struct Hitbox(pub Rect);
-// ...and then eventually I'll want Hurtbox for attacks, but, tbh I have no
-// idea how to best handle that yet. Is that even a component? Or is it a larger
-// data structure associated with an animation or something?
+pub struct Hitbox(pub Option<Rect>);
 
 pub fn centered_rect(width: f32, height: f32) -> Rect {
     let min = Vec2::new(-width / 2., -height / 2.);
@@ -326,6 +323,12 @@ pub struct WalkboxDebugBundle {
 /// Marker component for walkbox debug mesh
 #[derive(Component, Default)]
 pub struct WalkboxDebug;
+/// Marker component for hitbox debug mesh
+#[derive(Component, Default)]
+pub struct HitboxDebug;
+/// Marker component for origin debug mesh
+#[derive(Component, Default)]
+pub struct OriginDebug;
 
 // TODO: Maybe just convert this to a local resource for the debug spawner and
 // use .entry().or() to do the initialization.
@@ -334,43 +337,149 @@ pub fn setup_debug_assets(
     mut materials: ResMut<Assets<ColorMaterial>>,
     mut debug_assets: ResMut<DebugAssets>,
 ) {
-    let walkbox_mesh = meshes.add(Mesh::from(shape::Quad::default()));
+    let debug_box_mesh = meshes.add(Mesh::from(shape::Quad::default()));
     let walkbox_material = materials.add(ColorMaterial::from(Color::rgba(0.5, 0.0, 0.5, 0.6)));
-    debug_assets.insert("walkbox_mesh".to_string(), walkbox_mesh.clone_untyped());
+    let hitbox_material = materials.add(ColorMaterial::from(Color::rgba(0.8, 0.0, 0.0, 0.6)));
+    let origin_material = materials.add(ColorMaterial::from(Color::rgba(1.0, 1.0, 1.0, 1.0)));
+    debug_assets.insert("debug_box_mesh".to_string(), debug_box_mesh.clone_untyped());
     debug_assets.insert(
         "walkbox_material".to_string(),
         walkbox_material.clone_untyped(),
+    );
+    debug_assets.insert(
+        "hitbox_material".to_string(),
+        hitbox_material.clone_untyped(),
+    );
+    debug_assets.insert(
+        "origin_material".to_string(),
+        origin_material.clone_untyped(),
     );
 }
 
 /// Add debug mesh children to newly added collidable entities, so I can see
 /// where their boundaries are. (Toggle visibility with inspector).
 pub fn spawn_collider_debugs(
-    // vv Added<Player> is a hack, but rn that's the only mobile collider so shrug
-    new_collider_q: Query<Entity, Or<(Added<Solid>, Added<crate::Player>)>>,
+    new_collider_q: Query<
+        (
+            Entity,
+            Option<&Children>,
+            Option<Ref<Solid>>,
+            Option<Ref<Walkbox>>,
+            Option<Ref<Hitbox>>,
+        ),
+        Or<(Added<Solid>, Added<Walkbox>, Added<Hitbox>)>,
+    >,
+    old_origins_q: Query<&OriginDebug>,
     mut commands: Commands,
     debug_assets: Res<DebugAssets>,
 ) {
-    for collider in new_collider_q.iter() {
-        let (Some(mesh_untyped), Some(material_untyped)) = (debug_assets.get("walkbox_mesh"), debug_assets.get("walkbox_material"))
-        else {
+    if !new_collider_q.is_empty() {
+        let (Some(mesh), Some(walkbox_material), Some(hitbox_material), Some(origin_material)) = (
+            debug_assets
+                .get("debug_box_mesh")
+                .map(|x| Mesh2dHandle(x.clone().typed::<Mesh>())),
+            debug_assets
+                .get("walkbox_material")
+                .map(|x| x.clone().typed::<ColorMaterial>()),
+            debug_assets
+                .get("hitbox_material")
+                .map(|x| x.clone().typed::<ColorMaterial>()),
+            debug_assets
+                .get("origin_material")
+                .map(|x| x.clone().typed::<ColorMaterial>()),
+        ) else {
             warn!("Hey!! I couldn't get ahold of the collider debug assets for some reason!!");
             return;
         };
-        let material = material_untyped.clone().typed::<ColorMaterial>();
-        let mesh = Mesh2dHandle(mesh_untyped.clone().typed::<Mesh>());
 
-        // info!("attaching debug mesh to {:?}", &collider);
-        commands.entity(collider).with_children(|parent| {
-            parent.spawn(WalkboxDebugBundle {
-                mesh_bundle: MaterialMesh2dBundle {
-                    mesh,
-                    material,
-                    visibility: Visibility::Inherited,
-                    ..default()
-                },
-                marker: WalkboxDebug,
+        for (collider, maybe_children, r_solid, r_walkbox, r_hitbox) in new_collider_q.iter() {
+            let solid_added = r_solid.map_or(false, |x| x.is_added());
+            let walkbox_added = r_walkbox.map_or(false, |x| x.is_added());
+            let hitbox_added = r_hitbox.map_or(false, |x| x.is_added());
+
+            commands.entity(collider).with_children(|parent| {
+                // Maybe spawn walkbox debugs
+                if solid_added || walkbox_added {
+                    parent.spawn(WalkboxDebugBundle {
+                        mesh_bundle: MaterialMesh2dBundle {
+                            mesh: mesh.clone(),
+                            material: walkbox_material.clone(),
+                            visibility: Visibility::Inherited,
+                            ..default()
+                        },
+                        marker: WalkboxDebug,
+                    });
+                }
+
+                // Maybe spawn hitbox debugs
+                if hitbox_added {
+                    parent.spawn((
+                        HitboxDebug,
+                        MaterialMesh2dBundle {
+                            mesh: mesh.clone(),
+                            material: hitbox_material.clone(),
+                            visibility: Visibility::Inherited,
+                            ..default()
+                        },
+                    ));
+                }
+
+                // Spawn origin debugs: marker child with two mesh bundle grandkids forming a crosshair
+                // Only want to do this once, even if this is the parent's second time through this system
+                // (e.g. Hitbox got added later, after walkbox)
+                let spawn_origin_debug = match maybe_children {
+                    Some(children) => {
+                        // No existing child has the OriginDebug component:
+                        !children.iter().any(|&ent| old_origins_q.get(ent).is_ok())
+                    },
+                    None => true,
+                };
+                if spawn_origin_debug {
+                    parent
+                        .spawn((
+                            OriginDebug,
+                            SpatialBundle {
+                                visibility: Visibility::Inherited,
+                                // z-stack: 1 below walkbox mesh
+                                transform: Transform::from_translation(Vec3::new(0.0, 0.0, 39.0)),
+                                ..default()
+                            },
+                        ))
+                        .with_children(|origin| {
+                            origin.spawn(MaterialMesh2dBundle {
+                                mesh: mesh.clone(),
+                                material: origin_material.clone(),
+                                visibility: Visibility::Inherited,
+                                transform: Transform::from_scale(Vec3::new(3.0, 1.0, 1.0)),
+                                ..default()
+                            });
+                            origin.spawn(MaterialMesh2dBundle {
+                                mesh: mesh.clone(),
+                                material: origin_material.clone(),
+                                visibility: Visibility::Inherited,
+                                transform: Transform::from_scale(Vec3::new(1.0, 3.0, 1.0)),
+                                ..default()
+                            });
+                        });
+                }
             });
+        }
+    }
+}
+
+/// This one gets to be much dumber than the others bc the size never
+/// changes and the transform propagation is free.
+pub fn debug_origins_system(
+    mut debug_mesh_q: Query<&mut Visibility, With<OriginDebug>>,
+    debug_settings: Res<DebugSettings>,
+) {
+    if debug_settings.debug_origins {
+        debug_mesh_q.iter_mut().for_each(|mut v| {
+            *v = Visibility::Visible;
+        });
+    } else {
+        debug_mesh_q.iter_mut().for_each(|mut v| {
+            *v = Visibility::Hidden;
         });
     }
 }
@@ -383,11 +492,11 @@ pub fn debug_walkboxes_system(
     debug_settings: Res<DebugSettings>,
 ) {
     for (parent, mut transform, mut visibility) in debug_mesh_q.iter_mut() {
-        let Ok((_, walkbox)) = collider_q.get(parent.get()) else {
-            info!("?!?! tried to debug walkbox of some poor orphaned debug entity.");
-            continue;
-        };
         if debug_settings.debug_walkboxes {
+            let Ok((_, walkbox)) = collider_q.get(parent.get()) else {
+                info!("?!?! tried to debug walkbox of some poor orphaned debug entity.");
+                continue;
+            };
             // Unconditional, not inherited:
             *visibility = Visibility::Visible;
             // ok... need to set our scale to the size of the walkbox, and then
@@ -404,6 +513,42 @@ pub fn debug_walkboxes_system(
             *visibility = Visibility::Hidden;
             // we're done
         }
+    }
+}
+
+/// Separate system bc many walkbox-havers lack hitboxen.
+pub fn debug_hitboxes_system(
+    collider_q: Query<(Entity, &Hitbox)>,
+    mut debug_mesh_q: Query<(&Parent, &mut Transform, &mut Visibility), With<HitboxDebug>>,
+    debug_settings: Res<DebugSettings>,
+) {
+    if debug_settings.debug_hitboxes {
+        debug_mesh_q
+            .iter_mut()
+            .for_each(|(parent, mut transform, mut visibility)| {
+                // Parent check + hitbox data retrieval
+                let Ok((_, hitbox)) = collider_q.get(parent.get()) else {
+                    info!("?!?! tried to debug hitbox of some poor orphaned debug entity.");
+                    return;
+                };
+                // We actually swinging rn?
+                if let Hitbox(Some(active_hitbox)) = hitbox {
+                    // yep!
+                    *visibility = Visibility::Visible;
+                    let size = active_hitbox.max - active_hitbox.min;
+                    let center = active_hitbox.min + size / 2.0;
+                    transform.scale = size.extend(1.0);
+                    // z-stack: above walkbox
+                    transform.translation = center.extend(41.0);
+                } else {
+                    // nope!
+                    *visibility = Visibility::Hidden;
+                }
+            });
+    } else {
+        debug_mesh_q.iter_mut().for_each(|(_, _, mut visibility)| {
+            *visibility = Visibility::Hidden;
+        });
     }
 }
 

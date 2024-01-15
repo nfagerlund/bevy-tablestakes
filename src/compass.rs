@@ -87,6 +87,16 @@ impl Dir {
         }
     }
 
+    /// Given an angle, return east or west. Bias towards east when
+    /// given exactly north or south.
+    pub fn horizontal_from_angle(angle: f32) -> Self {
+        if (-FRAC_PI_2..=FRAC_PI_2).contains(&angle) {
+            Self::E
+        } else {
+            Self::W
+        }
+    }
+
     /// Given a Vec2, return north, south, or neutral. Bias towards south when
     /// given exactly east or west.
     pub fn vertical(motion: Vec2) -> Self {
