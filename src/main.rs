@@ -12,7 +12,7 @@ use bevy::{
     math::Rect,
     prelude::*,
     render::RenderApp,
-    utils::{tracing, Duration},
+    utils::tracing,
 };
 use bevy_ecs_ldtk::prelude::*;
 use bevy_inspector_egui::quick::{ResourceInspectorPlugin, WorldInspectorPlugin};
@@ -51,10 +51,6 @@ fn main() {
                 resizable: true,
                 ..default()
             }),
-            ..default()
-        })
-        .set(AssetPlugin {
-            watch_for_changes: bevy::asset::ChangeWatcher::with_delay(Duration::from_millis(200)),
             ..default()
         })
         .set(ImagePlugin::default_nearest())
