@@ -8,7 +8,6 @@ use crate::Motion;
 mod assets;
 mod components;
 mod systems;
-pub use self::assets::*;
 pub use self::components::*;
 pub use self::systems::*;
 
