@@ -33,7 +33,7 @@ bevy_prng = { version = "0.2.0", features = ["rand_xoshiro"] }
 rand = "0.8.5"
 rand_xoshiro = "0.6.0"
 
-bevy_mod_debugdump = "0.8.0" # neat: https://github.com/jakobhellermann/bevy_mod_debugdump
+bevy_mod_debugdump = "0.9.0" # neat: https://github.com/jakobhellermann/bevy_mod_debugdump
 
 [patch.crates-io]
 bevy_ecs_tilemap = { git = "https://github.com/StarArawn/bevy_ecs_tilemap", rev = "b08a5d99" }
