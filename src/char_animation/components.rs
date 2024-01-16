@@ -1,3 +1,4 @@
+use bevy::asset::Asset;
 use bevy::asset::Handle;
 use bevy::math::{prelude::*, Rect};
 use bevy::prelude::{Component, Entity, Event};
@@ -10,7 +11,7 @@ use std::collections::HashMap;
 use crate::compass::{self};
 use crate::toolbox::countup_timer::CountupTimer;
 
-#[derive(Debug, TypeUuid, TypePath)]
+#[derive(Asset, Debug, TypeUuid, TypePath)]
 #[uuid = "585e2e41-4a97-42ef-a13e-55761c854bb4"]
 pub struct CharAnimation {
     pub variants: VariantsMap,
