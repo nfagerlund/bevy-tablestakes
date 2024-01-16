@@ -75,7 +75,6 @@ fn main() {
         .add_plugins(LdtkPlugin)
         .add_plugins(EntropyPlugin::<Xoshiro256Plus>::default())
         // DEBUG STUFF
-        .insert_resource(DebugAssets::default())
         .add_systems(Startup, setup_debug_assets.before(setup_player))
         .add_systems(Update, spawn_collider_debugs)
         .insert_resource(DebugSettings::default())
