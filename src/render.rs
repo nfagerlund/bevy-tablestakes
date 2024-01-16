@@ -145,10 +145,13 @@ pub fn extract_and_flatten_space_system(
     let y_frac = |y: f32| (max_y - y) / y_size;
 
     // Well it's deeply unfortunate, but because the extract sprites system
-    // crams everything into a Vec stored as a resource, we've got to iterate
+    // crams everything into an EntityHashMap stored as a resource, we've got to iterate
     // over that and correlate it with our query.
-    for ex_sprite in extracted_sprites.sprites.iter_mut() {
-        if let Ok(matter) = has_z_query.get(ex_sprite.entity) {
+    // .......
+    // ................
+    // ........................HEY WAIT, ACTUALLY,
+    for (entity, ex_sprite) in extracted_sprites.sprites.iter_mut() {
+        if let Ok(matter) = has_z_query.get(*entity) {
             let mut translation = ex_sprite.transform.translation();
 
             let depth = match matter.depth_class {
