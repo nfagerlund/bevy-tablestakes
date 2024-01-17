@@ -355,7 +355,7 @@ fn delete<MarkComp>(
 ) where
     MarkComp: Component,
 {
-    for entity in removed.iter() {
+    for entity in removed.read() {
         tree_access.remove_entity(entity);
     }
 }

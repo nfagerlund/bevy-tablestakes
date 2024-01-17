@@ -325,12 +325,12 @@ pub fn player_state_read_events(
     mut landing_events: EventReader<Landed>,
     mut player_q: Query<&mut PlayerStateMachine>,
 ) {
-    for rb in rebound_events.iter() {
+    for rb in rebound_events.read() {
         if let Ok(mut machine) = player_q.get_mut(rb.entity) {
             machine.push_transition(PlayerState::bonk_from_vector(rb.vector));
         }
     }
-    for ld in landing_events.iter() {
+    for ld in landing_events.read() {
         if let Ok(mut machine) = player_q.get_mut(ld.0) {
             if let PlayerState::Bonk { .. } = machine.current() {
                 machine.push_transition(PlayerState::Idle);
@@ -414,7 +414,7 @@ pub fn enemy_state_read_events(
     mut aggroing: EventReader<AggroActivate>,
     mut query: Query<&mut EnemyStateMachine>,
 ) {
-    for aggro in aggroing.iter() {
+    for aggro in aggroing.read() {
         if let Ok(mut machine) = query.get_mut(aggro.subject) {
             machine.push_transition(EnemyState::Chase {
                 target: aggro.target,
