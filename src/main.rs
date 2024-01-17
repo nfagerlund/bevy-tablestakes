@@ -132,9 +132,15 @@ fn main() {
         // PLAYER STUFF
         .add_event::<Landed>()
         .add_systems(Startup, setup_player.after(load_sprite_assets))
-        .configure_set(Update, Movers.after(CharAnimationSystems).after(MovePlanners))
-        .configure_set(Update, MovePlanners.after(SpriteChangers))
-        .configure_set(Update, CameraMovers.after(Movers))
+        .configure_sets(
+            Update,
+            (
+                CharAnimationSystems, // which is after SpriteChangers
+                MovePlanners,
+                Movers,
+                CameraMovers,
+            ).chain()
+        )
         .add_systems(
             Update,
             (
@@ -152,7 +158,7 @@ fn main() {
                 player_state_read_events,
                 player_state_changes,
                 apply_deferred
-            ).chain().in_set(SpriteChangers).before(MovePlanners)
+            ).chain().in_set(SpriteChangers)
         )
         .add_systems(
             Update,

@@ -37,7 +37,7 @@ impl Plugin for CharAnimationPlugin {
                     .chain()
                     .in_set(CharAnimationSystems),
             )
-            .configure_set(Update, CharAnimationSystems.after(SpriteChangers));
+            .configure_sets(Update, CharAnimationSystems.after(SpriteChangers));
     }
 }
 
