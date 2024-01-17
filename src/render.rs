@@ -18,8 +18,8 @@ fn lerp_dudes_z(t: f32) -> f32 {
 #[derive(Component, Reflect)]
 pub struct TopDownMatter {
     /// How the global draw depth should be determined. Depth is calculated
-    /// differently for differet kinds of stuff. An extract
-    /// system uses this value to overwrite the entity's Z coordinate in the
+    /// differently for different kinds of stuff. A render
+    /// system uses this value to overwrite the entity's Z (depth) coordinate in the
     /// render world.
     pub depth_class: TopDownDepthClass,
     /// If false, the entity can rise into the air. If true, it remains fixed on
@@ -119,8 +119,11 @@ pub fn shadow_stitcher_system(
 /// Extract system to translate the in-game x/y/z-height coordinates to the
 /// draw-relevant x/y/z-depth coordiantes. Offsets Y by Z, and does Y-sorting
 /// for drawing things in front of each other.
+/// TODO: you're not supposed to do very much in `ExtractSchedule`, so maybe
+/// split this into an extract matter/viewport system and a flatten space system.
+/// Counterpoint: this is small.
 pub fn extract_and_flatten_space_system(
-    has_z_query: Extract<Query<&TopDownMatter>>,
+    has_z_query: Extract<Query<(Entity, &TopDownMatter)>>,
     camera_query: Extract<Query<(&OrthographicProjection, &GlobalTransform), With<Camera2d>>>,
     mut extracted_sprites: ResMut<ExtractedSprites>,
 ) {
@@ -130,30 +133,25 @@ pub fn extract_and_flatten_space_system(
     // - If a sprite is maybe visible, place it in the Z band proportional to its place
     //   in the Y band.
     // So, first, sort out the viewport.
-    // I'm gonna be dumb and assume there's one camera, for now. call me once there's not.
-    let (projection, cam_transform) = match camera_query.get_single() {
-        Ok(stuff) => stuff,
-        Err(e) => {
-            warn!("{}!?!? in extract_and_flatten_space", e);
+    let y_frac = {
+        // I'm gonna be dumb and assume there's one camera, for now. call me once there's not.
+        let Ok((projection, cam_transform)) = camera_query.get_single() else {
+            warn!("camera_qurey.get_single exploded in extract_and_flatten_space");
             return;
-        },
+        };
+        let viewport = AbsBBox::from_rect(projection.area, cam_transform.translation().truncate());
+        let min_y = viewport.min.y - VIEW_SLOP;
+        let max_y = viewport.max.y + VIEW_SLOP;
+        let y_size = max_y - min_y;
+
+        move |y: f32| (max_y - y) / y_size
     };
-    let viewport = AbsBBox::from_rect(projection.area, cam_transform.translation().truncate());
-    let min_y = viewport.min.y - VIEW_SLOP;
-    let max_y = viewport.max.y + VIEW_SLOP;
-    let y_size = max_y - min_y;
-    let y_frac = |y: f32| (max_y - y) / y_size;
 
-    // Well it's deeply unfortunate, but because the extract sprites system
-    // crams everything into an EntityHashMap stored as a resource, we've got to iterate
-    // over that and correlate it with our query.
-    // .......
-    // ................
-    // ........................HEY WAIT, ACTUALLY,
-    for (entity, ex_sprite) in extracted_sprites.sprites.iter_mut() {
-        if let Ok(matter) = has_z_query.get(*entity) {
+    // NICE, ExtractedSprites uses EntityHashMap now, so I only
+    // need to iterate over sprites that are topdown-matter.
+    for (entity, matter) in has_z_query.iter() {
+        if let Some(ex_sprite) = extracted_sprites.sprites.get_mut(&entity) {
             let mut translation = ex_sprite.transform.translation();
-
             let depth = match matter.depth_class {
                 TopDownDepthClass::Character => {
                     // OK, I think we can just yolo this without bounds-checking,
@@ -169,9 +167,4 @@ pub fn extract_and_flatten_space_system(
             ex_sprite.transform = Transform::from_translation(translation).into();
         }
     }
-    // Also!! Counterpoint! It makes somewhat more sense to do this in the
-    // actual extract run for sprites so you don't have to double-handle these
-    // ExtractedSprite structs. And extract_sprites is short, and so is the
-    // Plugin::build() impl for SpritePlugin. I could just make my own custom
-    // SpritePlugin and remove the stock one from DefaultPlugins.
 }
