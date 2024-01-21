@@ -16,9 +16,10 @@ bevy = { version = "0.12.1", features = [
     "mp3",
     "file_watcher", # Not desirable for release builds, btw
     # Tracy breaks protocol versions in patch releases, so check Cargo.lock.
-    # - table @ https://lib.rs/crates/tracing-tracy
-    # Bevy 0.8.1: Tracy 0.8.1 (coincidince)
-    # Bevy 0.9.1: Tracy 0.9
+    # - Support table @ https://lib.rs/crates/tracing-tracy
+    #   Bevy 0.12.1: Tracy 0.9.1
+    # - I install my own builds at /usr/local/bin/tracy-profiler-VERSION
+    # - To build, cd to `profiler/build/unix` in the tracy repo and `make release`.
     "trace_tracy",
 ] }
 bevy-inspector-egui = "0.22.1"
