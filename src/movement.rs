@@ -9,6 +9,7 @@ use crate::{
     space_lookup::RstarAccess,
 };
 use bevy::prelude::*;
+use bevy::utils::EntityHashMap;
 
 type SolidsTree = RstarAccess<Solid>;
 const SOLID_SCANNING_DISTANCE: f32 = 64.0;
@@ -110,14 +111,20 @@ pub(crate) fn move_continuous_no_collision(
 }
 
 pub(crate) fn move_continuous_ray_test(
-    mut mover_q: Query<(&mut PhysTransform, &mut Motion, &Walkbox), Without<Solid>>,
+    mut mover_q: Query<(Entity, &mut PhysTransform, &mut Motion, &Walkbox), Without<Solid>>,
     solids_q: Query<(&Walkbox, &PhysTransform), With<Solid>>,
     solids_tree: Res<SolidsTree>,
     time: Res<Time>,
 ) {
     let delta = time.delta_seconds();
 
-    for (mut transform, mut motion, walkbox) in mover_q.iter_mut() {
+    // Make a copy of mover positions, so we can double-iterate without violating borrow rules?
+    let mut movers: EntityHashMap<Entity, (Vec2, Rect)> = mover_q
+        .iter()
+        .map(|(e, pt, _, wb)| (e, (pt.translation.truncate(), wb.0)))
+        .collect();
+
+    for (entity, mut transform, mut motion, walkbox) in mover_q.iter_mut() {
         let planned_move = motion.velocity * delta;
         motion.velocity = Vec2::ZERO;
         let mut collided = false;
@@ -132,15 +139,36 @@ pub(crate) fn move_continuous_ray_test(
         let player_loc = transform.translation.truncate();
 
         // search for nearby solids
-        let candidate_solid_locs =
+        let mut candidate_solid_locs =
             solids_tree.within_distance(transform.translation.truncate(), SOLID_SCANNING_DISTANCE);
+        // Add mobile entities to nearby solids (no spatial partition atm, just trying to get it online)
+        candidate_solid_locs.extend(movers.iter().filter_map(|(k, (v, _))| {
+            if *k == entity {
+                None
+            } else {
+                Some((*v, *k))
+            }
+        }));
         let mut collided_solids: Vec<(AbsBBox, f32)> = candidate_solid_locs
             .iter()
             .filter_map(|&(_loc, ent)| {
-                // UNWRAP: is ok as long as tree doesn't have stale entities.
-                let (s_walkbox, s_transform) = solids_q.get(ent).unwrap();
-                let s_origin = s_transform.translation.truncate();
-                let solid = AbsBBox::from_rect(s_walkbox.0, s_origin);
+                let s_walkbox: Rect;
+                let s_origin: Vec2;
+                // Is it a solid?
+                if let Ok(s) = solids_q.get(ent) {
+                    s_walkbox = s.0.0;
+                    s_origin = s.1.translation.truncate();
+                } else if let Some(m) = movers.get(&ent) {
+                    // else, is it a mover?
+                    s_walkbox = m.1;
+                    s_origin = m.0;
+                } else {
+                    // wow, what?!
+                    warn!("Invalid collider of some kind in move_continuous_ray_test, idek what I'd even log here");
+                    return None;
+                }
+
+                let solid = AbsBBox::from_rect(s_walkbox, s_origin);
                 // Extend the solid's bounds by the opposite spans of the
                 // player's walkbox, so a simple ray test will detect projected
                 // collisions.
@@ -187,6 +215,11 @@ pub(crate) fn move_continuous_ray_test(
             collided,
             new_location: transform.translation.truncate(),
         });
+
+        // And, update the movers copy so future entities see:
+        movers
+            .entry(entity)
+            .and_modify(|stuff| stuff.0 = transform.translation.truncate());
     }
 }
 
