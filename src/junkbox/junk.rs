@@ -28,7 +28,7 @@ pub fn _debug_z_system(
 pub fn _tile_info_barfing_system(
     keys: Res<Input<KeyCode>>,
     tile_query: Query<(&IntGridCell, &GridCoords, &Transform)>,
-    level_query: Query<(&Handle<LdtkLevel>, &Transform)>,
+    level_query: Query<(&LevelIid, &Transform)>,
 ) {
     if keys.just_pressed(KeyCode::B) {
         for (gridcell, _coords, transform) in tile_query.iter() {

@@ -6,7 +6,8 @@ use super::components::*;
 use crate::toolbox::{flip_rect_y, move_rect_origin};
 
 use asefile::AsepriteFile;
-use bevy::asset::{AssetLoader, BoxedFuture, LoadContext, LoadedAsset};
+use bevy::asset::AsyncReadExt;
+use bevy::asset::{io::Reader, AssetLoader, BoxedFuture, LoadContext};
 use bevy::math::{prelude::*, Affine2, Rect};
 use bevy::render::{
     render_resource::{Extent3d, TextureDimension, TextureFormat},
@@ -21,18 +22,24 @@ use std::collections::HashMap;
 pub struct CharAnimationLoader;
 
 impl AssetLoader for CharAnimationLoader {
+    type Asset = CharAnimation;
+    type Settings = ();
+    type Error = anyhow::Error;
+
     fn extensions(&self) -> &[&str] {
         &["aseprite", "ase"]
     }
 
     fn load<'a>(
         &'a self,
-        bytes: &'a [u8],
+        reader: &'a mut Reader,
+        _settings: &'a Self::Settings,
         load_context: &'a mut LoadContext,
-    ) -> BoxedFuture<'a, anyhow::Result<()>> {
+    ) -> BoxedFuture<'a, Result<Self::Asset, Self::Error>> {
         Box::pin(async move {
-            load_aseprite(bytes, load_context)?;
-            Ok(())
+            let mut bytes = Vec::new();
+            reader.read_to_end(&mut bytes).await?;
+            load_aseprite(&bytes, load_context)
         })
     }
 }
@@ -56,7 +63,7 @@ const OFFSET_TO_CENTER: Vec2 = Vec2::new(-0.5, 0.5);
 /// - Origin layer: "origin"
 /// - Layers for drawn-on metadata coordinates should be marked as invisible in
 ///   the saved file.
-fn load_aseprite(bytes: &[u8], load_context: &mut LoadContext) -> anyhow::Result<()> {
+fn load_aseprite(bytes: &[u8], load_context: &mut LoadContext) -> anyhow::Result<CharAnimation> {
     let ase = AsepriteFile::read(bytes)?;
     let width = ase.width();
     let height = ase.height();
@@ -71,42 +78,51 @@ fn load_aseprite(bytes: &[u8], load_context: &mut LoadContext) -> anyhow::Result
 
     // Build the texture atlas, ensuring that its sub-texture indices match the
     // original Aseprite file's frame indices.
-    let frame_images: Vec<Image> = (0..num_frames)
-        .map(|i| remux_image(ase.frame(i).image()))
-        .collect();
-    // Atlas will be a 1D horizontal strip w/ 1px padding between frames.
-    let atlas_height = height as u32;
-    let atlas_width = width as u32 * num_frames + num_frames - 1;
-    let mut atlas_texture = Image::new_fill(
-        Extent3d {
-            width: atlas_width,
-            height: atlas_height,
-            depth_or_array_layers: 1,
-        },
-        TextureDimension::D2,
-        &[0, 0, 0, 0],                 // clear
-        TextureFormat::Rgba8UnormSrgb, // Could frame_images[0].format(), but hardcode for now.
-    );
-    // copy time
-    let mut cur_x = 0_usize;
-    for img in frame_images.iter() {
-        copy_texture_to_atlas(&mut atlas_texture, img, width, height, cur_x, 0);
-        cur_x += width + 1;
-    }
-    // stow texture and get a handle
-    let texture_handle = load_context.set_labeled_asset("texture", LoadedAsset::new(atlas_texture));
-    // atlas time!!!
-    // N.b.: from_grid_with_padding adds grid cells in left-to-right,
-    // top-to-bottom order, and we rely on this to make the frame indices match.
-    let atlas = TextureAtlas::from_grid(
-        texture_handle,
-        Vec2::new(width as f32, height as f32),
-        num_frames as usize,
-        1,
-        Some(Vec2::new(1.0, 0.0)),
-        None,
-    );
-    let atlas_handle = load_context.set_labeled_asset("texture_atlas", LoadedAsset::new(atlas));
+
+    // ~~ #texture ~~
+    // Capture the handle for the next step.
+    let texture_handle = load_context.labeled_asset_scope("texture".to_string(), |_lc| -> Image {
+        let frame_images: Vec<Image> = (0..num_frames)
+            .map(|i| remux_image(ase.frame(i).image()))
+            .collect();
+        // Atlas will be a 1D horizontal strip w/ 1px padding between frames.
+        let atlas_height = height as u32;
+        let atlas_width = width as u32 * num_frames + num_frames - 1;
+        let mut atlas_texture = Image::new_fill(
+            Extent3d {
+                width: atlas_width,
+                height: atlas_height,
+                depth_or_array_layers: 1,
+            },
+            TextureDimension::D2,
+            &[0, 0, 0, 0],                 // clear
+            TextureFormat::Rgba8UnormSrgb, // Could frame_images[0].format(), but hardcode for now.
+        );
+        // copy time
+        let mut cur_x = 0_usize;
+        for img in frame_images.iter() {
+            copy_texture_to_atlas(&mut atlas_texture, img, width, height, cur_x, 0);
+            cur_x += width + 1;
+        }
+        // return!
+        atlas_texture
+    });
+
+    // ~~ #texture_atlas ~~
+    let atlas_handle =
+        load_context.labeled_asset_scope("texture_atlas".to_string(), |_lc| -> TextureAtlas {
+            // N.b.: from_grid adds grid cells in left-to-right,
+            // top-to-bottom order, and we rely on this to make the frame indices match.
+            // capture handle for later
+            TextureAtlas::from_grid(
+                texture_handle,
+                Vec2::new(width as f32, height as f32),
+                num_frames as usize,
+                1,
+                Some(Vec2::new(1.0, 0.0)),
+                None,
+            )
+        });
 
     // Since our final frame indices are reliable, processing tags is easy.
     let mut variants: VariantsMap = HashMap::new();
@@ -198,8 +214,7 @@ fn load_aseprite(bytes: &[u8], load_context: &mut LoadContext) -> anyhow::Result
     };
 
     // And, cut!
-    load_context.set_default_asset(LoadedAsset::new(animation));
-    Ok(())
+    Ok(animation)
 }
 
 /// Convert the image buffer returned by `asefile::Frame.image()` into a

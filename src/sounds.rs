@@ -14,7 +14,7 @@ pub fn sounds_thumps(
 ) {
     // Eventually want to locate these in space maybe?? but crawl before u run.
     // I don't care about how many landings happen this frame, so just burn em all at once.
-    if landings.iter().count() > 0 {
+    if landings.read().count() > 0 {
         commands.spawn(AudioSourceBundle {
             source: sfx.thump.clone(),
             settings: PlaybackSettings {

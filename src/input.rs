@@ -62,7 +62,7 @@ pub fn connect_gamepads_system(
     for GamepadConnectionEvent {
         gamepad,
         connection,
-    } in connection_events.iter()
+    } in connection_events.read()
     {
         match connection {
             GamepadConnection::Connected(_) => {
@@ -91,7 +91,7 @@ pub fn connect_gamepads_system(
         gamepad,
         button_type,
         value,
-    } in button_events.iter()
+    } in button_events.read()
     {
         if *button_type == GamepadButtonType::Start && *value == 1.0 {
             info!("Pressed start: {:?}", gamepad);

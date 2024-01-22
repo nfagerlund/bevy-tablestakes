@@ -19,7 +19,7 @@ pub struct CharAnimationPlugin;
 
 impl Plugin for CharAnimationPlugin {
     fn build(&self, app: &mut App) {
-        app.add_asset::<CharAnimation>()
+        app.init_asset::<CharAnimation>()
             .init_asset_loader::<CharAnimationLoader>()
             .add_event::<AnimateFinishedEvent>()
             // These systems should run after any app code that might mutate
@@ -37,7 +37,7 @@ impl Plugin for CharAnimationPlugin {
                     .chain()
                     .in_set(CharAnimationSystems),
             )
-            .configure_set(Update, CharAnimationSystems.after(SpriteChangers));
+            .configure_sets(Update, CharAnimationSystems.after(SpriteChangers));
     }
 }
 

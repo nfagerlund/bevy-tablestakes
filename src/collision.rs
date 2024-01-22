@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 use crate::{phys_space::PhysOffset, DebugSettings};
 use bevy::{
     prelude::*,
@@ -312,8 +310,13 @@ impl LdtkIntCell for Wall {
 
 // -- COLLIDER DEBUG MESH STUFF --
 
-#[derive(Resource, Deref, DerefMut, Default)]
-pub struct DebugAssets(HashMap<String, HandleUntyped>);
+#[derive(Resource)]
+pub struct DebugAssets {
+    box_mesh: Handle<Mesh>,
+    walkbox_color: Handle<ColorMaterial>,
+    hitbox_color: Handle<ColorMaterial>,
+    origin_color: Handle<ColorMaterial>,
+}
 
 #[derive(Bundle, Default)]
 pub struct WalkboxDebugBundle {
@@ -330,30 +333,22 @@ pub struct HitboxDebug;
 #[derive(Component, Default)]
 pub struct OriginDebug;
 
-// TODO: Maybe just convert this to a local resource for the debug spawner and
-// use .entry().or() to do the initialization.
 pub fn setup_debug_assets(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<ColorMaterial>>,
-    mut debug_assets: ResMut<DebugAssets>,
+    mut commands: Commands,
 ) {
-    let debug_box_mesh = meshes.add(Mesh::from(shape::Quad::default()));
-    let walkbox_material = materials.add(ColorMaterial::from(Color::rgba(0.5, 0.0, 0.5, 0.6)));
-    let hitbox_material = materials.add(ColorMaterial::from(Color::rgba(0.8, 0.0, 0.0, 0.6)));
-    let origin_material = materials.add(ColorMaterial::from(Color::rgba(1.0, 1.0, 1.0, 1.0)));
-    debug_assets.insert("debug_box_mesh".to_string(), debug_box_mesh.clone_untyped());
-    debug_assets.insert(
-        "walkbox_material".to_string(),
-        walkbox_material.clone_untyped(),
-    );
-    debug_assets.insert(
-        "hitbox_material".to_string(),
-        hitbox_material.clone_untyped(),
-    );
-    debug_assets.insert(
-        "origin_material".to_string(),
-        origin_material.clone_untyped(),
-    );
+    let box_mesh = meshes.add(Mesh::from(shape::Quad::default()));
+    let walkbox_color = materials.add(ColorMaterial::from(Color::rgba(0.5, 0.0, 0.5, 0.6)));
+    let hitbox_color = materials.add(ColorMaterial::from(Color::rgba(0.8, 0.0, 0.0, 0.6)));
+    let origin_color = materials.add(ColorMaterial::from(Color::rgba(1.0, 1.0, 1.0, 1.0)));
+
+    commands.insert_resource(DebugAssets {
+        box_mesh,
+        walkbox_color,
+        hitbox_color,
+        origin_color,
+    });
 }
 
 /// Add debug mesh children to newly added collidable entities, so I can see
@@ -371,27 +366,9 @@ pub fn spawn_collider_debugs(
     >,
     old_origins_q: Query<&OriginDebug>,
     mut commands: Commands,
-    debug_assets: Res<DebugAssets>,
+    assets: Res<DebugAssets>,
 ) {
     if !new_collider_q.is_empty() {
-        let (Some(mesh), Some(walkbox_material), Some(hitbox_material), Some(origin_material)) = (
-            debug_assets
-                .get("debug_box_mesh")
-                .map(|x| Mesh2dHandle(x.clone().typed::<Mesh>())),
-            debug_assets
-                .get("walkbox_material")
-                .map(|x| x.clone().typed::<ColorMaterial>()),
-            debug_assets
-                .get("hitbox_material")
-                .map(|x| x.clone().typed::<ColorMaterial>()),
-            debug_assets
-                .get("origin_material")
-                .map(|x| x.clone().typed::<ColorMaterial>()),
-        ) else {
-            warn!("Hey!! I couldn't get ahold of the collider debug assets for some reason!!");
-            return;
-        };
-
         for (collider, maybe_children, r_solid, r_walkbox, r_hitbox) in new_collider_q.iter() {
             let solid_added = r_solid.map_or(false, |x| x.is_added());
             let walkbox_added = r_walkbox.map_or(false, |x| x.is_added());
@@ -402,8 +379,8 @@ pub fn spawn_collider_debugs(
                 if solid_added || walkbox_added {
                     parent.spawn(WalkboxDebugBundle {
                         mesh_bundle: MaterialMesh2dBundle {
-                            mesh: mesh.clone(),
-                            material: walkbox_material.clone(),
+                            mesh: Mesh2dHandle(assets.box_mesh.clone()),
+                            material: assets.walkbox_color.clone(),
                             visibility: Visibility::Inherited,
                             ..default()
                         },
@@ -416,8 +393,8 @@ pub fn spawn_collider_debugs(
                     parent.spawn((
                         HitboxDebug,
                         MaterialMesh2dBundle {
-                            mesh: mesh.clone(),
-                            material: hitbox_material.clone(),
+                            mesh: Mesh2dHandle(assets.box_mesh.clone()),
+                            material: assets.hitbox_color.clone(),
                             visibility: Visibility::Inherited,
                             ..default()
                         },
@@ -447,15 +424,15 @@ pub fn spawn_collider_debugs(
                         ))
                         .with_children(|origin| {
                             origin.spawn(MaterialMesh2dBundle {
-                                mesh: mesh.clone(),
-                                material: origin_material.clone(),
+                                mesh: Mesh2dHandle(assets.box_mesh.clone()),
+                                material: assets.origin_color.clone(),
                                 visibility: Visibility::Inherited,
                                 transform: Transform::from_scale(Vec3::new(3.0, 1.0, 1.0)),
                                 ..default()
                             });
                             origin.spawn(MaterialMesh2dBundle {
-                                mesh: mesh.clone(),
-                                material: origin_material.clone(),
+                                mesh: Mesh2dHandle(assets.box_mesh.clone()),
+                                material: assets.origin_color.clone(),
                                 visibility: Visibility::Inherited,
                                 transform: Transform::from_scale(Vec3::new(1.0, 3.0, 1.0)),
                                 ..default()

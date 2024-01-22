@@ -12,7 +12,7 @@ use bevy::{
     math::Rect,
     prelude::*,
     render::RenderApp,
-    utils::{tracing, Duration},
+    utils::tracing,
 };
 use bevy_ecs_ldtk::prelude::*;
 use bevy_inspector_egui::quick::{ResourceInspectorPlugin, WorldInspectorPlugin};
@@ -53,10 +53,6 @@ fn main() {
             }),
             ..default()
         })
-        .set(AssetPlugin {
-            watch_for_changes: bevy::asset::ChangeWatcher::with_delay(Duration::from_millis(200)),
-            ..default()
-        })
         .set(ImagePlugin::default_nearest())
         .set(LogPlugin {
             level: tracing::Level::INFO,
@@ -79,7 +75,6 @@ fn main() {
         .add_plugins(LdtkPlugin)
         .add_plugins(EntropyPlugin::<Xoshiro256Plus>::default())
         // DEBUG STUFF
-        .insert_resource(DebugAssets::default())
         .add_systems(Startup, setup_debug_assets.before(setup_player))
         .add_systems(Update, spawn_collider_debugs)
         .insert_resource(DebugSettings::default())
@@ -102,7 +97,7 @@ fn main() {
         ))
         // LDTK STUFF
         .add_systems(Startup, setup_level)
-        .insert_resource(LevelSelection::Index(1))
+        .insert_resource(LevelSelection::index(1))
         .register_ldtk_int_cell_for_layer::<Wall>("StructureKind", 1)
         .register_ldtk_int_cell_for_layer::<Wall>("TerrainKind", 3)
         // SPATIAL PARTITIONING STUFF
@@ -137,9 +132,15 @@ fn main() {
         // PLAYER STUFF
         .add_event::<Landed>()
         .add_systems(Startup, setup_player.after(load_sprite_assets))
-        .configure_set(Update, Movers.after(CharAnimationSystems).after(MovePlanners))
-        .configure_set(Update, MovePlanners.after(SpriteChangers))
-        .configure_set(Update, CameraMovers.after(Movers))
+        .configure_sets(
+            Update,
+            (
+                CharAnimationSystems, // which is after SpriteChangers
+                MovePlanners,
+                Movers,
+                CameraMovers,
+            ).chain()
+        )
         .add_systems(
             Update,
             (
@@ -157,7 +158,7 @@ fn main() {
                 player_state_read_events,
                 player_state_changes,
                 apply_deferred
-            ).chain().in_set(SpriteChangers).before(MovePlanners)
+            ).chain().in_set(SpriteChangers)
         )
         .add_systems(
             Update,
