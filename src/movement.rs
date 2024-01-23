@@ -194,10 +194,11 @@ pub(crate) fn move_continuous_ray_test(
             .within_distance(location, SOLID_SCANNING_DISTANCE)
             .into_iter()
             .filter_map(|(_, s_ent)| {
-                let Ok((s_walkbox, s_transform)) = solids_q.get(s_ent) else {
-                    return None;
-                };
-                Some((s_ent, s_transform.translation.truncate(), s_walkbox.0))
+                if let Ok((s_walkbox, s_transform)) = solids_q.get(s_ent) {
+                    Some((s_ent, s_transform.translation.truncate(), s_walkbox.0))
+                } else {
+                    None
+                }
             });
         // For mobile entities, we just grab everyone but the current mover.
         // Do it fresh each time, so we get updated results from prior moves.
