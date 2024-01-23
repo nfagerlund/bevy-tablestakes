@@ -126,116 +126,142 @@ pub(crate) fn move_continuous_no_collision(
     }
 }
 
+/// Lil private struct for intermediate values in move_continuous_ray_test.
+struct CollidedEntity {
+    entity: Entity,
+    expanded_walkbox: AbsBBox,
+    t: f32,
+}
+
+/// Velocity-expending move system that supports collisions with solids and
+/// other entities, and pushing other entities around.
+/// Push theory: pushing is just a MovePlanner system that produces velocity,
+/// which we can consume as normal as long as this system processes movement
+/// for the pushed BEFORE the pusher. Hence the sorting and indirect iteration.
 pub(crate) fn move_continuous_ray_test(
-    mut mover_q: Query<(Entity, &mut PhysTransform, &mut Motion, &Walkbox), Without<Solid>>,
+    mut mover_q: Query<
+        (
+            Entity,
+            &mut PhysTransform,
+            &mut Motion,
+            &Walkbox,
+            Option<&PushPriority>,
+        ),
+        Without<Solid>,
+    >,
     solids_q: Query<(&Walkbox, &PhysTransform), With<Solid>>,
     solids_tree: Res<SolidsTree>,
     time: Res<Time>,
 ) {
     let delta = time.delta_seconds();
 
-    // Make a copy of mover positions, so we can double-iterate without violating borrow rules?
-    let mut movers: EntityHashMap<Entity, (Vec2, Rect)> = mover_q
+    // Get our entities, and sort them by push priority. More-pushable guys get moved first.
+    // Unpushables can go any time.
+    let mut mover_ids: Vec<(Entity, i8)> = mover_q
         .iter()
-        .map(|(e, pt, _, wb)| (e, (pt.translation.truncate(), wb.0)))
+        .map(|(e, _, _, _, opp)| {
+            // I bet clippy knows some cool Option method to shrink this, but anyway,
+            let i = match opp {
+                Some(x) => x.0,
+                None => -1,
+            };
+            (e, i)
+        })
         .collect();
+    mover_ids.sort_unstable_by_key(|el| el.1);
 
-    for (entity, mut transform, mut motion, walkbox) in mover_q.iter_mut() {
-        let planned_move = motion.velocity * delta;
-        motion.velocity = Vec2::ZERO;
-        let mut collided = false;
-        // DON't bother creating an AbsBBox for player at this time. we'll use
-        // their position and walkbox separately.
-        if planned_move.length() == 0.0 {
-            motion.result = None;
+    // Iterate over entity list and process each mover.
+    for (entity, _) in mover_ids.into_iter() {
+        // Immutable .get for working copies of stuff, so we don't hog the borrow.
+        // We'll mutate at the last minute.
+        let Ok((_, transform, motion, walkbox, _)) = mover_q.get(entity) else {
             continue;
-            // yeah still don't like these motion struct semantics. later!
+        };
+        let location = transform.translation.truncate();
+        let planned_move = motion.velocity * delta;
+        let mut collided = false;
+
+        if planned_move.length() == 0.0 {
+            // skip all that
+            if let Ok((_, _, mut motion, _, _)) = mover_q.get_mut(entity) {
+                motion.result = None;
+            }
+            continue;
         }
 
-        let player_loc = transform.translation.truncate();
-
-        // search for nearby solids
-        let mut candidate_solid_locs =
-            solids_tree.within_distance(transform.translation.truncate(), SOLID_SCANNING_DISTANCE);
-        // Add mobile entities to nearby solids (no spatial partition atm, just trying to get it online)
-        candidate_solid_locs.extend(movers.iter().filter_map(|(k, (v, _))| {
-            if *k == entity {
-                None
-            } else {
-                Some((*v, *k))
-            }
-        }));
-        let mut collided_solids: Vec<(AbsBBox, f32)> = candidate_solid_locs
-            .iter()
-            .filter_map(|&(_loc, ent)| {
-                let s_walkbox: Rect;
-                let s_origin: Vec2;
-                // Is it a solid?
-                if let Ok(s) = solids_q.get(ent) {
-                    s_walkbox = s.0.0;
-                    s_origin = s.1.translation.truncate();
-                } else if let Some(m) = movers.get(&ent) {
-                    // else, is it a mover?
-                    s_walkbox = m.1;
-                    s_origin = m.0;
-                } else {
-                    // wow, what?!
-                    warn!("Invalid collider of some kind in move_continuous_ray_test, idek what I'd even log here");
+        // For static solids, use the spatial query tree.
+        let solids_broadphase = solids_tree
+            .within_distance(location, SOLID_SCANNING_DISTANCE)
+            .into_iter()
+            .filter_map(|(_, s_ent)| {
+                let Ok((s_walkbox, s_transform)) = solids_q.get(s_ent) else {
                     return None;
-                }
+                };
+                Some((s_ent, s_transform.translation.truncate(), s_walkbox.0))
+            });
+        // For mobile entities, we just grab everyone but the current mover.
+        // Do it fresh each time, so we get updated results from prior moves.
+        let mobile_broadphase =
+            mover_q
+                .iter()
+                .filter_map(|(m_ent, m_transform, _, m_walkbox, _)| {
+                    if m_ent == entity {
+                        None
+                    } else {
+                        Some((m_ent, m_transform.translation.truncate(), m_walkbox.0))
+                    }
+                });
+        let candidates = solids_broadphase.chain(mobile_broadphase);
 
-                let solid = AbsBBox::from_rect(s_walkbox, s_origin);
-                // Extend the solid's bounds by the opposite spans of the
-                // player's walkbox, so a simple ray test will detect projected
-                // collisions.
-                let expanded_solid = solid.expand_for_ray_test(&walkbox.0);
-                // Then, ray-cast test for collision, discard any we miss, and
-                // keep the normalized time and the expanded box for re-use --
-                // have to do each test twice, because you might collide a
-                // further rectangle at a different position after correcting
-                // for a nearer one.
-                expanded_solid
-                    .ray_collide(player_loc, planned_move)
-                    .map(|c| (expanded_solid, c.normalized_time))
+        // Build expanded colliders, ray test, and filter_map to actual intersections.
+        let mut collided_entities: Vec<CollidedEntity> = candidates
+            .filter_map(|(c_ent, c_loc, c_walkbox)| {
+                let expanded_walkbox =
+                    AbsBBox::from_rect(c_walkbox, c_loc).expand_for_ray_test(&walkbox.0);
+                expanded_walkbox
+                    .ray_collide(location, planned_move)
+                    .map(|c| CollidedEntity {
+                        entity: c_ent,
+                        expanded_walkbox,
+                        t: c.normalized_time,
+                    })
             })
             .collect();
-
-        // ALAS, the intermediate .collect() is mandatory because sort takes slice, not iterator.
-        collided_solids.sort_by(|a, b| a.1.total_cmp(&b.1));
-
-        // ok, NOW we can actually resolve collisions. Second pass!
-        let corrected_movement =
-            collided_solids
+        // Sort em
+        collided_entities.sort_by(|a, b| a.t.total_cmp(&b.t));
+        // Party!!!
+        let corrected_movement: Vec2 =
+            collided_entities
                 .iter()
-                .fold(planned_move, |current_move, (expanded_solid, _)| {
-                    // Always gotta return something outta this fold, so we'll mutate if still colliding.
-                    let mut next_move = current_move;
+                .fold(planned_move, |current_move, c_e| {
+                    // If we bump into this entity, truncate movement accordingly.
                     if let Some(collision) =
-                        expanded_solid.segment_collide(player_loc, current_move)
+                        c_e.expanded_walkbox.segment_collide(location, current_move)
                     {
                         // HEY, here's where we mark collision for the result:
                         collided = true;
 
                         // Ok moving on
-                        let vel_penalty = (1.0 - collision.normalized_time)
+                        let move_penalty = (1.0 - collision.normalized_time)
                             * collision.normal
                             * current_move.abs();
-                        next_move = current_move + vel_penalty;
+
+                        // done
+                        current_move + move_penalty
+                    } else {
+                        current_move
                     }
-                    next_move
                 });
 
-        // All right, finally! Now just do it:
-        transform.translation += corrected_movement.extend(0.0);
-        motion.result = Some(MotionResult {
-            collided,
-            new_location: transform.translation.truncate(),
-        });
-
-        // And, update the movers copy so future entities see:
-        movers
-            .entry(entity)
-            .and_modify(|stuff| stuff.0 = transform.translation.truncate());
+        // Okay!!! Time to mutate
+        if let Ok((_, mut transform, mut motion, _, _)) = mover_q.get_mut(entity) {
+            transform.translation += corrected_movement.extend(0.0);
+            motion.velocity = Vec2::ZERO;
+            motion.result = Some(MotionResult {
+                collided,
+                new_location: transform.translation.truncate(),
+            })
+        }
     }
 }
 
