@@ -71,6 +71,22 @@ pub struct MotionResult {
 #[derive(Event)]
 pub struct Landed(pub Entity);
 
+/// Relative strength of push! Higher scores can push entities of lower scores.
+/// This is meant to bottom out at 0 (the most pushable guy). Negative numbers
+/// are reserved to denote unpushable entities, whenever it's necessary to
+/// sort a mixed collection.
+#[derive(Component, Reflect)]
+pub struct PushPriority(i8);
+
+impl PushPriority {
+    pub fn player() -> Self {
+        Self(6)
+    }
+    pub fn enemy() -> Self {
+        Self(3)
+    }
+}
+
 /// Handle height motion... once I remove the other move systems, it should just get rolled into the remaining one.
 pub(crate) fn move_z_axis(
     mut mover_q: Query<(Entity, &mut PhysTransform, &mut Motion)>,

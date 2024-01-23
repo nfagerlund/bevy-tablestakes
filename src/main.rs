@@ -245,6 +245,7 @@ fn temp_setup_enemy(mut commands: Commands, animations: Res<AnimationsMap>) {
         top_down_matter: TopDownMatter::character(),
         speed: Speed(Speed::ENEMY_RUN), // ???
         motion: Motion::new(Vec2::ZERO),
+        push_priority: PushPriority::enemy(),
 
         patrol: PatrolArea::Patch {
             home: whence.truncate(),
@@ -274,6 +275,7 @@ fn setup_player(mut commands: Commands, animations: Res<AnimationsMap>) {
         // --- New animation system
         char_animation_state: CharAnimationState::new(initial_animation, Dir::E, Playback::Loop),
         motion: Motion::new(Vec2::ZERO),
+        push_priority: PushPriority::player(),
         // Initial gameplay state
         state_machine: PlayerStateMachine::new(PlayerState::Idle),
         state_timer: StateTimer::default(),
@@ -314,6 +316,7 @@ struct EnemyBundle {
 
     speed: Speed,
     motion: Motion,
+    push_priority: PushPriority,
 
     patrol: PatrolArea,
 }
@@ -339,6 +342,7 @@ struct PlayerBundle {
 
     speed: Speed,
     motion: Motion,
+    push_priority: PushPriority,
 }
 
 /// Marker component for a spawned LdtkWorldBundle
