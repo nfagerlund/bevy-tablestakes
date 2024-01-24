@@ -74,12 +74,6 @@ pub struct Collided {
     pub collision: Collision,
 }
 
-pub fn collided_events_dumper_system(mut evs: EventReader<Collided>) {
-    for event in evs.read() {
-        info!("bimp: {:?}", event);
-    }
-}
-
 #[derive(Event)]
 pub struct Landed(pub Entity);
 
