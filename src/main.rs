@@ -162,6 +162,7 @@ fn main() {
             .after(MovePlanners)
             .before(MoveModifiers)
         )
+        .add_systems(Update, push_system.in_set(MoveModifiers))
         .add_systems(
             Update,
             (

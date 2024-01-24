@@ -210,4 +210,23 @@ pub fn end_push(mut commands: Commands, pushing_q: Query<(Entity, &Motion, &Push
     }
 }
 
-pub fn push_system() {}
+/// Expects to go after all the "normal" move planners.
+pub fn push_system(
+    mut q_set: ParamSet<(
+        Query<(&Pushing, &Motion)>,             // pushing
+        Query<&mut Motion, With<PushPriority>>, // pushable
+    )>,
+) {
+    // Gotta do ParamSet and an intermediate collect, bc pushers and pushables aren't mutually exclusive.
+    let impulses: Vec<(Entity, Vec2)> = q_set
+        .p0()
+        .iter()
+        .map(|(pushing, motion)| (pushing.target, motion.velocity))
+        .collect();
+    let mut pushable_q = q_set.p1();
+    for (entity, impulse) in impulses.into_iter() {
+        if let Ok(mut motion) = pushable_q.get_mut(entity) {
+            motion.velocity += impulse;
+        }
+    }
+}
