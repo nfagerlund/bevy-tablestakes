@@ -82,7 +82,7 @@ pub struct Landed(pub Entity);
 /// are reserved to denote unpushable entities, whenever it's necessary to
 /// sort a mixed collection.
 #[derive(Component, Reflect)]
-pub struct PushPriority(i8);
+pub struct PushPriority(pub i8);
 
 impl PushPriority {
     pub fn player() -> Self {

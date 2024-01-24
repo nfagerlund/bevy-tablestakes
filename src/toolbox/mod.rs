@@ -36,3 +36,12 @@ pub fn move_rect_origin(r: Rect, origin: Vec2) -> Rect {
         max: r.max - origin,
     }
 }
+
+// Determines whether an input Vec2 no longer has any movement component in a given cardinal direction.
+pub fn turned_away_from(cardinal: Vec2, input: Vec2) -> bool {
+    if cardinal.x == 0.0 {
+        cardinal.y.signum() != input.y.signum()
+    } else {
+        cardinal.x.signum() != input.x.signum()
+    }
+}

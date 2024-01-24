@@ -132,16 +132,35 @@ fn main() {
         // SHARED MOVEMENT STUFF
         .add_event::<Landed>()
         .add_event::<Collided>()
-        // PLAYER STUFF
-        .add_systems(Startup, setup_player.after(load_sprite_assets))
         .configure_sets(
             Update,
             (
                 CharAnimationSystems, // which is after SpriteChangers
                 MovePlanners,
+                // push on/off systems go between here, but idk a good name for that set yet
+                MoveModifiers,
                 Movers,
                 CameraMovers,
             ).chain()
+        )
+        .add_systems(
+            Update,
+            (
+                mobile_free_velocity,
+                mobile_fixed_velocity,
+                launch_and_fall,
+                mobile_chase_entity,
+            ).in_set(MovePlanners),
+        )
+        .add_systems(
+            Update,
+            (
+                end_push,
+                start_push,
+                apply_deferred,
+            ).chain()
+            .after(MovePlanners)
+            .before(MoveModifiers)
         )
         .add_systems(
             Update,
@@ -153,6 +172,8 @@ fn main() {
             ).in_set(Movers).ambiguous_with(Movers).before(move_z_axis)
         )
         .add_systems(Update, move_z_axis.in_set(Movers))
+        // PLAYER STUFF
+        .add_systems(Startup, setup_player.after(load_sprite_assets))
         .add_systems(
             Update,
             (
@@ -161,15 +182,6 @@ fn main() {
                 player_state_changes,
                 apply_deferred
             ).chain().in_set(SpriteChangers)
-        )
-        .add_systems(
-            Update,
-            (
-                mobile_free_velocity,
-                mobile_fixed_velocity,
-                launch_and_fall,
-                mobile_chase_entity,
-            ).in_set(MovePlanners),
         )
         .add_systems(Update, player_queue_wall_bonk.after(Movers))
         .add_systems(
@@ -207,6 +219,9 @@ fn main() {
 
 #[derive(SystemSet, Clone, Debug, PartialEq, Eq, Hash)]
 pub struct MovePlanners;
+
+#[derive(SystemSet, Clone, Debug, PartialEq, Eq, Hash)]
+pub struct MoveModifiers;
 
 #[derive(SystemSet, Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Movers;
