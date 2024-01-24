@@ -129,8 +129,11 @@ fn main() {
                 enemy_state_changes
             ).chain().in_set(SpriteChangers))
         .add_systems(Update, acquire_aggro.after(Movers).after(CameraMovers))
-        // PLAYER STUFF
+        // SHARED MOVEMENT STUFF
         .add_event::<Landed>()
+        .add_event::<Collided>()
+        .add_systems(Update, collided_events_dumper_system)
+        // PLAYER STUFF
         .add_systems(Startup, setup_player.after(load_sprite_assets))
         .configure_sets(
             Update,

@@ -25,7 +25,7 @@ pub fn _bottom_centered_rect(width: f32, height: f32) -> Rect {
     Rect { min, max }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub struct Collision {
     pub contact_point: Vec2,
     pub normal: Vec2,

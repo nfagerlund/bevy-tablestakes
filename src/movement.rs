@@ -4,12 +4,11 @@
 //! move_continuous_ray_test; it gives much better stability and feel.
 
 use crate::{
-    collision::{AbsBBox, Solid, Walkbox},
+    collision::{AbsBBox, Collision, Solid, Walkbox},
     phys_space::PhysTransform,
     space_lookup::RstarAccess,
 };
 use bevy::prelude::*;
-use bevy::utils::EntityHashMap;
 
 type SolidsTree = RstarAccess<Solid>;
 const SOLID_SCANNING_DISTANCE: f32 = 64.0;
@@ -66,6 +65,19 @@ impl Motion {
 pub struct MotionResult {
     pub collided: bool,
     pub new_location: Vec2,
+}
+
+#[derive(Event, Debug)]
+pub struct Collided {
+    pub subject: Entity,
+    pub object: Entity,
+    pub collision: Collision,
+}
+
+pub fn collided_events_dumper_system(mut evs: EventReader<Collided>) {
+    for event in evs.read() {
+        info!("bimp: {:?}", event);
+    }
 }
 
 #[derive(Event)]
@@ -152,6 +164,7 @@ pub(crate) fn move_continuous_ray_test(
     solids_q: Query<(&Walkbox, &PhysTransform), With<Solid>>,
     solids_tree: Res<SolidsTree>,
     time: Res<Time>,
+    mut collided_events: EventWriter<Collided>,
 ) {
     let delta = time.delta_seconds();
 
@@ -241,6 +254,11 @@ pub(crate) fn move_continuous_ray_test(
                     {
                         // HEY, here's where we mark collision for the result:
                         collided = true;
+                        collided_events.send(Collided {
+                            subject: entity,
+                            object: c_e.entity,
+                            collision,
+                        });
 
                         // Ok moving on
                         let move_penalty = (1.0 - collision.normalized_time)
