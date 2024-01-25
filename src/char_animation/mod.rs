@@ -36,14 +36,6 @@ fn charanm_test_setup_system(mut commands: Commands, asset_server: Res<AssetServ
         CharAnimationState::new(anim_handle, Dir::W, Playback::Loop),
         Motion::new(Vec2::ZERO),
     ));
-
-    let test_texture_handle: Handle<Image> =
-        asset_server.load("sprites/sPlayerRun.aseprite#texture");
-    commands.spawn(SpriteBundle {
-        texture: test_texture_handle,
-        transform: Transform::from_translation(Vec3::new(10.0, 10.0, 3.0)),
-        ..default()
-    });
 }
 
 /// GOOFUS: an animation test entity who does the opposite of player inputs.
