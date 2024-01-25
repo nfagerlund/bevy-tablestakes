@@ -11,7 +11,7 @@ use crate::{
 };
 // use bevy_ecs_tilemap::prelude::*;
 
-pub fn overlap_chaperone(movers_q: Query<(Entity, &Walkbox, &PhysTransform), With<Motion>>) {
+pub fn _overlap_chaperone(movers_q: Query<(Entity, &Walkbox, &PhysTransform), With<Motion>>) {
     for [(a_ent, a_walkbox, a_transform), (b_ent, b_walkbox, b_transform)] in
         movers_q.iter_combinations()
     {
