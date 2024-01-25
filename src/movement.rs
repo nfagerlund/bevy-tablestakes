@@ -255,9 +255,11 @@ pub(crate) fn move_continuous_ray_test(
                         });
 
                         // Ok moving on
-                        let move_penalty = (1.0 - collision.normalized_time)
+                        let mut move_penalty = (1.0 - collision.normalized_time)
                             * collision.normal
                             * current_move.abs();
+                        // Arbitrary fudge factor to ensure you stay slightly *outside* whatever u hit.
+                        move_penalty += move_penalty.signum() * 0.0005;
 
                         // done
                         current_move + move_penalty
