@@ -170,11 +170,7 @@ pub(crate) fn move_continuous_ray_test(
     let mut mover_ids: Vec<(Entity, i8)> = mover_q
         .iter()
         .map(|(e, _, _, _, opp)| {
-            // I bet clippy knows some cool Option method to shrink this, but anyway,
-            let i = match opp {
-                Some(x) => x.0,
-                None => -1,
-            };
+            let i = opp.map_or(-1, |x| x.0);
             (e, i)
         })
         .collect();
