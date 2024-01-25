@@ -79,6 +79,7 @@ fn main() {
         .add_systems(Update, spawn_collider_debugs)
         .insert_resource(DebugSettings::default())
         .insert_resource(NumbersSettings::default())
+        .add_systems(Update, junkbox::junk::overlap_chaperone.after(Movers))
         // INSPECTOR STUFF
         .add_plugins(WorldInspectorPlugin::new())
         .register_type::<PhysTransform>()
