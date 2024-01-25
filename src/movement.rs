@@ -164,6 +164,9 @@ pub(crate) fn move_continuous_ray_test(
 
     // Get our entities, and sort them by push priority. More-pushable guys get moved first.
     // Unpushables can go any time.
+    // N.B.: this here is what limits us to "less than" for our push logic! If I could
+    // figure out how to sort by the real graph of push-er and push-ee, THEN
+    // I could enable pushes between equals.
     let mut mover_ids: Vec<(Entity, i8)> = mover_q
         .iter()
         .map(|(e, _, _, _, opp)| {
