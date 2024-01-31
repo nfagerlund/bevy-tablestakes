@@ -258,6 +258,7 @@ fn temp_setup_enemy(mut commands: Commands, animations: Res<AnimationsMap>) {
         phys_offset: PhysOffset(Vec2::ZERO),
         walkbox: Walkbox(Rect::default()),
         hitbox: Hitbox(None),
+        hurtbox: Hurtbox(None),
         shadow: HasShadow,
         top_down_matter: TopDownMatter::character(),
         speed: Speed(Speed::ENEMY_RUN), // ???
@@ -289,6 +290,7 @@ fn setup_player(mut commands: Commands, animations: Res<AnimationsMap>) {
         speed: Speed(Speed::RUN),
         walkbox: Walkbox(Rect::default()),
         hitbox: Hitbox(None),
+        hurtbox: Hurtbox(None),
         // --- New animation system
         char_animation_state: CharAnimationState::new(initial_animation, Dir::E, Playback::Loop),
         motion: Motion::new(Vec2::ZERO),
@@ -327,6 +329,7 @@ struct EnemyBundle {
 
     walkbox: Walkbox,
     hitbox: Hitbox,
+    hurtbox: Hurtbox,
 
     shadow: HasShadow,
     top_down_matter: TopDownMatter,
@@ -353,6 +356,7 @@ struct PlayerBundle {
 
     walkbox: Walkbox,
     hitbox: Hitbox,
+    hurtbox: Hurtbox,
 
     shadow: HasShadow,
     top_down_matter: TopDownMatter,
