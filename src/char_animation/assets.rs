@@ -147,16 +147,12 @@ fn load_aseprite(bytes: &[u8], load_context: &mut LoadContext) -> anyhow::Result
                         None => Vec2::ZERO, // Origin's non-optional.
                     };
 
-                    // Get the walkbox, position it relative to the origin, THEN flip the Y.
+                    // Get each box, position it relative to the origin, THEN flip the Y.
                     // (This is because source image coordinates go Y-down, but bevy spatial
                     // coordinates go Y-up.)
-                    let absolute_walkbox = rect_from_cel(&ase, "walkbox", i);
-                    let walkbox =
-                        absolute_walkbox.map(|r| flip_rect_y(move_rect_origin(r, origin)));
-
-                    // Same deal for hitbox as walkbox.
-                    let absolute_hitbox = rect_from_cel(&ase, "hitbox", i);
-                    let hitbox = absolute_hitbox.map(|r| flip_rect_y(move_rect_origin(r, origin)));
+                    let walkbox = anchored_physical_rect_from_cel(&ase, "walkbox", i, origin);
+                    let hitbox = anchored_physical_rect_from_cel(&ase, "hitbox", i, origin);
+                    let hurtbox = anchored_physical_rect_from_cel(&ase, "hurtbox", i, origin);
 
                     let anchor = anchor_transform.transform_point2(origin);
 
@@ -167,6 +163,7 @@ fn load_aseprite(bytes: &[u8], load_context: &mut LoadContext) -> anyhow::Result
                         anchor,
                         walkbox,
                         hitbox,
+                        hurtbox,
                     }
                 })
                 .collect();
@@ -232,6 +229,18 @@ fn remux_image(img: RgbaImage) -> Image {
         img.into_raw(),
         TextureFormat::Rgba8UnormSrgb,
     )
+}
+
+/// Get the bounding Rect for a cel's non-transparent pixels, located relative to
+/// a provided origin point (in y-down image coordinates) and then transformed into
+/// y-up engine physical coordinates.
+fn anchored_physical_rect_from_cel(
+    ase: &AsepriteFile,
+    layer_name: &str,
+    frame_index: u32,
+    origin: Vec2,
+) -> Option<Rect> {
+    rect_from_cel(ase, layer_name, frame_index).map(|r| flip_rect_y(move_rect_origin(r, origin)))
 }
 
 /// Get the bounding Rect for a cel's non-transparent pixels.

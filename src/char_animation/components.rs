@@ -95,7 +95,8 @@ pub struct CharAnimationFrame {
     pub walkbox: Option<Rect>,
     /// Bbox for the damage-dealing area of a frame.
     pub hitbox: Option<Rect>,
-    // todo: hurtbox,
+    /// Bbox for the damageable area of a frame.
+    pub hurtbox: Option<Rect>,
 }
 
 #[derive(Event)]
