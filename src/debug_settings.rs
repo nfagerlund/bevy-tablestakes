@@ -5,6 +5,7 @@ pub struct DebugSettings {
     pub debug_walkboxes: bool,
     pub debug_origins: bool,
     pub debug_hitboxes: bool,
+    pub debug_hurtboxes: bool,
     pub motion_kind: MotionKind,
     pub camera_kind: CameraKind,
 }

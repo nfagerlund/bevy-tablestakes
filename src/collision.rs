@@ -318,6 +318,7 @@ pub struct DebugAssets {
     box_mesh: Handle<Mesh>,
     walkbox_color: Handle<ColorMaterial>,
     hitbox_color: Handle<ColorMaterial>,
+    hurtbox_color: Handle<ColorMaterial>,
     origin_color: Handle<ColorMaterial>,
 }
 
@@ -332,6 +333,9 @@ pub struct WalkboxDebug;
 /// Marker component for hitbox debug mesh
 #[derive(Component, Default)]
 pub struct HitboxDebug;
+/// Marker component for hurtbox debug mesh
+#[derive(Component, Default)]
+pub struct HurtboxDebug;
 /// Marker component for origin debug mesh
 #[derive(Component, Default)]
 pub struct OriginDebug;
@@ -344,12 +348,14 @@ pub fn setup_debug_assets(
     let box_mesh = meshes.add(Mesh::from(shape::Quad::default()));
     let walkbox_color = materials.add(ColorMaterial::from(Color::rgba(0.5, 0.0, 0.5, 0.6)));
     let hitbox_color = materials.add(ColorMaterial::from(Color::rgba(0.8, 0.0, 0.0, 0.6)));
+    let hurtbox_color = materials.add(ColorMaterial::from(Color::rgba(0.0, 0.8, 0.0, 0.6)));
     let origin_color = materials.add(ColorMaterial::from(Color::rgba(1.0, 1.0, 1.0, 1.0)));
 
     commands.insert_resource(DebugAssets {
         box_mesh,
         walkbox_color,
         hitbox_color,
+        hurtbox_color,
         origin_color,
     });
 }
@@ -364,18 +370,22 @@ pub fn spawn_collider_debugs(
             Option<Ref<Solid>>,
             Option<Ref<Walkbox>>,
             Option<Ref<Hitbox>>,
+            Option<Ref<Hurtbox>>,
         ),
-        Or<(Added<Solid>, Added<Walkbox>, Added<Hitbox>)>,
+        Or<(Added<Solid>, Added<Walkbox>, Added<Hitbox>, Added<Hurtbox>)>,
     >,
     old_origins_q: Query<&OriginDebug>,
     mut commands: Commands,
     assets: Res<DebugAssets>,
 ) {
     if !new_collider_q.is_empty() {
-        for (collider, maybe_children, r_solid, r_walkbox, r_hitbox) in new_collider_q.iter() {
+        for (collider, maybe_children, r_solid, r_walkbox, r_hitbox, r_hurtbox) in
+            new_collider_q.iter()
+        {
             let solid_added = r_solid.map_or(false, |x| x.is_added());
             let walkbox_added = r_walkbox.map_or(false, |x| x.is_added());
             let hitbox_added = r_hitbox.map_or(false, |x| x.is_added());
+            let hurtbox_added = r_hurtbox.map_or(false, |x| x.is_added());
 
             commands.entity(collider).with_children(|parent| {
                 // Maybe spawn walkbox debugs
@@ -398,6 +408,19 @@ pub fn spawn_collider_debugs(
                         MaterialMesh2dBundle {
                             mesh: Mesh2dHandle(assets.box_mesh.clone()),
                             material: assets.hitbox_color.clone(),
+                            visibility: Visibility::Inherited,
+                            ..default()
+                        },
+                    ));
+                }
+
+                // Maybe spawn hurtbox debugs
+                if hurtbox_added {
+                    parent.spawn((
+                        HurtboxDebug,
+                        MaterialMesh2dBundle {
+                            mesh: Mesh2dHandle(assets.box_mesh.clone()),
+                            material: assets.hurtbox_color.clone(),
                             visibility: Visibility::Inherited,
                             ..default()
                         },
