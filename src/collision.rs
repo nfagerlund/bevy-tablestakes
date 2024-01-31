@@ -13,6 +13,9 @@ pub struct Walkbox(pub Rect);
 #[derive(Component, Reflect, Default)]
 pub struct Hitbox(pub Option<Rect>);
 
+#[derive(Component, Reflect, Default)]
+pub struct Hurtbox(pub Option<Rect>);
+
 pub fn centered_rect(width: f32, height: f32) -> Rect {
     let min = Vec2::new(-width / 2., -height / 2.);
     let max = Vec2::new(width / 2., height / 2.);
