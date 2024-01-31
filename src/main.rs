@@ -91,8 +91,7 @@ fn main() {
         .add_plugins(ResourceInspectorPlugin::<DebugSettings>::new())
         .add_plugins(ResourceInspectorPlugin::<NumbersSettings>::new())
         .add_systems(Update, (
-            debug_walkboxes_system,
-            debug_hitboxes_system,
+            debug_collider_boxes_system,
             debug_origins_system,
         ))
         // LDTK STUFF

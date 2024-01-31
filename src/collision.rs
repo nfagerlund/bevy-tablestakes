@@ -487,72 +487,63 @@ pub fn debug_origins_system(
     }
 }
 
-/// Update size and position of collider debug meshes, since walkboxes can
-/// change frame-by-frame.
-pub fn debug_walkboxes_system(
-    collider_q: Query<(Entity, &Walkbox)>,
-    mut debug_mesh_q: Query<(&Parent, &mut Transform, &mut Visibility), With<WalkboxDebug>>,
-    debug_settings: Res<DebugSettings>,
+// A private helper to deduplicate logic for walkbox/hitbox/hurtbox debugs
+fn flip_collider_debug_meshes<'a>(
+    enabled: bool,
+    z_stack: f32,
+    debug_meshes: impl Iterator<Item = (&'a Parent, Mut<'a, Transform>, Mut<'a, Visibility>)>,
+    rect_getter: impl Fn(Entity) -> Option<Rect>,
 ) {
-    for (parent, mut transform, mut visibility) in debug_mesh_q.iter_mut() {
-        if debug_settings.debug_walkboxes {
-            let Ok((_, walkbox)) = collider_q.get(parent.get()) else {
-                info!("?!?! tried to debug walkbox of some poor orphaned debug entity.");
-                continue;
-            };
-            // Unconditional, not inherited:
+    for (parent, mut transform, mut visibility) in debug_meshes {
+        if let (true, Some(active_rect)) = (enabled, rect_getter(parent.get())) {
             *visibility = Visibility::Visible;
-            // ok... need to set our scale to the size of the walkbox, and then
-            // offset our translation relative to our parent by the difference
-            // between their walkbox's center and their actual anchor point
-            // (because the mesh's anchor is always centered).
-            let size = walkbox.0.max - walkbox.0.min;
-            let center = walkbox.0.min + size / 2.0;
-            // and of course, the anchor point of the rect is (0,0), by definition.
+            let size = active_rect.max - active_rect.min;
+            let center = active_rect.min + size / 2.0;
             transform.scale = size.extend(1.0);
-            // draw on top of parent by A LOT. (cheating out of interactions with the TopDownMatter system.)
-            transform.translation = center.extend(40.0);
+            transform.translation = center.extend(z_stack);
         } else {
             *visibility = Visibility::Hidden;
-            // we're done
         }
     }
 }
 
-/// Separate system bc many walkbox-havers lack hitboxen.
-pub fn debug_hitboxes_system(
-    collider_q: Query<(Entity, &Hitbox)>,
-    mut debug_mesh_q: Query<(&Parent, &mut Transform, &mut Visibility), With<HitboxDebug>>,
+/// Update size and position of collider debug meshes, since walkboxes etc. can
+/// change frame-by-frame.
+pub fn debug_collider_boxes_system(
+    walkbox_q: Query<&Walkbox>,
+    hitbox_q: Query<&Hitbox>,
+    hurtbox_q: Query<&Hurtbox>,
+    mut debug_mesh_set: ParamSet<(
+        Query<(&Parent, &mut Transform, &mut Visibility), With<WalkboxDebug>>,
+        Query<(&Parent, &mut Transform, &mut Visibility), With<HitboxDebug>>,
+        Query<(&Parent, &mut Transform, &mut Visibility), With<HurtboxDebug>>,
+    )>,
     debug_settings: Res<DebugSettings>,
 ) {
-    if debug_settings.debug_hitboxes {
-        debug_mesh_q
-            .iter_mut()
-            .for_each(|(parent, mut transform, mut visibility)| {
-                // Parent check + hitbox data retrieval
-                let Ok((_, hitbox)) = collider_q.get(parent.get()) else {
-                    info!("?!?! tried to debug hitbox of some poor orphaned debug entity.");
-                    return;
-                };
-                // We actually swinging rn?
-                if let Hitbox(Some(active_hitbox)) = hitbox {
-                    // yep!
-                    *visibility = Visibility::Visible;
-                    let size = active_hitbox.max - active_hitbox.min;
-                    let center = active_hitbox.min + size / 2.0;
-                    transform.scale = size.extend(1.0);
-                    // z-stack: above walkbox
-                    transform.translation = center.extend(41.0);
-                } else {
-                    // nope!
-                    *visibility = Visibility::Hidden;
-                }
-            });
-    } else {
-        debug_mesh_q.iter_mut().for_each(|(_, _, mut visibility)| {
-            *visibility = Visibility::Hidden;
-        });
-    }
+    // The walkbox getter uses .map, bc it has an infallible Rect inside.
+    // Other getters use .and_then, bc they have Option<Rect>s inside.
+
+    // Walkboxes
+    flip_collider_debug_meshes(
+        debug_settings.debug_walkboxes,
+        40.0, // WAY above parent, to avoid TopDownMatter interactions
+        debug_mesh_set.p0().iter_mut(),
+        |e| walkbox_q.get(e).ok().map(|wb| wb.0),
+    );
+    // Hitboxes
+    flip_collider_debug_meshes(
+        debug_settings.debug_hitboxes,
+        41.0,
+        debug_mesh_set.p1().iter_mut(),
+        |e| hitbox_q.get(e).ok().and_then(|hb| hb.0),
+    );
+    // Hurtboxes
+    flip_collider_debug_meshes(
+        debug_settings.debug_hurtboxes,
+        42.0,
+        debug_mesh_set.p2().iter_mut(),
+        |e| hurtbox_q.get(e).ok().and_then(|hb| hb.0),
+    );
 }
 
 #[cfg(test)]
