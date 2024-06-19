@@ -3,7 +3,28 @@ use bevy::{
     prelude::*,
 };
 use bevy_ecs_ldtk::prelude::*;
+
+use crate::{
+    collision::{AbsBBox, Walkbox},
+    movement::Motion,
+    phys_space::PhysTransform,
+};
 // use bevy_ecs_tilemap::prelude::*;
+
+pub fn _overlap_chaperone(movers_q: Query<(Entity, &Walkbox, &PhysTransform), With<Motion>>) {
+    for [(a_ent, a_walkbox, a_transform), (b_ent, b_walkbox, b_transform)] in
+        movers_q.iter_combinations()
+    {
+        let a_bbox = AbsBBox::from_rect(a_walkbox.0, a_transform.translation.truncate());
+        let b_bbox = AbsBBox::from_rect(b_walkbox.0, b_transform.translation.truncate());
+        if a_bbox.collide(b_bbox) {
+            info!(
+                "Hanky-panky detected between {:?} and {:?} \n ({:.8?}) \n ({:.8?})",
+                a_ent, b_ent, a_bbox, b_bbox
+            );
+        }
+    }
+}
 
 pub fn _debug_z_system(
     // mut local_timer: Local<Timer>,

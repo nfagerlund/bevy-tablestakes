@@ -3,12 +3,11 @@ use bevy::sprite::{Anchor, TextureAtlas};
 
 use super::assets::*;
 use super::components::*;
+use crate::collision::{Hitbox, Hurtbox, Walkbox};
 use crate::compass::Dir;
 use crate::toolbox::countup_timer::CountupTimer;
 use crate::toolbox::{flip_rect_x, flip_vec2_x};
-use crate::Hitbox;
 use crate::Motion;
-use crate::Walkbox;
 
 #[derive(SystemSet, Clone, Debug, PartialEq, Eq, Hash)]
 pub struct CharAnimationSystems;
@@ -182,11 +181,16 @@ pub fn charanm_animate_system(
 fn charanm_update_colliders_system(
     animations: Res<Assets<CharAnimation>>,
     mut query: Query<
-        (&CharAnimationState, &mut Walkbox, Option<&mut Hitbox>),
+        (
+            &CharAnimationState,
+            &mut Walkbox,
+            Option<&mut Hitbox>,
+            Option<&mut Hurtbox>,
+        ),
         Changed<TextureAtlasSprite>,
     >,
 ) {
-    for (state, mut walkbox, hitbox) in query.iter_mut() {
+    for (state, mut walkbox, hitbox, hurtbox) in query.iter_mut() {
         let Some(animation) = animations.get(&state.animation) else {
             continue;
         };
@@ -204,8 +208,12 @@ fn charanm_update_colliders_system(
 
         // Hitbox is both optional as a whole (entity does/doesn't ever attack), and has
         // an optional inner value (entity is/isn't dealing damage this frame).
-        if let Some(mut hb) = hitbox {
-            hb.0 = frame.hitbox.map(|r| maybe_mirrored(r, state.flip_x));
+        if let Some(mut hit) = hitbox {
+            hit.0 = frame.hitbox.map(|r| maybe_mirrored(r, state.flip_x));
+        }
+        // Same for hurtbox.
+        if let Some(mut hurt) = hurtbox {
+            hurt.0 = frame.hurtbox.map(|r| maybe_mirrored(r, state.flip_x));
         }
     }
 }

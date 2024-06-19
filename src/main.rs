@@ -91,8 +91,7 @@ fn main() {
         .add_plugins(ResourceInspectorPlugin::<DebugSettings>::new())
         .add_plugins(ResourceInspectorPlugin::<NumbersSettings>::new())
         .add_systems(Update, (
-            debug_walkboxes_system,
-            debug_hitboxes_system,
+            debug_collider_boxes_system,
             debug_origins_system,
         ))
         // LDTK STUFF
@@ -129,18 +128,40 @@ fn main() {
                 enemy_state_changes
             ).chain().in_set(SpriteChangers))
         .add_systems(Update, acquire_aggro.after(Movers).after(CameraMovers))
-        // PLAYER STUFF
+        // SHARED MOVEMENT STUFF
         .add_event::<Landed>()
-        .add_systems(Startup, setup_player.after(load_sprite_assets))
+        .add_event::<Collided>()
         .configure_sets(
             Update,
             (
                 CharAnimationSystems, // which is after SpriteChangers
                 MovePlanners,
+                // push on/off systems go between here, but idk a good name for that set yet
+                MoveModifiers,
                 Movers,
                 CameraMovers,
             ).chain()
         )
+        .add_systems(
+            Update,
+            (
+                mobile_free_velocity,
+                mobile_fixed_velocity,
+                launch_and_fall,
+                mobile_chase_entity,
+            ).in_set(MovePlanners),
+        )
+        .add_systems(
+            Update,
+            (
+                end_push,
+                start_push,
+                apply_deferred,
+            ).chain()
+            .after(MovePlanners)
+            .before(MoveModifiers)
+        )
+        .add_systems(Update, push_system.in_set(MoveModifiers))
         .add_systems(
             Update,
             (
@@ -151,6 +172,8 @@ fn main() {
             ).in_set(Movers).ambiguous_with(Movers).before(move_z_axis)
         )
         .add_systems(Update, move_z_axis.in_set(Movers))
+        // PLAYER STUFF
+        .add_systems(Startup, setup_player.after(load_sprite_assets))
         .add_systems(
             Update,
             (
@@ -159,15 +182,6 @@ fn main() {
                 player_state_changes,
                 apply_deferred
             ).chain().in_set(SpriteChangers)
-        )
-        .add_systems(
-            Update,
-            (
-                mobile_free_velocity,
-                mobile_fixed_velocity,
-                launch_and_fall,
-                mobile_chase_entity,
-            ).in_set(MovePlanners),
         )
         .add_systems(Update, player_queue_wall_bonk.after(Movers))
         .add_systems(
@@ -207,6 +221,9 @@ fn main() {
 pub struct MovePlanners;
 
 #[derive(SystemSet, Clone, Debug, PartialEq, Eq, Hash)]
+pub struct MoveModifiers;
+
+#[derive(SystemSet, Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Movers;
 
 #[derive(SystemSet, Clone, Debug, PartialEq, Eq, Hash)]
@@ -241,10 +258,12 @@ fn temp_setup_enemy(mut commands: Commands, animations: Res<AnimationsMap>) {
         phys_offset: PhysOffset(Vec2::ZERO),
         walkbox: Walkbox(Rect::default()),
         hitbox: Hitbox(None),
+        hurtbox: Hurtbox(None),
         shadow: HasShadow,
         top_down_matter: TopDownMatter::character(),
         speed: Speed(Speed::ENEMY_RUN), // ???
         motion: Motion::new(Vec2::ZERO),
+        push_priority: PushPriority::enemy(),
 
         patrol: PatrolArea::Patch {
             home: whence.truncate(),
@@ -271,9 +290,11 @@ fn setup_player(mut commands: Commands, animations: Res<AnimationsMap>) {
         speed: Speed(Speed::RUN),
         walkbox: Walkbox(Rect::default()),
         hitbox: Hitbox(None),
+        hurtbox: Hurtbox(None),
         // --- New animation system
         char_animation_state: CharAnimationState::new(initial_animation, Dir::E, Playback::Loop),
         motion: Motion::new(Vec2::ZERO),
+        push_priority: PushPriority::player(),
         // Initial gameplay state
         state_machine: PlayerStateMachine::new(PlayerState::Idle),
         state_timer: StateTimer::default(),
@@ -308,12 +329,14 @@ struct EnemyBundle {
 
     walkbox: Walkbox,
     hitbox: Hitbox,
+    hurtbox: Hurtbox,
 
     shadow: HasShadow,
     top_down_matter: TopDownMatter,
 
     speed: Speed,
     motion: Motion,
+    push_priority: PushPriority,
 
     patrol: PatrolArea,
 }
@@ -333,12 +356,14 @@ struct PlayerBundle {
 
     walkbox: Walkbox,
     hitbox: Hitbox,
+    hurtbox: Hurtbox,
 
     shadow: HasShadow,
     top_down_matter: TopDownMatter,
 
     speed: Speed,
     motion: Motion,
+    push_priority: PushPriority,
 }
 
 /// Marker component for a spawned LdtkWorldBundle

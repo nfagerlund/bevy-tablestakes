@@ -1,10 +1,11 @@
 //! Behavioral components and events for... all kinds of shit.
 
 use crate::{
-    debug_settings::NumbersSettings, // Mmmmmmm need to reconsider where this goes
+    debug_settings::NumbersSettings,
     input::CurrentInputs,
-    movement::{Motion, Speed},
+    movement::{Collided, Motion, PushPriority, Speed},
     phys_space::PhysTransform,
+    toolbox::turned_away_from,
     Player,
 };
 use bevy::prelude::*;
@@ -70,6 +71,15 @@ pub struct Aggro {
     pub target: Entity,
     /// The entity's home point, and the max distance it's willing to stray from it.
     pub limit: Option<(Vec2, f32)>,
+}
+
+/// Behavior: currently pushing another entity
+#[derive(Component)]
+#[component(storage = "SparseSet")]
+pub struct Pushing {
+    pub target: Entity,
+    /// Must be cardinal.
+    pub activation_dir: Vec2,
 }
 
 // ------- Behavior events -------
@@ -164,6 +174,59 @@ pub fn acquire_aggro(
                     target: player,
                 });
             }
+        }
+    }
+}
+
+// Needs to go between main move planners and push system, with an apply_deferred.
+pub fn start_push(
+    mut collision_events: EventReader<Collided>,
+    pushables_q: Query<(&PushPriority, Option<&Pushing>), Without<Headlong>>,
+    mut commands: Commands,
+) {
+    for event in collision_events.read() {
+        // Can only push if you're not pushing someone already
+        if let Ok((subj_priority, None)) = pushables_q.get(event.subject) {
+            if let Ok((obj_priority, _)) = pushables_q.get(event.object) {
+                if subj_priority.0 > obj_priority.0 {
+                    info!("{:?} now pushing {:?}", event.subject, event.object);
+                    commands.entity(event.subject).insert(Pushing {
+                        target: event.object,
+                        activation_dir: -1.0 * event.collision.normal,
+                    });
+                }
+            }
+        }
+    }
+}
+
+// Needs to go between main move planners and push system, with an apply_deferred.
+pub fn end_push(mut commands: Commands, pushing_q: Query<(Entity, &Motion, &Pushing)>) {
+    for (entity, motion, pushing) in pushing_q.iter() {
+        if turned_away_from(pushing.activation_dir, motion.velocity) {
+            info!("{:?} no longer pushing {:?}", entity, pushing.target);
+            commands.entity(entity).remove::<Pushing>();
+        }
+    }
+}
+
+/// Expects to go after all the "normal" move planners.
+pub fn push_system(
+    mut q_set: ParamSet<(
+        Query<(&Pushing, &Motion)>,             // pushing
+        Query<&mut Motion, With<PushPriority>>, // pushable
+    )>,
+) {
+    // Gotta do ParamSet and an intermediate collect, bc pushers and pushables aren't mutually exclusive.
+    let impulses: Vec<(Entity, Vec2)> = q_set
+        .p0()
+        .iter()
+        .map(|(pushing, motion)| (pushing.target, motion.velocity))
+        .collect();
+    let mut pushable_q = q_set.p1();
+    for (entity, impulse) in impulses.into_iter() {
+        if let Ok(mut motion) = pushable_q.get_mut(entity) {
+            motion.velocity += impulse;
         }
     }
 }
