@@ -3,9 +3,9 @@ use bevy::asset::Handle;
 use bevy::math::{prelude::*, Rect};
 use bevy::prelude::{Component, Entity, Event};
 use bevy::reflect::Reflect;
-use bevy::reflect::TypePath;
-use bevy::sprite::TextureAtlas;
+use bevy::sprite::TextureAtlasLayout;
 use bevy::utils::Duration;
+use bevy::{reflect::TypePath, render::texture::Image};
 use std::collections::HashMap;
 
 use crate::compass::{self};
@@ -15,7 +15,8 @@ use crate::toolbox::countup_timer::CountupTimer;
 pub struct CharAnimation {
     pub variants: VariantsMap,
     pub directionality: Directionality,
-    pub texture_atlas: Handle<TextureAtlas>,
+    pub layout: Handle<TextureAtlasLayout>,
+    pub texture: Handle<Image>,
 }
 
 #[derive(Debug)]

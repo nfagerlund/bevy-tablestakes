@@ -79,13 +79,21 @@ fn charanm_set_directions_system(
     }
 }
 
+/// This system handles the main logic of progressing through an animation:
+/// tick the frame timer, then reset it and flip to the next animation frame
+/// if it's time to do that.
 pub fn charanm_animate_system(
     animations: Res<Assets<CharAnimation>>,
-    mut query: Query<(&mut CharAnimationState, &mut TextureAtlasSprite, Entity)>,
+    mut query: Query<(
+        &mut CharAnimationState,
+        &mut Sprite,
+        &mut TextureAtlas,
+        Entity,
+    )>,
     time: Res<Time>,
     mut finished_events: EventWriter<AnimateFinishedEvent>,
 ) {
-    for (mut state, mut sprite, entity) in query.iter_mut() {
+    for (mut state, mut sprite, mut atlas, entity) in query.iter_mut() {
         let Some(animation) = animations.get(&state.animation) else {
             continue;
         };
@@ -150,7 +158,10 @@ pub fn charanm_animate_system(
             // Uh, dig into the variant and frame to see what actual
             // texture index we oughtta use, and set it.
             let frame = &variant.frames[state.frame];
-            sprite.index = frame.index;
+            // Atlas-based sprite data is split across the Sprite (shared with all
+            // the stuff a non-animating sprite needs) and the TextureAtlas (just
+            // the index of which rect to show, and a Handle<...Layout>).
+            atlas.index = frame.index;
             sprite.flip_x = state.flip_x;
             // Also, set the origin:
             let anchor = if state.flip_x {
@@ -175,7 +186,7 @@ pub fn charanm_animate_system(
 /// - We don't remove collider components! The component itself needs to be able
 /// to express the condition of "yeah I do this type of interaction, but have no
 /// collider info for this frame".
-/// - We're filtering on `Changed<TextureAtlasSprite>` because the animation state
+/// - We're filtering on `Changed<TextureAtlas>` because the animation state
 /// contains a Timer and thus changes constantly... but we only update the atlas
 /// index when it's time to flip frames.
 fn charanm_update_colliders_system(
@@ -187,7 +198,7 @@ fn charanm_update_colliders_system(
             Option<&mut Hitbox>,
             Option<&mut Hurtbox>,
         ),
-        Changed<TextureAtlasSprite>,
+        Changed<TextureAtlas>,
     >,
 ) {
     for (state, mut walkbox, hitbox, hurtbox) in query.iter_mut() {
@@ -227,17 +238,27 @@ fn maybe_mirrored(r: Rect, flip_x: bool) -> Rect {
     }
 }
 
+/// Texture atlas sprites require two asset Handles, per the SpriteSheetBundle:
+///
+/// - a Handle<Image> (as a loose component)
+/// - a Handle<TextureAtlasLayout> (inside the TextureAtlas component)
+///
+/// For an entity managed by the char_animation system, both of those must always
+/// match the handles from the CharAnimationState. So, this system syncs em, with
+/// a quick check first to avoid spurious change events.
 fn charanm_atlas_reassign_system(
     animations: Res<Assets<CharAnimation>>,
-    mut query: Query<(&CharAnimationState, &mut Handle<TextureAtlas>)>,
+    mut query: Query<(&CharAnimationState, &mut TextureAtlas, &mut Handle<Image>)>,
 ) {
-    for (state, mut atlas_handle) in query.iter_mut() {
+    for (state, mut atlas, mut texture) in query.iter_mut() {
         // get the animation, get the handle off it, compare the handles, and if
         // they don't match, replace the value.
         if let Some(animation) = animations.get(&state.animation) {
-            let desired_atlas_handle = &animation.texture_atlas;
-            if *desired_atlas_handle != *atlas_handle {
-                *atlas_handle = desired_atlas_handle.clone();
+            if atlas.layout != animation.layout {
+                atlas.layout = animation.layout.clone();
+            }
+            if *texture != animation.texture {
+                *texture = animation.texture.clone();
             }
         }
     }
