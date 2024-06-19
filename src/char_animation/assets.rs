@@ -9,6 +9,7 @@ use asefile::AsepriteFile;
 use bevy::asset::AsyncReadExt;
 use bevy::asset::{io::Reader, AssetLoader, BoxedFuture, LoadContext};
 use bevy::math::{prelude::*, Affine2, Rect};
+use bevy::render::render_asset::RenderAssetUsages;
 use bevy::render::{
     render_resource::{Extent3d, TextureDimension, TextureFormat},
     texture::{Image, TextureFormatPixelInfo},
@@ -97,6 +98,7 @@ fn load_aseprite(bytes: &[u8], load_context: &mut LoadContext) -> anyhow::Result
             TextureDimension::D2,
             &[0, 0, 0, 0],                 // clear
             TextureFormat::Rgba8UnormSrgb, // Could frame_images[0].format(), but hardcode for now.
+            RenderAssetUsages::default(),
         );
         // copy time
         let mut cur_x = 0_usize;
@@ -228,6 +230,7 @@ fn remux_image(img: RgbaImage) -> Image {
         TextureDimension::D2,
         img.into_raw(),
         TextureFormat::Rgba8UnormSrgb,
+        RenderAssetUsages::default(),
     )
 }
 
@@ -293,6 +296,7 @@ fn non_empty(pixel: &image::Rgba<u8>) -> bool {
     alpha(pixel) != 0
 }
 
+// TODO 0.13: maybe actually use TextureAtlasBuilder now. :thonking:
 // Variation on a TextureAtlasBuilder fn (which I can't use directly bc it
 // relies on runtime asset collections):
 // https://github.com/bevyengine/bevy/blob/c27cc59e0/crates/bevy_sprite/src/texture_atlas_builder.rs#L95

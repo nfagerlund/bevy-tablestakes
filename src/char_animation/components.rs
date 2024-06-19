@@ -3,7 +3,7 @@ use bevy::asset::Handle;
 use bevy::math::{prelude::*, Rect};
 use bevy::prelude::{Component, Entity, Event};
 use bevy::reflect::Reflect;
-use bevy::reflect::{TypePath, TypeUuid};
+use bevy::reflect::TypePath;
 use bevy::sprite::TextureAtlas;
 use bevy::utils::Duration;
 use std::collections::HashMap;
@@ -11,8 +11,7 @@ use std::collections::HashMap;
 use crate::compass::{self};
 use crate::toolbox::countup_timer::CountupTimer;
 
-#[derive(Asset, Debug, TypeUuid, TypePath)]
-#[uuid = "585e2e41-4a97-42ef-a13e-55761c854bb4"]
+#[derive(Asset, Debug, TypePath)]
 pub struct CharAnimation {
     pub variants: VariantsMap,
     pub directionality: Directionality,

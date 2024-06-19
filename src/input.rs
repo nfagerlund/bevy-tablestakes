@@ -31,19 +31,19 @@ pub fn get_gamepad_movement_vector(gamepad: Gamepad, axes: Res<Axis<GamepadAxis>
 }
 
 /// helper function: forward keycodes to it, get a vec back.
-pub fn get_kb_movement_vector(keys: &Res<Input<KeyCode>>) -> Vec2 {
+pub fn get_kb_movement_vector(keys: &Res<ButtonInput<KeyCode>>) -> Vec2 {
     let mut x = 0f32;
     let mut y = 0f32;
-    if keys.pressed(KeyCode::Left) {
+    if keys.pressed(KeyCode::ArrowLeft) {
         x -= 1.0;
     }
-    if keys.pressed(KeyCode::Right) {
+    if keys.pressed(KeyCode::ArrowRight) {
         x += 1.0;
     }
-    if keys.pressed(KeyCode::Up) {
+    if keys.pressed(KeyCode::ArrowUp) {
         y += 1.0; // bc, opposite of other engines so far
     }
-    if keys.pressed(KeyCode::Down) {
+    if keys.pressed(KeyCode::ArrowDown) {
         y -= 1.0;
     }
     Vec2::new(x, y).normalize_or_zero()
@@ -120,7 +120,7 @@ pub fn accept_input_system(
     active_gamepad: Option<Res<ActiveGamepad>>,
     mut inputs: ResMut<CurrentInputs>,
     axes: Res<Axis<GamepadAxis>>,
-    keys: Res<Input<KeyCode>>,
+    keys: Res<ButtonInput<KeyCode>>,
 ) {
     // get movement intent
     let mut gamepad_movement = None;

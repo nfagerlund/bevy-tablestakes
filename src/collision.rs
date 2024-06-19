@@ -340,12 +340,13 @@ pub struct HurtboxDebug;
 #[derive(Component, Default)]
 pub struct OriginDebug;
 
+// TODO 0.13 replace these meshes with gizmos!
 pub fn setup_debug_assets(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<ColorMaterial>>,
     mut commands: Commands,
 ) {
-    let box_mesh = meshes.add(Mesh::from(shape::Quad::default()));
+    let box_mesh = meshes.add(Mesh::from(Rectangle::default()));
     let walkbox_color = materials.add(ColorMaterial::from(Color::rgba(0.5, 0.0, 0.5, 0.6)));
     let hitbox_color = materials.add(ColorMaterial::from(Color::rgba(0.8, 0.0, 0.0, 0.6)));
     let hurtbox_color = materials.add(ColorMaterial::from(Color::rgba(0.0, 0.8, 0.0, 0.6)));
