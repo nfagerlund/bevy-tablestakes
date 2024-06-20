@@ -2,7 +2,7 @@ use bevy::prelude::*;
 use bevy::sprite::{Anchor, TextureAtlas};
 
 use super::assets::*;
-use super::components::*;
+use super::types::*;
 use crate::collision::{Hitbox, Hurtbox, Walkbox};
 use crate::compass::Dir;
 use crate::toolbox::countup_timer::CountupTimer;

@@ -6,10 +6,10 @@ use crate::Motion;
 
 // Breaking stuff up for organization, but functionally this is just one thing from the outside.
 mod assets;
-mod components;
 mod systems;
-pub use self::components::*;
+mod types;
 pub use self::systems::*;
+pub use self::types::*;
 
 /// GOOFUS SYSTEM: Follow the birdie
 fn charanm_test_set_motion_system(

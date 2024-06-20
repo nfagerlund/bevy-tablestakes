@@ -2,7 +2,7 @@
 //! combination of texture atlases and animation data. This is the messiest
 //! stuff in this module, so it's very nice to have it isolated.
 
-use super::components::*;
+use super::types::*;
 use crate::toolbox::{flip_rect_y, move_rect_origin};
 
 use asefile::AsepriteFile;
