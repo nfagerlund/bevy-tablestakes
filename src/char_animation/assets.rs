@@ -10,10 +10,11 @@ use bevy::asset::AsyncReadExt;
 use bevy::asset::{io::Reader, AssetLoader, BoxedFuture, LoadContext};
 use bevy::math::{prelude::*, Affine2, Rect};
 use bevy::render::{
+    render_asset::RenderAssetUsages,
     render_resource::{Extent3d, TextureDimension, TextureFormat},
     texture::{Image, TextureFormatPixelInfo},
 };
-use bevy::sprite::TextureAtlas;
+use bevy::sprite::TextureAtlasLayout;
 use bevy::utils::Duration;
 use image::RgbaImage;
 use std::collections::HashMap;
@@ -49,7 +50,7 @@ const REFLECT_Y: Mat2 = Mat2::from_cols_array(&REFLECT_Y_COMPONENTS);
 const OFFSET_TO_CENTER: Vec2 = Vec2::new(-0.5, 0.5);
 
 /// Loads an aseprite file and uses it to construct a sprite sheet `#texture`, a
-/// `#texture_atlas` that indexes into that sprite sheet, and a top-level
+/// `#texture_atlas_layout` that indexes into that sprite sheet, and a top-level
 /// `CharAnimation`. The individual `CharAnimationFrames` in the
 /// `CharAnimationVariants` contain indexes into the `TextureAtlas`.
 /// Assumptions:
@@ -97,6 +98,7 @@ fn load_aseprite(bytes: &[u8], load_context: &mut LoadContext) -> anyhow::Result
             TextureDimension::D2,
             &[0, 0, 0, 0],                 // clear
             TextureFormat::Rgba8UnormSrgb, // Could frame_images[0].format(), but hardcode for now.
+            RenderAssetUsages::default(),
         );
         // copy time
         let mut cur_x = 0_usize;
@@ -108,21 +110,22 @@ fn load_aseprite(bytes: &[u8], load_context: &mut LoadContext) -> anyhow::Result
         atlas_texture
     });
 
-    // ~~ #texture_atlas ~~
-    let atlas_handle =
-        load_context.labeled_asset_scope("texture_atlas".to_string(), |_lc| -> TextureAtlas {
+    // ~~ #texture_atlas_layout ~~
+    let atlas_layout_handle = load_context.labeled_asset_scope(
+        "texture_atlas_layout".to_string(),
+        |_lc| -> TextureAtlasLayout {
             // N.b.: from_grid adds grid cells in left-to-right,
             // top-to-bottom order, and we rely on this to make the frame indices match.
             // capture handle for later
-            TextureAtlas::from_grid(
-                texture_handle,
+            TextureAtlasLayout::from_grid(
                 Vec2::new(width as f32, height as f32),
                 num_frames as usize,
                 1,
                 Some(Vec2::new(1.0, 0.0)),
                 None,
             )
-        });
+        },
+    );
 
     // Since our final frame indices are reliable, processing tags is easy.
     let mut variants: VariantsMap = HashMap::new();
@@ -207,7 +210,8 @@ fn load_aseprite(bytes: &[u8], load_context: &mut LoadContext) -> anyhow::Result
     let animation = CharAnimation {
         variants,
         directionality,
-        texture_atlas: atlas_handle,
+        layout: atlas_layout_handle,
+        texture: texture_handle,
     };
 
     // And, cut!
@@ -228,6 +232,7 @@ fn remux_image(img: RgbaImage) -> Image {
         TextureDimension::D2,
         img.into_raw(),
         TextureFormat::Rgba8UnormSrgb,
+        RenderAssetUsages::default(),
     )
 }
 
@@ -293,6 +298,7 @@ fn non_empty(pixel: &image::Rgba<u8>) -> bool {
     alpha(pixel) != 0
 }
 
+// TODO 0.13: maybe actually use TextureAtlasBuilder now. :thonking:
 // Variation on a TextureAtlasBuilder fn (which I can't use directly bc it
 // relies on runtime asset collections):
 // https://github.com/bevyengine/bevy/blob/c27cc59e0/crates/bevy_sprite/src/texture_atlas_builder.rs#L95

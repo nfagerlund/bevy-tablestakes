@@ -112,14 +112,14 @@ pub fn mobile_free_velocity(
     mut free_q: Query<(&mut Motion, &Speed), With<MobileFree>>,
     inputs: Res<CurrentInputs>,
 ) {
-    free_q.for_each_mut(|(mut motion, speed)| {
+    free_q.iter_mut().for_each(|(mut motion, speed)| {
         motion.velocity += inputs.movement * speed.0;
     });
 }
 
 /// Plan motion for entities moving on a fixed vector.
 pub fn mobile_fixed_velocity(mut fixed_q: Query<(&mut Motion, &Speed, &MobileFixed)>) {
-    fixed_q.for_each_mut(|(mut motion, speed, fixed)| {
+    fixed_q.iter_mut().for_each(|(mut motion, speed, fixed)| {
         motion.velocity += fixed.input * speed.0;
         if fixed.face {
             motion.face(fixed.input);
@@ -133,14 +133,16 @@ pub fn mobile_chase_entity(
     mut chase_q: Query<(&mut Motion, &Aggro, &Speed, &PhysTransform)>,
     all_locs_q: Query<&PhysTransform>,
 ) {
-    chase_q.for_each_mut(|(mut motion, aggro, speed, transform)| {
-        if let Ok(target_transform) = all_locs_q.get(aggro.target) {
-            let difference = target_transform.translation - transform.translation;
-            let input = difference.truncate().normalize_or_zero();
-            motion.velocity += input * speed.0;
-            motion.face(input);
-        }
-    });
+    chase_q
+        .iter_mut()
+        .for_each(|(mut motion, aggro, speed, transform)| {
+            if let Ok(target_transform) = all_locs_q.get(aggro.target) {
+                let difference = target_transform.translation - transform.translation;
+                let input = difference.truncate().normalize_or_zero();
+                motion.velocity += input * speed.0;
+                motion.face(input);
+            }
+        });
 }
 
 pub const LAUNCH_GRAVITY: f32 = 255.0; // Reduce z-velocity by X per second. idk!
@@ -152,7 +154,7 @@ pub fn launch_and_fall(
     numbers: Res<NumbersSettings>,
 ) {
     let gravity = numbers.launch_gravity;
-    launched_q.for_each_mut(|(mut motion, mut launch)| {
+    launched_q.iter_mut().for_each(|(mut motion, mut launch)| {
         motion.z_velocity += launch.z_velocity;
         launch.z_velocity -= gravity * time.delta_seconds();
     });

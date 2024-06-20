@@ -47,11 +47,11 @@ pub fn _debug_z_system(
 }
 
 pub fn _tile_info_barfing_system(
-    keys: Res<Input<KeyCode>>,
+    keys: Res<ButtonInput<KeyCode>>,
     tile_query: Query<(&IntGridCell, &GridCoords, &Transform)>,
     level_query: Query<(&LevelIid, &Transform)>,
 ) {
-    if keys.just_pressed(KeyCode::B) {
+    if keys.just_pressed(KeyCode::KeyB) {
         for (gridcell, _coords, transform) in tile_query.iter() {
             info!("{:?} at {:?}", gridcell, transform);
         }
@@ -100,7 +100,7 @@ pub fn _update_fps_debug_system(
     diagnostics: Res<DiagnosticsStore>,
     mut query: Query<&mut Text, With<FPSCounter>>,
 ) {
-    if let Some(fps) = diagnostics.get(FrameTimeDiagnosticsPlugin::FPS) {
+    if let Some(fps) = diagnostics.get(&FrameTimeDiagnosticsPlugin::FPS) {
         if let Some(average) = fps.average() {
             for mut text in query.iter_mut() {
                 text.sections[1].value = format!("{:.2}", average);

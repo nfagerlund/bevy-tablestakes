@@ -3,7 +3,7 @@
 
 use std::marker::PhantomData;
 
-use bevy::ecs::query::WorldQuery;
+use bevy::ecs::query::QueryData;
 use bevy::prelude::*;
 use rstar::{DefaultParams, PointDistance, RTree, RTreeObject, AABB};
 
@@ -268,8 +268,8 @@ fn add_added<MarkComp>(
 
 // OK, this is really interesting, I hadn't seen a worldquery struct before
 // taking spatial apart. Seems occasionally convenient!
-#[derive(WorldQuery)]
-#[world_query(mutable)]
+#[derive(QueryData)]
+#[query_data(mutable)]
 pub struct TrackedQuery<'a, MarkComp>
 where
     MarkComp: Sync + Send + 'static,

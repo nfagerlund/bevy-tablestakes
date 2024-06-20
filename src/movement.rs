@@ -99,20 +99,22 @@ pub(crate) fn move_z_axis(
     time: Res<Time>,
     mut landings: EventWriter<Landed>,
 ) {
-    mover_q.for_each_mut(|(entity, mut transform, mut motion)| {
-        // No collisions or anything, just move em.
-        if motion.z_velocity != 0.0 {
-            let mut new_z = transform.translation.z + motion.z_velocity * time.delta_seconds();
-            motion.z_velocity = 0.0;
-            if new_z <= 0.0 && transform.translation.z > 0.0 {
-                // 1. Don't sink below the floor
-                new_z = 0.0;
-                // 2. Announce we're coming in hot
-                landings.send(Landed(entity));
+    mover_q
+        .iter_mut()
+        .for_each(|(entity, mut transform, mut motion)| {
+            // No collisions or anything, just move em.
+            if motion.z_velocity != 0.0 {
+                let mut new_z = transform.translation.z + motion.z_velocity * time.delta_seconds();
+                motion.z_velocity = 0.0;
+                if new_z <= 0.0 && transform.translation.z > 0.0 {
+                    // 1. Don't sink below the floor
+                    new_z = 0.0;
+                    // 2. Announce we're coming in hot
+                    landings.send(Landed(entity));
+                }
+                transform.translation.z = new_z;
             }
-            transform.translation.z = new_z;
-        }
-    });
+        });
 }
 
 pub(crate) fn move_continuous_no_collision(
