@@ -1,9 +1,9 @@
 #![allow(clippy::type_complexity)] // it's just impossible
 
 use crate::{
-    assets_setup::*, behaviors::*, camera::*, char_animation::*, collision::*, compass::*,
-    debug_settings::*, entity_states::*, input::*, movement::*, phys_space::*, render::*,
-    sounds::*, space_lookup::RstarPlugin,
+    assets_setup::*, behaviors::*, camera::*, char_animation::*, collision::*, collision_debug::*,
+    compass::*, debug_settings::*, entity_states::*, input::*, movement::*, phys_space::*,
+    render::*, sounds::*, space_lookup::RstarPlugin, walls::*,
 };
 use bevy::{
     // ecs::schedule::{LogLevel, ScheduleBuildSettings},
@@ -25,6 +25,7 @@ mod behaviors;
 mod camera;
 mod char_animation;
 mod collision;
+mod collision_debug;
 mod compass;
 mod debug_settings;
 mod entity_states;
@@ -37,6 +38,7 @@ mod render;
 mod sounds;
 mod space_lookup;
 mod toolbox;
+mod walls;
 
 fn main() {
     let configured_default_plugins = DefaultPlugins
