@@ -59,7 +59,7 @@ fn main() {
         .set(LogPlugin {
             level: tracing::Level::INFO,
             filter: "wgpu=error".to_string(),
-            update_subscriber: None,
+            custom_layer: |_| None,
         });
 
     let mut app = App::new();
