@@ -253,7 +253,8 @@ fn temp_setup_enemy(mut commands: Commands, animations: Res<AnimationsMap>) {
         name: Name::new("Sloom"),
         state_machine: EnemyStateMachine::new(EnemyState::default()),
         state_timer: StateTimer::default(),
-        sprite_sheet: SpriteSheetBundle::default(), // Oh huh wow, I took over all that stuff.
+        sprite: SpriteBundle::default(),
+        texture_atlas: TextureAtlas::default(),
         char_animation_state: CharAnimationState::new(initial_animation, Dir::E, Playback::Loop),
         phys_transform: PhysTransform {
             translation: whence,
@@ -282,10 +283,11 @@ fn setup_player(mut commands: Commands, animations: Res<AnimationsMap>) {
     commands.spawn((PlayerBundle {
         // Remember who u are
         identity: Player,
-        sprite_sheet: SpriteSheetBundle {
+        sprite: SpriteBundle {
             transform: Transform::from_translation(Vec3::new(0.0, 0.0, 3.0)),
             ..Default::default()
         },
+        texture_atlas: TextureAtlas::default(),
         phys_transform: PhysTransform {
             translation: Vec3::ZERO,
         },
@@ -324,7 +326,8 @@ struct EnemyBundle {
     state_timer: StateTimer,
 
     // .......oh nice, everything below here is same as player. Ripe for future consolidation!
-    sprite_sheet: SpriteSheetBundle,
+    sprite: SpriteBundle,
+    texture_atlas: TextureAtlas,
     char_animation_state: CharAnimationState,
 
     phys_transform: PhysTransform,
@@ -351,7 +354,8 @@ struct PlayerBundle {
     state_machine: PlayerStateMachine,
     state_timer: StateTimer,
 
-    sprite_sheet: SpriteSheetBundle,
+    sprite: SpriteBundle,
+    texture_atlas: TextureAtlas,
     char_animation_state: CharAnimationState,
 
     phys_transform: PhysTransform,

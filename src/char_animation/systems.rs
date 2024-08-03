@@ -5,9 +5,9 @@ use super::assets::*;
 use super::types::*;
 use crate::collision::{Hitbox, Hurtbox, Walkbox};
 use crate::compass::Dir;
+use crate::movement::Motion;
 use crate::toolbox::countup_timer::CountupTimer;
 use crate::toolbox::{flip_rect_x, flip_vec2_x};
-use crate::Motion;
 
 #[derive(SystemSet, Clone, Debug, PartialEq, Eq, Hash)]
 pub struct CharAnimationSystems;
@@ -238,7 +238,7 @@ fn maybe_mirrored(r: Rect, flip_x: bool) -> Rect {
     }
 }
 
-/// Texture atlas sprites require two asset Handles, per the SpriteSheetBundle:
+/// Texture atlas sprites require two asset Handles:
 ///
 /// - a Handle<Image> (as a loose component)
 /// - a Handle<TextureAtlasLayout> (inside the TextureAtlas component)

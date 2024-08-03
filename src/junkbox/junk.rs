@@ -65,7 +65,7 @@ pub fn _setup_fps_debug(mut commands: Commands, asset_server: Res<AssetServer>) 
     let style = TextStyle {
         font: asset_server.load("fonts/m5x7.ttf"),
         font_size: 32.0,
-        color: Color::rgb(0.0, 1.0, 0.0),
+        color: Color::srgb(0.0, 1.0, 0.0),
     };
     // borrowing this from the bevymark example
     commands.spawn((

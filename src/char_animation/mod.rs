@@ -28,10 +28,11 @@ fn charanm_test_setup_system(mut commands: Commands, asset_server: Res<AssetServ
         Goofus,
         Name::new("Goofus"),
         TopDownMatter::character(),
-        SpriteSheetBundle {
+        SpriteBundle {
             transform: Transform::from_translation(Vec3::new(30.0, 60.0, 0.0)),
             ..default()
         },
+        TextureAtlas::default(),
         crate::render::HasShadow,
         CharAnimationState::new(anim_handle, Dir::W, Playback::Loop),
         Motion::new(Vec2::ZERO),
