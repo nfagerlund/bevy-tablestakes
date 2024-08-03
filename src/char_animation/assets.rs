@@ -7,7 +7,7 @@ use crate::toolbox::{flip_rect_y, move_rect_origin};
 
 use asefile::AsepriteFile;
 use bevy::asset::AsyncReadExt;
-use bevy::asset::{io::Reader, AssetLoader, BoxedFuture, LoadContext};
+use bevy::asset::{io::Reader, AssetLoader, LoadContext};
 use bevy::math::{prelude::*, Affine2, Rect};
 use bevy::render::{
     render_asset::RenderAssetUsages,
@@ -31,17 +31,15 @@ impl AssetLoader for CharAnimationLoader {
         &["aseprite", "ase"]
     }
 
-    fn load<'a>(
+    async fn load<'a>(
         &'a self,
-        reader: &'a mut Reader,
+        reader: &'a mut Reader<'_>,
         _settings: &'a Self::Settings,
-        load_context: &'a mut LoadContext,
-    ) -> BoxedFuture<'a, Result<Self::Asset, Self::Error>> {
-        Box::pin(async move {
-            let mut bytes = Vec::new();
-            reader.read_to_end(&mut bytes).await?;
-            load_aseprite(&bytes, load_context)
-        })
+        load_context: &'a mut LoadContext<'_>,
+    ) -> Result<Self::Asset, Self::Error> {
+        let mut bytes = Vec::new();
+        reader.read_to_end(&mut bytes).await?;
+        load_aseprite(&bytes, load_context)
     }
 }
 
@@ -118,10 +116,10 @@ fn load_aseprite(bytes: &[u8], load_context: &mut LoadContext) -> anyhow::Result
             // top-to-bottom order, and we rely on this to make the frame indices match.
             // capture handle for later
             TextureAtlasLayout::from_grid(
-                Vec2::new(width as f32, height as f32),
-                num_frames as usize,
+                UVec2::new(width as u32, height as u32),
+                num_frames,
                 1,
-                Some(Vec2::new(1.0, 0.0)),
+                Some(UVec2::new(1, 0)),
                 None,
             )
         },

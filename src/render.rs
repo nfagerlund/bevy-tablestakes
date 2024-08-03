@@ -67,7 +67,8 @@ pub struct ShadowSprite;
 #[derive(Bundle)]
 pub struct ShadowSpriteBundle {
     identity: ShadowSprite,
-    sprite_sheet: SpriteSheetBundle,
+    sprite: SpriteBundle,
+    texture_atlas: TextureAtlas,
     char_animation_state: CharAnimationState,
     topdown_matter: TopDownMatter,
 }
@@ -76,10 +77,11 @@ impl ShadowSpriteBundle {
     fn new(handle: Handle<CharAnimation>) -> Self {
         Self {
             identity: ShadowSprite,
-            sprite_sheet: SpriteSheetBundle {
+            sprite: SpriteBundle {
                 transform: Transform::from_translation(Vec3::new(0.0, 0.0, -0.1)),
                 ..default()
             },
+            texture_atlas: TextureAtlas::default(),
             char_animation_state: CharAnimationState::new(
                 handle,
                 VariantName::Neutral,

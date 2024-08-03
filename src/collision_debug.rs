@@ -43,10 +43,10 @@ pub fn setup_debug_assets(
     mut commands: Commands,
 ) {
     let box_mesh = meshes.add(Mesh::from(Rectangle::default()));
-    let walkbox_color = materials.add(ColorMaterial::from(Color::rgba(0.5, 0.0, 0.5, 0.6)));
-    let hitbox_color = materials.add(ColorMaterial::from(Color::rgba(0.8, 0.0, 0.0, 0.6)));
-    let hurtbox_color = materials.add(ColorMaterial::from(Color::rgba(0.0, 0.8, 0.0, 0.6)));
-    let origin_color = materials.add(ColorMaterial::from(Color::rgba(1.0, 1.0, 1.0, 1.0)));
+    let walkbox_color = materials.add(ColorMaterial::from(Color::srgba(0.5, 0.0, 0.5, 0.6)));
+    let hitbox_color = materials.add(ColorMaterial::from(Color::srgba(0.8, 0.0, 0.0, 0.6)));
+    let hurtbox_color = materials.add(ColorMaterial::from(Color::srgba(0.0, 0.8, 0.0, 0.6)));
+    let origin_color = materials.add(ColorMaterial::from(Color::srgba(1.0, 1.0, 1.0, 1.0)));
 
     commands.insert_resource(DebugAssets {
         box_mesh,
