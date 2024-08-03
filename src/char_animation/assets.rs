@@ -116,10 +116,10 @@ fn load_aseprite(bytes: &[u8], load_context: &mut LoadContext) -> anyhow::Result
             // top-to-bottom order, and we rely on this to make the frame indices match.
             // capture handle for later
             TextureAtlasLayout::from_grid(
-                Vec2::new(width as f32, height as f32),
-                num_frames as usize,
+                UVec2::new(width as u32, height as u32),
+                num_frames,
                 1,
-                Some(Vec2::new(1.0, 0.0)),
+                Some(UVec2::new(1, 0)),
                 None,
             )
         },
