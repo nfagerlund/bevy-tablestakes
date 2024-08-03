@@ -200,7 +200,7 @@ fn main() {
         // OK BYE!!!
         ;
 
-    if let Ok(render_app) = app.get_sub_app_mut(RenderApp) {
+    if let Some(render_app) = app.get_sub_app_mut(RenderApp) {
         render_app
             // SPACE STUFF
             .add_systems(
